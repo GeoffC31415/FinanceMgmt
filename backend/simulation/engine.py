@@ -313,62 +313,72 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         if primary_cash.balance < emergency_target:
             remaining_shortfall = emergency_target - primary_cash.balance
 
-            withdrawal_assets = sorted(
-                [a for a in assets if a.asset_type != "CASH"],
-                key=lambda a: (a.withdrawal_priority, a.name.lower()),
-            )
+            # Build unified withdrawal sources: assets + pension (as synthetic "PENSION" source)
+            # Sort by priority so pension can be drawn before or after other assets as configured.
+            withdrawal_sources: list[tuple[int, str, AssetAccount | None]] = []
 
-            # Insert pension as a synthetic source based on scenario.pension_withdrawal_priority
-            # by splitting the process: withdraw non-pension assets first, then pension, then remaining assets.
-            for asset in withdrawal_assets:
+            for a in assets:
+                if a.asset_type != "CASH":
+                    withdrawal_sources.append((a.withdrawal_priority, a.name.lower(), a))
+
+            # Include pension as a synthetic source with configured priority
+            total_pension_balance = sum(p.balance for p in pension_by_person.values())
+            if pension_by_person and total_pension_balance > 0:
+                withdrawal_sources.append((scenario.pension_withdrawal_priority, "pension", None))
+
+            withdrawal_sources.sort(key=lambda x: (x[0], x[1]))
+
+            for priority, name, asset in withdrawal_sources:
                 if remaining_shortfall <= 0:
                     break
 
-                if asset.asset_type == "ISA":
+                if asset is not None:
+                    # Regular asset withdrawal
+                    if asset.asset_type == "ISA":
+                        res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
+                        asset.withdraw(amount=res.gross_withdrawal)
+                        primary_cash.balance += res.net_withdrawal
+                        remaining_shortfall -= res.net_withdrawal
+                        continue
+
+                    if asset.asset_type == "GIA":
+                        res = calculate_gia_withdrawal(
+                            requested=remaining_shortfall,
+                            balance=asset.balance,
+                            cost_basis=asset.cost_basis,
+                            cgt_allowance_remaining=cgt_allowance_remaining,
+                            cgt_rate=scenario.assumptions.cgt_rate,
+                        )
+                        asset.withdraw(amount=res.gross_withdrawal)
+                        cgt_allowance_remaining = res.cgt_allowance_remaining
+                        cgt_paid += res.tax_paid
+                        primary_cash.balance += res.net_withdrawal
+                        remaining_shortfall -= res.net_withdrawal
+                        continue
+
+                    # Unknown types treated as tax-free (safe default)
                     res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
                     asset.withdraw(amount=res.gross_withdrawal)
                     primary_cash.balance += res.net_withdrawal
                     remaining_shortfall -= res.net_withdrawal
-                    continue
+                else:
+                    # Pension withdrawal (synthetic source)
+                    current_pension_balance = sum(p.balance for p in pension_by_person.values())
+                    if current_pension_balance > 0:
+                        drawdown_result = calculate_pension_drawdown(
+                            target_net_income=remaining_shortfall,
+                            other_taxable_income=state_pension_income,
+                            pension_balance=current_pension_balance,
+                        )
+                        pension_income_net += drawdown_result.net_income
+                        pension_income_tax += drawdown_result.tax_paid
+                        primary_cash.balance += drawdown_result.net_income
+                        remaining_shortfall -= drawdown_result.net_income
 
-                if asset.asset_type == "GIA":
-                    res = calculate_gia_withdrawal(
-                        requested=remaining_shortfall,
-                        balance=asset.balance,
-                        cost_basis=asset.cost_basis,
-                        cgt_allowance_remaining=cgt_allowance_remaining,
-                        cgt_rate=scenario.assumptions.cgt_rate,
-                    )
-                    asset.withdraw(amount=res.gross_withdrawal)
-                    cgt_allowance_remaining = res.cgt_allowance_remaining
-                    cgt_paid += res.tax_paid
-                    primary_cash.balance += res.net_withdrawal
-                    remaining_shortfall -= res.net_withdrawal
-                    continue
-
-                # Unknown types treated as tax-free (safe default)
-                res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
-                asset.withdraw(amount=res.gross_withdrawal)
-                primary_cash.balance += res.net_withdrawal
-                remaining_shortfall -= res.net_withdrawal
-
-            if remaining_shortfall > 0 and pension_by_person:
-                total_pension_balance = sum(p.balance for p in pension_by_person.values())
-                if total_pension_balance > 0:
-                    drawdown_result = calculate_pension_drawdown(
-                        target_net_income=remaining_shortfall,
-                        other_taxable_income=state_pension_income,
-                        pension_balance=total_pension_balance,
-                    )
-                    pension_income_net += drawdown_result.net_income
-                    pension_income_tax += drawdown_result.tax_paid
-                    primary_cash.balance += drawdown_result.net_income
-                    remaining_shortfall -= drawdown_result.net_income
-
-                    if drawdown_result.gross_withdrawal > 0 and total_pension_balance > 0:
-                        for pension in pension_by_person.values():
-                            proportion = pension.balance / total_pension_balance
-                            pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
+                        if drawdown_result.gross_withdrawal > 0:
+                            for pension in pension_by_person.values():
+                                proportion = pension.balance / current_pension_balance
+                                pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
             # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
             if primary_cash.balance < 0:
@@ -654,59 +664,72 @@ def _simulate_single_run_to_matrices(
         if primary_cash.balance < emergency_target:
             remaining_shortfall = emergency_target - primary_cash.balance
 
-            withdrawal_assets = sorted(
-                [a for a in assets if a.asset_type != "CASH"],
-                key=lambda a: (a.withdrawal_priority, a.name.lower()),
-            )
+            # Build unified withdrawal sources: assets + pension (as synthetic "PENSION" source)
+            # Sort by priority so pension can be drawn before or after other assets as configured.
+            withdrawal_sources: list[tuple[int, str, AssetAccount | None]] = []
 
-            for asset in withdrawal_assets:
+            for a in assets:
+                if a.asset_type != "CASH":
+                    withdrawal_sources.append((a.withdrawal_priority, a.name.lower(), a))
+
+            # Include pension as a synthetic source with configured priority
+            total_pension_balance = sum(p.balance for p in pension_by_person.values())
+            if pension_by_person and total_pension_balance > 0:
+                withdrawal_sources.append((scenario.pension_withdrawal_priority, "pension", None))
+
+            withdrawal_sources.sort(key=lambda x: (x[0], x[1]))
+
+            for priority, name, asset in withdrawal_sources:
                 if remaining_shortfall <= 0:
                     break
 
-                if asset.asset_type == "ISA":
+                if asset is not None:
+                    # Regular asset withdrawal
+                    if asset.asset_type == "ISA":
+                        res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
+                        asset.withdraw(amount=res.gross_withdrawal)
+                        primary_cash.balance += res.net_withdrawal
+                        remaining_shortfall -= res.net_withdrawal
+                        continue
+
+                    if asset.asset_type == "GIA":
+                        res = calculate_gia_withdrawal(
+                            requested=remaining_shortfall,
+                            balance=asset.balance,
+                            cost_basis=asset.cost_basis,
+                            cgt_allowance_remaining=cgt_allowance_remaining,
+                            cgt_rate=scenario.assumptions.cgt_rate,
+                        )
+                        asset.withdraw(amount=res.gross_withdrawal)
+                        cgt_allowance_remaining = res.cgt_allowance_remaining
+                        cgt_paid += res.tax_paid
+                        primary_cash.balance += res.net_withdrawal
+                        remaining_shortfall -= res.net_withdrawal
+                        continue
+
+                    # Unknown types treated as tax-free (safe default)
                     res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
                     asset.withdraw(amount=res.gross_withdrawal)
                     primary_cash.balance += res.net_withdrawal
                     remaining_shortfall -= res.net_withdrawal
-                    continue
+                else:
+                    # Pension withdrawal (synthetic source)
+                    current_pension_balance = sum(p.balance for p in pension_by_person.values())
+                    if current_pension_balance > 0:
+                        drawdown_result = calculate_pension_drawdown(
+                            target_net_income=remaining_shortfall,
+                            other_taxable_income=state_pension_income,
+                            pension_balance=current_pension_balance,
+                        )
+                        pension_income_net += drawdown_result.net_income
+                        pension_income_tax += drawdown_result.tax_paid
+                        primary_cash.balance += drawdown_result.net_income
+                        remaining_shortfall -= drawdown_result.net_income
 
-                if asset.asset_type == "GIA":
-                    res = calculate_gia_withdrawal(
-                        requested=remaining_shortfall,
-                        balance=asset.balance,
-                        cost_basis=asset.cost_basis,
-                        cgt_allowance_remaining=cgt_allowance_remaining,
-                        cgt_rate=scenario.assumptions.cgt_rate,
-                    )
-                    asset.withdraw(amount=res.gross_withdrawal)
-                    cgt_allowance_remaining = res.cgt_allowance_remaining
-                    cgt_paid += res.tax_paid
-                    primary_cash.balance += res.net_withdrawal
-                    remaining_shortfall -= res.net_withdrawal
-                    continue
-
-                res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
-                asset.withdraw(amount=res.gross_withdrawal)
-                primary_cash.balance += res.net_withdrawal
-                remaining_shortfall -= res.net_withdrawal
-
-            if remaining_shortfall > 0 and pension_by_person:
-                total_pension_balance = sum(p.balance for p in pension_by_person.values())
-                if total_pension_balance > 0:
-                    drawdown_result = calculate_pension_drawdown(
-                        target_net_income=remaining_shortfall,
-                        other_taxable_income=state_pension_income,
-                        pension_balance=total_pension_balance,
-                    )
-                    pension_income_net += drawdown_result.net_income
-                    pension_income_tax += drawdown_result.tax_paid
-                    primary_cash.balance += drawdown_result.net_income
-                    remaining_shortfall -= drawdown_result.net_income
-
-                    if drawdown_result.gross_withdrawal > 0 and total_pension_balance > 0:
-                        for pension in pension_by_person.values():
-                            proportion = pension.balance / total_pension_balance
-                            pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
+                        if drawdown_result.gross_withdrawal > 0:
+                            for pension in pension_by_person.values():
+                                proportion = pension.balance / current_pension_balance
+                                pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
             # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
             if primary_cash.balance < 0:
