@@ -24,6 +24,43 @@ const STEPS: { id: StepId; label: string }[] = [
   { id: "review", label: "Review" }
 ];
 
+// --- Tooltip component ---
+function Tooltip({ text }: { text: string }) {
+  return (
+    <span
+      className="ml-1.5 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-500 text-[10px] text-slate-400 transition-colors hover:border-indigo-400 hover:text-indigo-300"
+      title={text}
+      aria-label={text}
+    >
+      ?
+    </span>
+  );
+}
+
+// --- Hint component for italic helper text ---
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-1 text-xs italic text-slate-400">{children}</p>;
+}
+
+// --- Section intro component ---
+function StepIntro({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-4 rounded-lg border border-slate-700/50 bg-slate-800/30 px-4 py-3">
+      <p className="text-sm text-slate-300">{children}</p>
+    </div>
+  );
+}
+
+// --- Label with optional tooltip ---
+function Label({ children, tooltip }: { children: React.ReactNode; tooltip?: string }) {
+  return (
+    <label className="flex items-center text-xs text-slate-400">
+      {children}
+      {tooltip && <Tooltip text={tooltip} />}
+    </label>
+  );
+}
+
 function default_draft(): ScenarioCreate {
   const year = new Date().getFullYear();
   return {
@@ -141,7 +178,7 @@ export function ConfigWizard() {
         <div>
           <h1 className="text-2xl font-semibold">New scenario walkthrough</h1>
           <p className="text-slate-300">
-            We create the scenario in the database first, then save updates page-by-page.
+            Build your financial scenario step by step. Each setting shapes how the simulation models your future.
           </p>
         </div>
         <button
@@ -159,13 +196,13 @@ export function ConfigWizard() {
           <div className="text-xs text-slate-400">{progress}%</div>
         </div>
         <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-800">
-          <div className="h-full bg-indigo-600" style={{ width: `${progress}%` }} />
+          <div className="h-full bg-indigo-600 transition-all duration-300" style={{ width: `${progress}%` }} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
           {STEPS.map((s) => (
             <div
               key={s.id}
-              className={`rounded px-2 py-1 ${
+              className={`rounded px-2 py-1 transition-colors ${
                 s.id === step ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-200"
               }`}
             >
@@ -179,6 +216,10 @@ export function ConfigWizard() {
 
       {step === "start" && (
         <div className="rounded border border-slate-800 bg-slate-900/30 p-4 space-y-4">
+          <StepIntro>
+            Give your scenario a memorable name. You might create multiple scenarios to compare different life choices — e.g. "Early retirement at 55" vs "Work until 60".
+          </StepIntro>
+          
           <div>
             <label className="block text-sm font-medium">Scenario name</label>
             <input
@@ -186,6 +227,7 @@ export function ConfigWizard() {
               value={draft.name}
               onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             />
+            <Hint>Choose something descriptive so you can identify it later.</Hint>
           </div>
 
           <div className="flex items-center justify-end gap-3">
@@ -227,11 +269,15 @@ export function ConfigWizard() {
           {step === "people" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">People</div>
+              <StepIntro>
+                Add everyone whose finances you want to model. The simulation uses each person's age to determine when they retire, when they receive state pension, and when they can access private pensions (age 55+).
+              </StepIntro>
+              
               <div className="hidden md:grid md:grid-cols-4 md:gap-3 text-xs text-slate-400">
-                <div>Name</div>
-                <div>DoB</div>
-                <div>Retirement_age</div>
-                <div>State_pension_age</div>
+                <Label tooltip="A friendly name to identify this person in the scenario">Name</Label>
+                <Label tooltip="Used to calculate current age and project retirement timing">Date of Birth</Label>
+                <Label tooltip="When salary income stops and retirement spending begins. Can be different from state pension age.">Retirement Age</Label>
+                <Label tooltip="When UK state pension payments start (currently 66-67 for most people)">State Pension Age</Label>
               </div>
               {draft.people.map((p, idx) => (
                 <div key={idx} className="grid gap-3 md:grid-cols-4">
@@ -244,7 +290,7 @@ export function ConfigWizard() {
                         people: d.people.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x))
                       }))
                     }
-                    placeholder="label"
+                    placeholder="e.g. you, partner"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -269,7 +315,7 @@ export function ConfigWizard() {
                         )
                       }))
                     }
-                    placeholder="retirement age"
+                    placeholder="e.g. 60"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -281,10 +327,13 @@ export function ConfigWizard() {
                         people: d.people.map((x, i) => (i === idx ? { ...x, state_pension_age: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="state pension age"
+                    placeholder="e.g. 67"
                   />
                 </div>
               ))}
+              <Hint>
+                Salary stops at retirement age. Private pension access requires age 55+. State pension begins at state pension age.
+              </Hint>
               <button
                 type="button"
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
@@ -312,13 +361,17 @@ export function ConfigWizard() {
           {step === "income" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Income</div>
+              <StepIntro>
+                Define salary income for each person. Salary is subject to income tax and National Insurance. Pension contributions are deducted before tax, reducing your tax bill while building retirement savings.
+              </StepIntro>
+              
               <div className="hidden md:grid md:grid-cols-6 md:gap-3 text-xs text-slate-400">
-                <div>Person</div>
-                <div>Type</div>
-                <div>Gross_annual</div>
-                <div>Growth_rate</div>
-                <div>Employee_pension_pct</div>
-                <div>Employer_pension_pct</div>
+                <Label tooltip="Link this income to a specific person's retirement timeline">Person</Label>
+                <Label tooltip="Label for this income source (e.g. salary, bonus, freelance)">Type</Label>
+                <Label tooltip="Annual salary before tax. Tax and NI are calculated automatically.">Gross Annual (£)</Label>
+                <Label tooltip="How much salary increases each year (e.g. 0.02 = 2%). Applied at the start of each simulated year.">Growth Rate</Label>
+                <Label tooltip="Percentage of gross salary you contribute to pension. Deducted before tax, so reduces your tax bill.">Employee Pension %</Label>
+                <Label tooltip="Percentage of gross salary your employer adds to your pension. Free money that boosts your retirement pot.">Employer Pension %</Label>
               </div>
               {draft.incomes.map((inc, idx) => (
                 <div key={idx} className="grid gap-3 md:grid-cols-6">
@@ -348,7 +401,7 @@ export function ConfigWizard() {
                         incomes: d.incomes.map((x, i) => (i === idx ? { ...x, kind: e.target.value } : x))
                       }))
                     }
-                    placeholder="kind"
+                    placeholder="salary"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -360,7 +413,7 @@ export function ConfigWizard() {
                         incomes: d.incomes.map((x, i) => (i === idx ? { ...x, gross_annual: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="gross annual"
+                    placeholder="60000"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -373,7 +426,7 @@ export function ConfigWizard() {
                         incomes: d.incomes.map((x, i) => (i === idx ? { ...x, annual_growth_rate: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="growth"
+                    placeholder="0.02"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -386,7 +439,7 @@ export function ConfigWizard() {
                         incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employee_pension_pct: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="employee pension %"
+                    placeholder="0.05"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -399,10 +452,13 @@ export function ConfigWizard() {
                         incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employer_pension_pct: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="employer pension %"
+                    placeholder="0.05"
                   />
                 </div>
               ))}
+              <Hint>
+                Income stops when the assigned person retires. Use decimal format for percentages (0.05 = 5%). Combined pension contributions go into the person's pension pot.
+              </Hint>
               <button
                 type="button"
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
@@ -431,16 +487,20 @@ export function ConfigWizard() {
           {step === "assets" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Assets</div>
+              <StepIntro>
+                Define your investment accounts. The simulation automatically manages cash flow: excess cash is invested (ISA first, then GIA), and assets are withdrawn when needed to cover expenses. Lower withdrawal priority = withdrawn first.
+              </StepIntro>
+              
               <div className="hidden md:grid md:grid-cols-9 md:gap-3 text-xs text-slate-400">
-                <div>Person</div>
-                <div>Name</div>
-                <div>Type</div>
-                <div>Withdraw_priority</div>
-                <div>Balance</div>
-                <div>Annual_invest_cap</div>
-                <div>Growth_mean</div>
-                <div>Growth_std</div>
-                <div>End_at_retire</div>
+                <Label tooltip="Optional: link to a person for retirement-aware contributions">Person</Label>
+                <Label tooltip="A friendly name for this account">Name</Label>
+                <Label tooltip="CASH: Emergency fund, no growth. ISA: Tax-free growth & withdrawals. GIA: Taxable gains. PENSION: Managed separately via income contributions.">Type</Label>
+                <Label tooltip="Lower numbers are withdrawn first when cash is needed. Cash is always 0, so ISA (20) is used before Pension (30).">Priority</Label>
+                <Label tooltip="Current value of this account. Starting point for the simulation.">Balance (£)</Label>
+                <Label tooltip="Maximum annual investment into this account. 0 = unlimited (within ISA annual limits).">Annual Cap (£)</Label>
+                <Label tooltip="Expected average annual return (0.05 = 5%). Used with std dev for Monte Carlo simulation.">Growth Mean</Label>
+                <Label tooltip="Volatility of returns. Higher = more variation between simulation runs. Typical stocks: 0.10-0.15">Growth Std</Label>
+                <Label tooltip="If checked, new contributions stop when everyone retires. Balance still grows and can be withdrawn.">Stop at Retire</Label>
               </div>
               {draft.assets.map((a, idx) => (
                 <div key={idx} className="grid gap-3 md:grid-cols-9 items-center">
@@ -509,7 +569,7 @@ export function ConfigWizard() {
                         assets: d.assets.map((x, i) => (i === idx ? { ...x, balance: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="balance"
+                    placeholder="50000"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -521,7 +581,7 @@ export function ConfigWizard() {
                         assets: d.assets.map((x, i) => (i === idx ? { ...x, annual_contribution: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="annual invest cap"
+                    placeholder="10000"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -534,7 +594,7 @@ export function ConfigWizard() {
                         assets: d.assets.map((x, i) => (i === idx ? { ...x, growth_rate_mean: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="growth mean"
+                    placeholder="0.05"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -547,7 +607,7 @@ export function ConfigWizard() {
                         assets: d.assets.map((x, i) => (i === idx ? { ...x, growth_rate_std: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="growth std"
+                    placeholder="0.10"
                   />
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -563,6 +623,9 @@ export function ConfigWizard() {
                   </label>
                 </div>
               ))}
+              <Hint>
+                Typical growth: Cash 0%, Bonds 2-3%, Stocks 5-7%. Typical std: Bonds 0.03-0.05, Stocks 0.10-0.15. Pensions are drawn at age 55+ and taxed as income.
+              </Hint>
               <button
                 type="button"
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
@@ -581,6 +644,10 @@ export function ConfigWizard() {
           {step === "mortgage" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Mortgage</div>
+              <StepIntro>
+                If you have a mortgage, it's deducted as a fixed monthly expense. The simulation tracks the declining balance and stops payments when the mortgage is paid off. This is modelled separately from other expenses.
+              </StepIntro>
+              
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -592,33 +659,73 @@ export function ConfigWizard() {
                     }))
                   }
                 />
-                Has mortgage
+                I have a mortgage to include
               </label>
               {draft.mortgage !== null && (
-                <div className="grid gap-3 md:grid-cols-4">
-                  {[
-                    ["balance", "Balance"],
-                    ["annual_interest_rate", "Annual interest rate"],
-                    ["monthly_payment", "Monthly payment"],
-                    ["months_remaining", "Months remaining"]
-                  ].map(([k, label]) => (
-                    <div key={k}>
-                      <label className="block text-sm font-medium">{label}</label>
+                <>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <Label tooltip="Current outstanding mortgage balance">Balance (£)</Label>
                       <input
                         className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                         type="number"
-                        step={k === "annual_interest_rate" ? "0.01" : "1"}
-                        value={(draft.mortgage as any)[k]}
+                        value={draft.mortgage.balance}
                         onChange={(e) =>
                           setDraft((d) => ({
                             ...d,
-                            mortgage: d.mortgage ? { ...d.mortgage, [k]: Number(e.target.value) } : null
+                            mortgage: d.mortgage ? { ...d.mortgage, balance: Number(e.target.value) } : null
                           }))
                         }
                       />
                     </div>
-                  ))}
-                </div>
+                    <div>
+                      <Label tooltip="Your current mortgage interest rate as a decimal (0.04 = 4%)">Annual Interest Rate</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        value={draft.mortgage.annual_interest_rate}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            mortgage: d.mortgage ? { ...d.mortgage, annual_interest_rate: Number(e.target.value) } : null
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Your current monthly mortgage payment. Stays fixed until paid off.">Monthly Payment (£)</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={draft.mortgage.monthly_payment}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            mortgage: d.mortgage ? { ...d.mortgage, monthly_payment: Number(e.target.value) } : null
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="How many months until your mortgage is fully paid (e.g. 240 = 20 years)">Months Remaining</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={draft.mortgage.months_remaining}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            mortgage: d.mortgage ? { ...d.mortgage, months_remaining: Number(e.target.value) } : null
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <Hint>
+                    The simulation amortises the mortgage and tracks when it's paid off. Once complete, the monthly payment is freed up for other uses.
+                  </Hint>
+                </>
               )}
             </div>
           )}
@@ -626,10 +733,14 @@ export function ConfigWizard() {
           {step === "expenses" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Expenses</div>
+              <StepIntro>
+                Define your regular outgoings. These are deducted from cash each year. Inflation-linked expenses grow with inflation, keeping their "real" value constant over time.
+              </StepIntro>
+              
               <div className="hidden md:grid md:grid-cols-3 md:gap-3 text-xs text-slate-400">
-                <div>Name</div>
-                <div>Monthly_amount</div>
-                <div>Inflation_linked</div>
+                <Label tooltip="A label for this expense category">Name</Label>
+                <Label tooltip="Monthly cost in today's money. Multiplied by 12 for annual simulation.">Monthly Amount (£)</Label>
+                <Label tooltip="If enabled, this expense grows with inflation each year. Disable for fixed costs like a fixed-rate utility contract.">Inflation Linked</Label>
               </div>
               {draft.expenses.map((ex, idx) => (
                 <div key={idx} className="grid gap-3 md:grid-cols-3 items-center">
@@ -642,7 +753,7 @@ export function ConfigWizard() {
                         expenses: d.expenses.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x))
                       }))
                     }
-                    placeholder="name"
+                    placeholder="e.g. Household, Childcare"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -654,7 +765,7 @@ export function ConfigWizard() {
                         expenses: d.expenses.map((x, i) => (i === idx ? { ...x, monthly_amount: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="monthly amount"
+                    placeholder="2500"
                   />
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -671,6 +782,9 @@ export function ConfigWizard() {
                   </label>
                 </div>
               ))}
+              <Hint>
+                These expenses run throughout the simulation. In retirement, the "Annual spend target" (set in Assumptions) may add additional spending if you want to model a lifestyle budget.
+              </Hint>
               <button
                 type="button"
                 className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
@@ -684,31 +798,130 @@ export function ConfigWizard() {
           {step === "assumptions" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Assumptions</div>
+              <StepIntro>
+                These global settings shape the economic environment of your simulation. The Monte Carlo engine runs many iterations with randomised investment returns to show a range of possible outcomes.
+              </StepIntro>
+              
               <div className="grid gap-3 md:grid-cols-2">
-                {[
-                  ["inflation_rate", "Inflation rate"],
-                  ["equity_return_mean", "Equity return mean"],
-                  ["equity_return_std", "Equity return std dev"],
-                  ["isa_annual_limit", "ISA annual limit"],
-                  ["state_pension_annual", "State pension annual"],
-                  ["start_year", "Start year"],
-                  ["end_year", "End year"],
-                  ["annual_spend_target", "Annual spend target"]
-                ].map(([k, label]) => (
-                  <div key={k}>
-                    <label className="block text-sm font-medium">{label}</label>
-                    <input
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      value={String((draft.assumptions as any)[k] ?? "")}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          assumptions: { ...(d.assumptions as any), [k]: Number(e.target.value) }
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Annual inflation rate as a decimal (0.02 = 2%). Affects inflation-linked expenses and real-value calculations.">Inflation Rate</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).inflation_rate ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), inflation_rate: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>UK long-term average: ~2%. Higher inflation erodes purchasing power faster.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Average annual equity return as a decimal (0.05 = 5%). Used as the 'mean' in Monte Carlo simulations for asset growth.">Equity Return Mean</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).equity_return_mean ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), equity_return_mean: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>Historical UK equities: ~5-7% real return. This is a default; assets can override.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Standard deviation of annual returns (0.10 = 10% volatility). Higher values create more variation between simulation runs.">Equity Return Std Dev</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).equity_return_std ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), equity_return_std: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>Typical stocks: 0.10-0.15. Higher = more "boom and bust" scenarios simulated.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Maximum annual ISA contribution (currently £20,000 in the UK). Excess cash goes to GIA instead.">ISA Annual Limit (£)</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).isa_annual_limit ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), isa_annual_limit: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>The simulation prioritises ISA contributions up to this limit each year.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Annual UK state pension amount. Paid to each person once they reach state pension age.">State Pension Annual (£)</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).state_pension_annual ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), state_pension_annual: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>Full new state pension (2024): ~£11,500. Check gov.uk for your forecast.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="First year of the simulation. Usually the current year.">Start Year</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).start_year ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), start_year: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>The simulation begins from this year using your current balances.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Last year of the simulation. Set this to cover your expected lifespan.">End Year</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).end_year ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), end_year: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>Run until age ~90+ to see if your money lasts. Longer = more uncertainty.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Target annual spending in retirement. If defined expenses are less than this, the simulation adds extra spending to meet this lifestyle budget.">Annual Spend Target (£)</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={String((draft.assumptions as any).annual_spend_target ?? "")}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), annual_spend_target: Number(e.target.value) }
+                      }))
+                    }
+                  />
+                  <Hint>Set to 0 to only use defined expenses. Otherwise, this is your retirement "lifestyle" target.</Hint>
+                </div>
               </div>
             </div>
           )}
@@ -716,12 +929,46 @@ export function ConfigWizard() {
           {step === "review" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Review</div>
-              <p className="text-sm text-slate-300">
-                This is the configuration that will be used by the simulator. You can still edit it later on the Config page.
-              </p>
-              <pre className="max-h-[520px] overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-200">
-                {JSON.stringify(draft, null, 2)}
-              </pre>
+              <StepIntro>
+                Here's your complete scenario configuration. After finishing, you can run simulations to see projected outcomes, or return to edit any section.
+              </StepIntro>
+              
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">People</div>
+                  <div className="mt-1 text-sm">{draft.people.length} person(s)</div>
+                </div>
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">Income Sources</div>
+                  <div className="mt-1 text-sm">{draft.incomes.length} income(s)</div>
+                </div>
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">Assets</div>
+                  <div className="mt-1 text-sm">{draft.assets.length} account(s)</div>
+                </div>
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">Mortgage</div>
+                  <div className="mt-1 text-sm">{draft.mortgage ? `£${draft.mortgage.balance.toLocaleString()}` : "None"}</div>
+                </div>
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">Expenses</div>
+                  <div className="mt-1 text-sm">{draft.expenses.length} expense(s)</div>
+                </div>
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <div className="text-xs font-medium text-slate-400">Simulation Period</div>
+                  <div className="mt-1 text-sm">{(draft.assumptions as any).start_year} – {(draft.assumptions as any).end_year}</div>
+                </div>
+              </div>
+              
+              <details className="rounded border border-slate-700/50 bg-slate-800/20">
+                <summary className="cursor-pointer px-3 py-2 text-sm text-slate-300 hover:text-white">
+                  View raw JSON configuration
+                </summary>
+                <pre className="max-h-[400px] overflow-auto p-3 text-xs text-slate-200">
+                  {JSON.stringify(draft, null, 2)}
+                </pre>
+              </details>
+              
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -729,7 +976,7 @@ export function ConfigWizard() {
                   disabled={!scenario_id}
                   onClick={() => navigate(`/config?selected=${encodeURIComponent(scenario_id ?? "")}`)}
                 >
-                  Finish
+                  Finish and view scenario
                 </button>
               </div>
             </div>
@@ -766,4 +1013,3 @@ export function ConfigWizard() {
     </div>
   );
 }
-
