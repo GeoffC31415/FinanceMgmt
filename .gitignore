@@ -2,5 +2,4 @@
 **/__pycache__/
 frontend/node_modules
 finances.db
-
-
+frontend/.vite
