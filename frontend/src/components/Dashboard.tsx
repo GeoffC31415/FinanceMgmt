@@ -70,7 +70,6 @@ export function Dashboard() {
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
   const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
   const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
-  const [realtime_mode, setRealtimeMode] = useState<boolean>(true);
   const [show_real_values, setShowRealValues] = useState<boolean>(false);
   const [percentile, setPercentile] = useState<number>(50);
 
@@ -87,7 +86,7 @@ export function Dashboard() {
     if (!selected) return;
     init({
       scenario_id: selected.id,
-      iterations: 1000,
+      iterations: 2000,
       seed: 0,
       annual_spend_target,
       end_year
@@ -98,10 +97,10 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  // Debounced recalc for spend + retirement age offset + percentile (only when realtime mode is on).
+  // Debounced recalc for spend + retirement age offset + percentile.
   // Fast engine enables low debounce for near-instant feedback.
   useEffect(() => {
-    if (!realtime_mode || !selected || !session_id) return;
+    if (!selected || !session_id) return;
     const t = window.setTimeout(() => {
       recalc({
         annual_spend_target,
@@ -112,7 +111,7 @@ export function Dashboard() {
       });
     }, 100);
     return () => window.clearTimeout(t);
-  }, [realtime_mode, selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
+  }, [selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
 
   function export_csv() {
     if (!result) return;
@@ -228,7 +227,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="sticky top-0 z-10 rounded border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg">
+      <div className="sticky top-0 z-10 rounded border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-[240px]">
             <label className="block text-sm font-medium">Scenario</label>
@@ -350,7 +349,7 @@ export function Dashboard() {
               if (!selected) return;
               await init({
                 scenario_id: selected.id,
-                iterations: 1000,
+                iterations: 2000,
                 seed: 0,
                 annual_spend_target,
                 end_year
@@ -366,54 +365,6 @@ export function Dashboard() {
           >
             Export CSV
           </button>
-          {result && (
-            <button
-              className={`flex items-center gap-2 text-xs transition-colors ${
-                show_real_values ? "text-cyan-400" : "text-slate-500"
-              } hover:text-slate-300`}
-              onClick={() => setShowRealValues((prev) => !prev)}
-              title={show_real_values 
-                ? "Showing values in today's purchasing power. Click to show nominal values." 
-                : "Showing nominal (future) values. Click to adjust for inflation."}
-            >
-              <span
-                className={`inline-block h-3 w-6 rounded-full transition-colors ${
-                  show_real_values ? "bg-cyan-600" : "bg-slate-700"
-                } relative`}
-              >
-                <span
-                  className={`absolute top-0.5 h-2 w-2 rounded-full bg-white transition-transform ${
-                    show_real_values ? "translate-x-3.5" : "translate-x-0.5"
-                  }`}
-                />
-              </span>
-              {show_real_values 
-                ? `Today's value (${((result.inflation_rate ?? 0.02) * 100).toFixed(1)}% inflation)`
-                : "Nominal values"}
-            </button>
-          )}
-          {session_id && (
-            <button
-              className={`flex items-center gap-2 text-xs transition-colors ${
-                realtime_mode ? "text-emerald-400" : "text-slate-500"
-              } hover:text-slate-300`}
-              onClick={() => setRealtimeMode((prev) => !prev)}
-              title={realtime_mode ? "Click to disable automatic recalculation" : "Click to enable automatic recalculation"}
-            >
-              <span
-                className={`inline-block h-3 w-6 rounded-full transition-colors ${
-                  realtime_mode ? "bg-emerald-600" : "bg-slate-700"
-                } relative`}
-              >
-                <span
-                  className={`absolute top-0.5 h-2 w-2 rounded-full bg-white transition-transform ${
-                    realtime_mode ? "translate-x-3.5" : "translate-x-0.5"
-                  }`}
-                />
-              </span>
-              {is_running ? "Recalculating…" : realtime_mode ? "Realtime: on" : "Realtime: off"}
-            </button>
-          )}
           {result && (() => {
             const lastIdx = result.years.length - 1;
             const depletionPct = lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
@@ -450,6 +401,44 @@ export function Dashboard() {
             );
           })()}
         </div>
+
+        {/* Secondary row: display options */}
+        {result && (
+          <div className="flex items-center gap-4 border-t border-slate-800 pt-3">
+            <button
+              className={`flex items-center gap-2 text-xs transition-colors ${
+                show_real_values ? "text-cyan-400" : "text-slate-500"
+              } hover:text-slate-300`}
+              onClick={() => setShowRealValues((prev) => !prev)}
+              title={show_real_values 
+                ? "Showing values in today's purchasing power. Click to show nominal values." 
+                : "Showing nominal (future) values. Click to adjust for inflation."}
+            >
+              <span
+                className={`flex items-center h-4 w-7 rounded-full transition-colors ${
+                  show_real_values ? "bg-cyan-600" : "bg-slate-700"
+                } px-0.5`}
+              >
+                <span
+                  className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                    show_real_values ? "translate-x-3" : "translate-x-0"
+                  }`}
+                />
+              </span>
+              <span className="font-medium">
+                {show_real_values ? "Today's value" : "Nominal values"}
+              </span>
+            </button>
+            <span className={`text-xs ${show_real_values ? "text-cyan-300/70" : "text-slate-500"}`}>
+              {show_real_values 
+                ? `All amounts adjusted for ${((result.inflation_rate ?? 0.02) * 100).toFixed(1)}% annual inflation to show today's purchasing power`
+                : "Showing future nominal values without inflation adjustment"}
+            </span>
+            {is_running && (
+              <span className="ml-auto text-xs text-slate-500">Recalculating…</span>
+            )}
+          </div>
+        )}
       </div>
 
       {display_result && (
@@ -466,12 +455,6 @@ export function Dashboard() {
               >
                 Reset to median
               </button>
-            </div>
-          )}
-          {show_real_values && (
-            <div className="rounded border border-cyan-800/50 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-200">
-              <strong>Today's value mode:</strong> All amounts are adjusted for {((result?.inflation_rate ?? 0.02) * 100).toFixed(1)}% annual inflation, 
-              showing what future money would be worth in today's purchasing power.
             </div>
           )}
           <NetWorthChart

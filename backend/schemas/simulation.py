@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class SimulationRequest(BaseModel):
     scenario_id: str
-    iterations: int = Field(default=1000, ge=10, le=20000)
+    iterations: int = Field(default=2000, ge=10, le=20000)
     seed: int = Field(default=0, ge=0)
 
     # Scenario-level knobs for quick experiments (RORO style).
@@ -69,7 +69,7 @@ class SimulationResponse(BaseModel):
 
 class SimulationInitRequest(BaseModel):
     scenario_id: str
-    iterations: int = Field(default=1000, ge=10, le=20000)
+    iterations: int = Field(default=2000, ge=10, le=20000)
     seed: int = Field(default=0, ge=0)
 
     # Optional scenario-level knobs for initialization.
