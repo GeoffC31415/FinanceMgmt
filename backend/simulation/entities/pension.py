@@ -8,6 +8,8 @@ from backend.simulation.entities.base import SimContext
 @dataclass
 class PensionPot:
     balance: float
+    growth_rate_mean: float = 0.05
+    growth_rate_std: float = 0.10
     annual_return: float = 0.0
 
     _investment_return: float = 0.0

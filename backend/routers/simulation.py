@@ -9,14 +9,22 @@ from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db_session
 from backend.models import Asset, Expense, Income, Mortgage, Person, Scenario
-from backend.schemas.simulation import SimulationRequest, SimulationResponse
+from backend.schemas.simulation import (
+    SimulationInitRequest,
+    SimulationInitResponse,
+    SimulationRecalcRequest,
+    SimulationRequest,
+    SimulationResponse,
+)
 import numpy as np
 
 from backend.simulation.engine import (
     SimulationAssumptions,
     SimulationScenario,
     run_monte_carlo,
+    run_with_cached_returns,
 )
+from backend.simulation.returns_cache import create_session, get_session
 from backend.simulation.entities import ExpenseItem, MortgageAccount, PensionPot, PersonEntity, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
 
@@ -53,16 +61,12 @@ def _coerce_float(value: object, default: float) -> float:
         return default
 
 
-@router.post("/run", response_model=SimulationResponse)
-async def run_simulation(payload: SimulationRequest, session: AsyncSession = Depends(get_db_session)) -> SimulationResponse:
-    result = await session.execute(_scenario_query().where(Scenario.id == payload.scenario_id))
-    scenario = result.scalars().unique().first()
-    if scenario is None:
-        raise HTTPException(status_code=404, detail="Scenario not found")
-
-    if len(scenario.people) == 0:
-        raise HTTPException(status_code=400, detail="Scenario must have at least one person")
-
+def _build_simulation_scenario(
+    *,
+    scenario: Scenario,
+    annual_spend_target_override: float | None,
+    end_year_override: int | None,
+) -> SimulationScenario:
     # Assumptions (basic UK defaults, plus user overrides from JSON)
     assumptions_json = scenario.assumptions or {}
     assumptions = SimulationAssumptions(
@@ -78,10 +82,10 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
 
     start_year = _coerce_int(assumptions_json.get("start_year"), date.today().year)
     end_year_default = _coerce_int(assumptions_json.get("end_year"), start_year + 60)
-    end_year = payload.end_year if payload.end_year is not None else end_year_default
+    end_year = end_year_override if end_year_override is not None else end_year_default
 
     annual_spend_default = _coerce_float(assumptions_json.get("annual_spend_target"), 0.0)
-    annual_spend_target = payload.annual_spend_target if payload.annual_spend_target is not None else annual_spend_default
+    annual_spend_target = annual_spend_target_override if annual_spend_target_override is not None else annual_spend_default
 
     people = [
         PersonEntity(
@@ -110,31 +114,34 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
             )
         )
 
-    # Separate pensions (they get contributions from salary) from other assets
     pension_by_person: dict[str, PensionPot] = {}
     assets: list[AssetAccount] = []
     pension_withdrawal_priority = 100
 
     for asset in scenario.assets:
-        # Prefer explicit asset type; fall back to name-based inference for old DB rows.
         asset_type = getattr(asset, "asset_type", None) or ("PENSION" if "pension" in asset.name.lower() else "GIA")
         withdrawal_priority = getattr(asset, "withdrawal_priority", 100)
 
-        if asset_type == "PENSION" and asset.person_id:
-            # Create pension pot (still handled separately for salary contributions)
-            person_key = next((p.label for p in scenario.people if p.id == asset.person_id), scenario.people[0].label)
-            if person_key not in pension_by_person:
-                pension_by_person[person_key] = PensionPot(balance=asset.balance)
+        if asset_type == "PENSION":
+            # Pension assets: assign to specific person or default to first person
+            if asset.person_id:
+                person_key = next((p.label for p in scenario.people if p.id == asset.person_id), scenario.people[0].label)
             else:
-                # Sum multiple pensions for same person
-                pension_by_person[person_key].balance += asset.balance
+                # No person_id - assign to first person as a household pension
+                person_key = scenario.people[0].label
 
-            # NOTE: We'll treat pension withdrawal ordering in the engine (based on this priority)
-            # once we refactor the cashflow allocator.
+            if person_key not in pension_by_person:
+                pension_by_person[person_key] = PensionPot(
+                    balance=asset.balance,
+                    growth_rate_mean=asset.growth_rate_mean,
+                    growth_rate_std=asset.growth_rate_std,
+                )
+            else:
+                # Add balance to existing pension; keep growth rates from first pension
+                pension_by_person[person_key].balance += asset.balance
             pension_withdrawal_priority = min(pension_withdrawal_priority, int(withdrawal_priority))
             continue
 
-        # Generic asset account
         assets.append(
             AssetAccount(
                 name=asset.name,
@@ -167,7 +174,7 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         for expense in scenario.expenses
     ]
 
-    sim_scenario = SimulationScenario(
+    return SimulationScenario(
         start_year=start_year,
         end_year=end_year,
         people=people,
@@ -180,6 +187,77 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
         pension_withdrawal_priority=pension_withdrawal_priority,
         assumptions=assumptions,
+    )
+
+
+def _retirement_years_from_people(*, people: list[PersonEntity]) -> list[int]:
+    return sorted({p.birth_date.year + p.planned_retirement_age for p in people})
+
+
+def _response_from_matrices(*, years: list[int], mats: dict[str, np.ndarray], people: list[PersonEntity]) -> SimulationResponse:
+    def median(field_name: str) -> list[float]:
+        m = mats.get(field_name)
+        return np.median(m, axis=0).tolist() if m is not None and m.size else []
+
+    def percentile(field_name: str, pct: int) -> list[float]:
+        m = mats.get(field_name)
+        return np.percentile(m, pct, axis=0).tolist() if m is not None and m.size else []
+
+    def percentage(field_name: str) -> list[float]:
+        m = mats.get(field_name)
+        return (np.mean(m, axis=0) * 100).tolist() if m is not None and m.size else []
+
+    return SimulationResponse(
+        years=years,
+        net_worth_p10=percentile("net_worth", 10),
+        net_worth_median=median("net_worth"),
+        net_worth_p90=percentile("net_worth", 90),
+        income_median=median("total_income"),
+        spend_median=median("total_expenses"),
+        retirement_years=_retirement_years_from_people(people=people),
+        # Detailed incomes
+        salary_gross_median=median("salary_gross"),
+        salary_net_median=median("salary_net"),
+        pension_income_median=median("pension_income"),
+        state_pension_income_median=median("state_pension_income"),
+        investment_returns_median=median("investment_returns"),
+        total_income_median=median("total_income"),
+        # Detailed expenses
+        total_expenses_median=median("total_expenses"),
+        mortgage_payment_median=median("mortgage_payment"),
+        pension_contributions_median=median("pension_contributions"),
+        # Tax
+        income_tax_paid_median=median("income_tax_paid"),
+        ni_paid_median=median("ni_paid"),
+        total_tax_median=median("total_tax"),
+        # Assets
+        isa_balance_median=median("isa_balance"),
+        pension_balance_median=median("pension_balance"),
+        cash_balance_median=median("cash_balance"),
+        total_assets_median=median("total_assets"),
+        # Liabilities
+        mortgage_balance_median=median("mortgage_balance"),
+        total_liabilities_median=median("total_liabilities"),
+        # Other
+        mortgage_paid_off_median=percentage("mortgage_paid_off"),
+        is_depleted_median=percentage("is_depleted"),
+    )
+
+
+@router.post("/run", response_model=SimulationResponse)
+async def run_simulation(payload: SimulationRequest, session: AsyncSession = Depends(get_db_session)) -> SimulationResponse:
+    result = await session.execute(_scenario_query().where(Scenario.id == payload.scenario_id))
+    scenario = result.scalars().unique().first()
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+
+    if len(scenario.people) == 0:
+        raise HTTPException(status_code=400, detail="Scenario must have at least one person")
+
+    sim_scenario = _build_simulation_scenario(
+        scenario=scenario,
+        annual_spend_target_override=payload.annual_spend_target,
+        end_year_override=payload.end_year,
     )
 
     results = run_monte_carlo(scenario=sim_scenario, iterations=payload.iterations, seed=payload.seed)
@@ -211,7 +289,7 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         median = []
         p90 = []
 
-    retirement_years = sorted({person.birth_date.year + person.planned_retirement_age for person in scenario.people})
+    retirement_years = _retirement_years_from_people(people=sim_scenario.people)
 
     return SimulationResponse(
         years=years,
@@ -248,4 +326,77 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         mortgage_paid_off_median=get_percentage("mortgage_paid_off"),
         is_depleted_median=get_percentage("is_depleted"),
     )
+
+
+@router.post("/init", response_model=SimulationInitResponse)
+async def init_simulation(
+    payload: SimulationInitRequest, session: AsyncSession = Depends(get_db_session)
+) -> SimulationInitResponse:
+    result = await session.execute(_scenario_query().where(Scenario.id == payload.scenario_id))
+    scenario = result.scalars().unique().first()
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    if len(scenario.people) == 0:
+        raise HTTPException(status_code=400, detail="Scenario must have at least one person")
+
+    sim_scenario = _build_simulation_scenario(
+        scenario=scenario,
+        annual_spend_target_override=payload.annual_spend_target,
+        end_year_override=payload.end_year,
+    )
+
+    session_id = create_session(
+        scenario_id=scenario.id,
+        base_scenario=sim_scenario,
+        iterations=payload.iterations,
+        seed=payload.seed,
+    )
+
+    cached = get_session(session_id=session_id)
+    if cached is None:
+        raise HTTPException(status_code=500, detail="Failed to initialize simulation session")
+
+    mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
+    response = _response_from_matrices(years=mats.years, mats=mats.fields, people=sim_scenario.people)
+    return SimulationInitResponse(session_id=session_id, **response.model_dump())
+
+
+@router.post("/recalc", response_model=SimulationResponse)
+async def recalc_simulation(
+    payload: SimulationRecalcRequest,
+) -> SimulationResponse:
+    cached = get_session(session_id=payload.session_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
+
+    base = cached.base_scenario
+    retirement_age_offset = int(payload.retirement_age_offset or 0)
+
+    people = [
+        PersonEntity(
+            key=p.key,
+            birth_date=p.birth_date,
+            planned_retirement_age=max(0, int(p.planned_retirement_age) + retirement_age_offset),
+            state_pension_age=p.state_pension_age,
+        )
+        for p in base.people
+    ]
+
+    sim_scenario = SimulationScenario(
+        start_year=base.start_year,
+        end_year=base.end_year,
+        people=people,
+        salary_by_person=base.salary_by_person,
+        pension_by_person=base.pension_by_person,
+        assets=base.assets,
+        mortgage=base.mortgage,
+        expenses=base.expenses,
+        annual_spend_target=float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target,
+        planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
+        pension_withdrawal_priority=base.pension_withdrawal_priority,
+        assumptions=base.assumptions,
+    )
+
+    mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
+    return _response_from_matrices(years=mats.years, mats=mats.fields, people=sim_scenario.people)
 
