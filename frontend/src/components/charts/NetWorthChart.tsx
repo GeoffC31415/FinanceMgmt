@@ -154,6 +154,8 @@ export function NetWorthChart({
               fill="transparent"
               yAxisId="left"
               stackId="band-base"
+              tooltipType="none"
+              legendType="none"
             />
             <Area
               type="monotone"
@@ -165,6 +167,8 @@ export function NetWorthChart({
               yAxisId="left"
               stackId="band-base"
               name="net_worth_p10_p90"
+              tooltipType="none"
+              legendType="none"
             />
             <Line
               type="monotone"
