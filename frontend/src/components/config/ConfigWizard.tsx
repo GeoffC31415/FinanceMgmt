@@ -655,7 +655,7 @@ export function ConfigWizard() {
                   onChange={(e) =>
                     setDraft((d) => ({
                       ...d,
-                      mortgage: e.target.checked ? { balance: 0, annual_interest_rate: 0.04, monthly_payment: 0, months_remaining: 0 } : null
+                      mortgage: e.target.checked ? { balance: 0, annual_interest_rate: 0.04, monthly_payment: 0 } : null
                     }))
                   }
                 />
@@ -663,7 +663,7 @@ export function ConfigWizard() {
               </label>
               {draft.mortgage !== null && (
                 <>
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-3">
                     <div>
                       <Label tooltip="Current outstanding mortgage balance">Balance (£)</Label>
                       <input
@@ -703,20 +703,6 @@ export function ConfigWizard() {
                           setDraft((d) => ({
                             ...d,
                             mortgage: d.mortgage ? { ...d.mortgage, monthly_payment: Number(e.target.value) } : null
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Label tooltip="How many months until your mortgage is fully paid (e.g. 240 = 20 years)">Months Remaining</Label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        value={draft.mortgage.months_remaining}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            mortgage: d.mortgage ? { ...d.mortgage, months_remaining: Number(e.target.value) } : null
                           }))
                         }
                       />
