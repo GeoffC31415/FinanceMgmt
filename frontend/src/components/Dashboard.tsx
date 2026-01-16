@@ -217,8 +217,8 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-slate-300">Pick a scenario and run a quick simulation (median net worth).</p>
+        <h1 className="text-2xl font-semibold">Scenario Simulation</h1>
+        <p className="text-slate-300">Run Monte Carlo simulations with randomised investment returns to explore the range of possible financial outcomes.</p>
       </div>
 
       {(error || run_error) && (

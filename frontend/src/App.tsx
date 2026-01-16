@@ -18,7 +18,7 @@ export function App() {
               }
               end
             >
-              Dashboard
+              Simulation
             </NavLink>
             <NavLink
               to="/config"
