@@ -40,7 +40,7 @@ def calculate_pension_drawdown(
     Returns:
         PensionDrawdownResult with withdrawal amounts and tax
     """
-    if target_net_income <= 0:
+    if target_net_income <= 0 or pension_balance <= 0:
         return PensionDrawdownResult(
             gross_withdrawal=0.0,
             tax_free_amount=0.0,
@@ -48,48 +48,18 @@ def calculate_pension_drawdown(
             tax_paid=0.0,
             net_income=0.0,
         )
-    
-    # Binary search for the gross withdrawal that gives us target net income
-    # This is needed because tax is non-linear (different bands)
-    low = 0.0
-    high = min(pension_balance, target_net_income * 2)  # Upper bound guess
-    
-    # If pension is empty, nothing to withdraw
-    if pension_balance <= 0:
-        return PensionDrawdownResult(
-            gross_withdrawal=0.0,
-            tax_free_amount=0.0,
-            taxable_amount=0.0,
-            tax_paid=0.0,
-            net_income=0.0,
-        )
-    
-    # Iteratively find the right withdrawal amount
-    for _ in range(50):  # Should converge quickly
-        gross = (low + high) / 2
-        result = _calculate_for_gross(
-            gross_withdrawal=gross,
-            other_taxable_income=other_taxable_income,
-            bands=bands,
-        )
-        
-        if abs(result.net_income - target_net_income) < 0.01:
-            break
-        
-        if result.net_income < target_net_income:
-            low = gross
-        else:
-            high = gross
-    
-    # Cap at pension balance
-    if result.gross_withdrawal > pension_balance:
-        return _calculate_for_gross(
-            gross_withdrawal=pension_balance,
-            other_taxable_income=other_taxable_income,
-            bands=bands,
-        )
-    
-    return result
+
+    gross = _solve_gross_withdrawal(
+        target_net_income=target_net_income,
+        other_taxable_income=other_taxable_income,
+        pension_balance=pension_balance,
+        bands=bands,
+    )
+    return _calculate_for_gross(
+        gross_withdrawal=gross,
+        other_taxable_income=other_taxable_income,
+        bands=bands,
+    )
 
 
 def _calculate_for_gross(
@@ -120,3 +90,80 @@ def _calculate_for_gross(
         tax_paid=pension_tax,
         net_income=net_income,
     )
+
+
+def _solve_gross_withdrawal(
+    *,
+    target_net_income: float,
+    other_taxable_income: float,
+    pension_balance: float,
+    bands: IncomeTaxBands,
+) -> float:
+    """
+    Closed-form solution for pension drawdown based on piecewise-linear tax bands.
+
+    Net income per unit of pension taxable income depends on the marginal tax rate:
+    - gross = taxable / 0.75
+    - net = gross - tax
+    => net per taxable = 4/3 - rate
+    """
+    taxable_target = _solve_taxable_amount(
+        target_net_income=target_net_income,
+        other_taxable_income=other_taxable_income,
+        bands=bands,
+    )
+    gross = taxable_target / 0.75 if taxable_target > 0 else 0.0
+    return min(gross, pension_balance)
+
+
+def _solve_taxable_amount(
+    *,
+    target_net_income: float,
+    other_taxable_income: float,
+    bands: IncomeTaxBands,
+) -> float:
+    if target_net_income <= 0:
+        return 0.0
+
+    base_income = max(0.0, other_taxable_income)
+    remaining_net = target_net_income
+    taxable_needed = 0.0
+
+    band_limits = (
+        (bands.personal_allowance, 0.0),
+        (bands.basic_rate_limit, bands.basic_rate),
+        (bands.higher_rate_limit, bands.higher_rate),
+    )
+
+    previous_limit = 0.0
+    current_income = base_income
+
+    for limit, rate in band_limits:
+        band_start = previous_limit
+        band_end = limit
+        previous_limit = limit
+
+        if current_income >= band_end:
+            continue
+
+        available = band_end - max(current_income, band_start)
+        if available <= 0:
+            continue
+
+        net_per_taxable = (4.0 / 3.0) - rate
+        net_available = available * net_per_taxable
+        if remaining_net <= net_available:
+            taxable_needed += remaining_net / net_per_taxable
+            return taxable_needed
+
+        taxable_needed += available
+        remaining_net -= net_available
+        current_income = band_end
+
+    # Additional rate band (no upper limit)
+    additional_rate = bands.additional_rate
+    net_per_taxable = (4.0 / 3.0) - additional_rate
+    if net_per_taxable <= 0:
+        return taxable_needed
+    taxable_needed += remaining_net / net_per_taxable
+    return taxable_needed

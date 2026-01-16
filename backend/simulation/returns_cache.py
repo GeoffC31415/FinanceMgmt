@@ -23,8 +23,13 @@ class ReturnsMatrix:
 
     years: np.ndarray
     asset_names: list[str]
+    asset_types: np.ndarray
+    asset_withdrawal_priority: np.ndarray
+    initial_asset_balances: np.ndarray
+    initial_asset_cost_bases: np.ndarray
     asset_returns: np.ndarray
     pension_keys: list[str]
+    initial_pension_balances: np.ndarray
     pension_returns: np.ndarray
 
     @property
@@ -104,7 +109,17 @@ def _scenario_assets_for_returns(*, scenario: SimulationScenario) -> list[Any]:
     if not any(getattr(a, "asset_type", None) == "CASH" for a in assets):
         assets = assets + [
             # minimal stub with expected attributes
-            type("CashStub", (), {"name": "Cash", "asset_type": "CASH"})()  # type: ignore[misc]
+            type(
+                "CashStub",
+                (),
+                {
+                    "name": "Cash",
+                    "asset_type": "CASH",
+                    "withdrawal_priority": 0,
+                    "balance": 0.0,
+                    "cost_basis": 0.0,
+                },
+            )()  # type: ignore[misc]
         ]
     return assets
 
@@ -125,6 +140,20 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
     # Assets (including CASH if absent; CASH should have zero growth in the engine anyway).
     assets = _scenario_assets_for_returns(scenario=scenario)
     asset_names = [str(getattr(a, "name", "")) for a in assets]
+    asset_types = np.array(
+        [_asset_type_code(str(getattr(a, "asset_type", ""))) for a in assets],
+        dtype=np.int8,
+    )
+    asset_withdrawal_priority = np.array(
+        [int(getattr(a, "withdrawal_priority", 0)) for a in assets], dtype=np.int32
+    )
+    initial_asset_balances = np.array(
+        [float(getattr(a, "balance", 0.0)) for a in assets], dtype=np.float64
+    )
+    initial_asset_cost_bases = np.array(
+        [float(getattr(a, "cost_basis", getattr(a, "balance", 0.0))) for a in assets],
+        dtype=np.float64,
+    )
     asset_means = np.array([float(getattr(a, "growth_rate_mean", 0.0)) for a in assets], dtype=np.float64)
     asset_stds = np.array([float(getattr(a, "growth_rate_std", 0.0)) for a in assets], dtype=np.float64)
 
@@ -145,6 +174,9 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
         pension_stds = np.array(
             [float(scenario.pension_by_person[k].growth_rate_std) for k in pension_keys], dtype=np.float64
         )
+        initial_pension_balances = np.array(
+            [float(scenario.pension_by_person[k].balance) for k in pension_keys], dtype=np.float64
+        )
         pension_returns = rng.normal(
             loc=pension_means.reshape(1, 1, -1),
             scale=pension_stds.reshape(1, 1, -1),
@@ -152,12 +184,29 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
         ).astype(np.float64)
     else:
         pension_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
+        initial_pension_balances = np.zeros(0, dtype=np.float64)
 
     return ReturnsMatrix(
         years=years,
         asset_names=asset_names,
+        asset_types=asset_types,
+        asset_withdrawal_priority=asset_withdrawal_priority,
+        initial_asset_balances=initial_asset_balances,
+        initial_asset_cost_bases=initial_asset_cost_bases,
         asset_returns=asset_returns,
         pension_keys=pension_keys,
+        initial_pension_balances=initial_pension_balances,
         pension_returns=pension_returns,
     )
+
+
+def _asset_type_code(asset_type: str) -> int:
+    asset_type_upper = (asset_type or "").upper()
+    if asset_type_upper == "CASH":
+        return 0
+    if asset_type_upper == "ISA":
+        return 1
+    if asset_type_upper == "GIA":
+        return 2
+    return 3
 
