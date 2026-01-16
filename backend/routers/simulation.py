@@ -71,6 +71,9 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         equity_return_std=_coerce_float(assumptions_json.get("equity_return_std"), 0.10),
         isa_annual_limit=_coerce_float(assumptions_json.get("isa_annual_limit"), 20_000.0),
         state_pension_annual=_coerce_float(assumptions_json.get("state_pension_annual"), 11_500.0),
+        cgt_annual_allowance=_coerce_float(assumptions_json.get("cgt_annual_allowance"), 3_000.0),
+        cgt_rate=_coerce_float(assumptions_json.get("cgt_rate"), 0.10),
+        emergency_fund_months=_coerce_float(assumptions_json.get("emergency_fund_months"), 6.0),
     )
 
     start_year = _coerce_int(assumptions_json.get("start_year"), date.today().year)
@@ -106,12 +109,14 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
     # Separate pensions (they get contributions from salary) from other assets
     pension_by_person: dict[str, PensionPot] = {}
     assets: list[AssetAccount] = []
+    pension_withdrawal_priority = 100
 
     for asset in scenario.assets:
-        # Check if this is a pension by name (backward compatibility)
-        is_pension = "pension" in asset.name.lower()
-        
-        if is_pension and asset.person_id:
+        # Prefer explicit asset type; fall back to name-based inference for old DB rows.
+        asset_type = getattr(asset, "asset_type", None) or ("PENSION" if "pension" in asset.name.lower() else "GIA")
+        withdrawal_priority = getattr(asset, "withdrawal_priority", 100)
+
+        if asset_type == "PENSION" and asset.person_id:
             # Create pension pot (still handled separately for salary contributions)
             person_key = next((p.label for p in scenario.people if p.id == asset.person_id), scenario.people[0].label)
             if person_key not in pension_by_person:
@@ -119,18 +124,26 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
             else:
                 # Sum multiple pensions for same person
                 pension_by_person[person_key].balance += asset.balance
-        else:
-            # Create generic asset account
-            assets.append(
-                AssetAccount(
-                    name=asset.name,
-                    balance=asset.balance,
-                    annual_contribution=asset.annual_contribution,
-                    growth_rate_mean=asset.growth_rate_mean,
-                    growth_rate_std=asset.growth_rate_std,
-                    contributions_end_at_retirement=asset.contributions_end_at_retirement,
-                )
+
+            # NOTE: We'll treat pension withdrawal ordering in the engine (based on this priority)
+            # once we refactor the cashflow allocator.
+            pension_withdrawal_priority = min(pension_withdrawal_priority, int(withdrawal_priority))
+            continue
+
+        # Generic asset account
+        assets.append(
+            AssetAccount(
+                name=asset.name,
+                asset_type=asset_type,
+                withdrawal_priority=withdrawal_priority,
+                balance=asset.balance,
+                annual_contribution=asset.annual_contribution,
+                growth_rate_mean=asset.growth_rate_mean,
+                growth_rate_std=asset.growth_rate_std,
+                contributions_end_at_retirement=asset.contributions_end_at_retirement,
+                cost_basis=asset.balance,
             )
+        )
 
     mortgage = None
     if scenario.mortgage is not None:
@@ -161,6 +174,7 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         expenses=expenses,
         annual_spend_target=annual_spend_target,
         planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
+        pension_withdrawal_priority=pension_withdrawal_priority,
         assumptions=assumptions,
     )
 
