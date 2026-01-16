@@ -8,7 +8,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+        <div className="mx-auto flex w-[70%] min-w-[800px] items-center justify-between py-4">
           <div className="text-lg font-semibold">Finances Simulator</div>
           <nav className="flex gap-4 text-sm">
             <NavLink
@@ -40,7 +40,7 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto w-[70%] min-w-[800px] py-8">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/config" element={<ScenarioConfigPage />} />
