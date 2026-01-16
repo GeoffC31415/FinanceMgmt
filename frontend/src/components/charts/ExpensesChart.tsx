@@ -17,7 +17,7 @@ type Props = {
   mortgage_payment_median: number[];
   pension_contributions_median: number[];
   total_tax_median: number[];
-  spend_median: number[];
+  fun_fund_median: number[];
   retirement_years: number[];
   percentile?: number;
 };
@@ -28,7 +28,7 @@ export function ExpensesChart({
   mortgage_payment_median,
   pension_contributions_median,
   total_tax_median,
-  spend_median,
+  fun_fund_median,
   retirement_years,
   percentile = 50
 }: Props) {
@@ -39,19 +39,27 @@ export function ExpensesChart({
   const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
 
   const data = years.map((year, idx) => {
+    // Backend total_expenses = expenses + mortgage + fun_fund
     const total_expenses = total_expenses_median[idx] ?? 0;
     const mortgage_payment = mortgage_payment_median[idx] ?? 0;
     const pension_contributions = pension_contributions_median[idx] ?? 0;
     const total_tax = total_tax_median[idx] ?? 0;
-    const other_expenses = Math.max(0, total_expenses - mortgage_payment - pension_contributions - total_tax);
+    const fun_fund = fun_fund_median[idx] ?? 0;
+    
+    // Living expenses = total_expenses - mortgage - fun_fund (what's left after known components)
+    const living_expenses = Math.max(0, total_expenses - mortgage_payment - fun_fund);
+    
+    // Total outgoings includes everything: living expenses + mortgage + pension contributions + tax + fun fund
+    const total_outgoings = living_expenses + mortgage_payment + pension_contributions + total_tax + fun_fund;
     
     return {
       year,
-      total_expenses: clampForLog(total_expenses),
+      total_outgoings: clampForLog(total_outgoings),
+      living_expenses: clampForLog(living_expenses),
       mortgage_payment: clampForLog(mortgage_payment),
       pension_contributions: clampForLog(pension_contributions),
       total_tax: clampForLog(total_tax),
-      other_expenses: clampForLog(other_expenses)
+      fun_fund: clampForLog(fun_fund)
     };
   });
 
@@ -59,7 +67,7 @@ export function ExpensesChart({
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold">
-          Expenses Breakdown
+          Outgoings Breakdown
           {percentile !== 50 && (
             <span className="ml-2 text-xs font-normal text-amber-400">
               (P{percentile})
@@ -93,17 +101,19 @@ export function ExpensesChart({
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}
               formatter={(value, name) => {
                 const label =
-                  name === "total_expenses"
-                    ? "Total expenses"
+                  name === "total_outgoings"
+                    ? "Total outgoings"
                     : name === "mortgage_payment"
-                      ? "Mortgage payment"
+                      ? "Mortgage"
                       : name === "pension_contributions"
                         ? "Pension contributions"
                         : name === "total_tax"
-                          ? "Total tax"
-                          : name === "other_expenses"
-                            ? "Other expenses"
-                            : name;
+                          ? "Tax"
+                          : name === "living_expenses"
+                            ? "Living expenses"
+                            : name === "fun_fund"
+                              ? "Fun fund"
+                              : name;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -113,11 +123,12 @@ export function ExpensesChart({
               iconType="line"
               contentStyle={{ color: "#e2e8f0" }}
               formatter={(value) => {
-                if (value === "total_expenses") return "Total expenses";
-                if (value === "mortgage_payment") return "Mortgage payment";
+                if (value === "total_outgoings") return "Total outgoings";
+                if (value === "mortgage_payment") return "Mortgage";
                 if (value === "pension_contributions") return "Pension contributions";
-                if (value === "total_tax") return "Total tax";
-                if (value === "other_expenses") return "Other expenses";
+                if (value === "total_tax") return "Tax";
+                if (value === "living_expenses") return "Living expenses";
+                if (value === "fun_fund") return "Fun fund";
                 return value;
               }}
             />
@@ -132,12 +143,21 @@ export function ExpensesChart({
             ))}
             <Line
               type="monotone"
-              dataKey="total_expenses"
+              dataKey="total_outgoings"
               stroke="#ef4444"
-              strokeWidth={2}
+              strokeWidth={3}
               dot={false}
               yAxisId="left"
-              name="total_expenses"
+              name="total_outgoings"
+            />
+            <Line
+              type="monotone"
+              dataKey="living_expenses"
+              stroke="#a78bfa"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="living_expenses"
             />
             <Line
               type="monotone"
@@ -168,12 +188,12 @@ export function ExpensesChart({
             />
             <Line
               type="monotone"
-              dataKey="other_expenses"
-              stroke="#a78bfa"
+              dataKey="fun_fund"
+              stroke="#ec4899"
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
-              name="other_expenses"
+              name="fun_fund"
             />
           </ComposedChart>
         </ResponsiveContainer>

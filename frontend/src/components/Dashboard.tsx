@@ -50,6 +50,7 @@ function applyInflationAdjustment(result: SimulationResponse): SimulationRespons
     total_expenses_median: adjust(result.total_expenses_median),
     mortgage_payment_median: adjust(result.mortgage_payment_median),
     pension_contributions_median: adjust(result.pension_contributions_median),
+    fun_fund_median: adjust(result.fun_fund_median),
     income_tax_paid_median: adjust(result.income_tax_paid_median),
     ni_paid_median: adjust(result.ni_paid_median),
     total_tax_median: adjust(result.total_tax_median),
@@ -475,7 +476,7 @@ export function Dashboard() {
             mortgage_payment_median={display_result.mortgage_payment_median}
             pension_contributions_median={display_result.pension_contributions_median}
             total_tax_median={display_result.total_tax_median}
-            spend_median={display_result.spend_median}
+            fun_fund_median={display_result.fun_fund_median}
             retirement_years={display_result.retirement_years}
             percentile={percentile}
           />

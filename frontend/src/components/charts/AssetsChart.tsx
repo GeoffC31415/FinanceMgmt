@@ -133,7 +133,7 @@ export function AssetsChart({
               type="monotone"
               dataKey="total_assets"
               stroke="#a78bfa"
-              strokeWidth={2}
+              strokeWidth={3}
               dot={false}
               yAxisId="left"
               name="total_assets"
