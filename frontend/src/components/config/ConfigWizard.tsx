@@ -437,7 +437,7 @@ export function ConfigWizard() {
                 <div>Type</div>
                 <div>Withdraw_priority</div>
                 <div>Balance</div>
-                <div>Annual_contrib</div>
+                <div>Annual_invest_cap</div>
                 <div>Growth_mean</div>
                 <div>Growth_std</div>
                 <div>End_at_retire</div>
@@ -521,7 +521,7 @@ export function ConfigWizard() {
                         assets: d.assets.map((x, i) => (i === idx ? { ...x, annual_contribution: Number(e.target.value) } : x))
                       }))
                     }
-                    placeholder="annual contribution"
+                    placeholder="annual invest cap"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"

@@ -1,9 +1,136 @@
 import { useEffect, useMemo, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { ScenarioCreate, ScenarioRead } from "../../types";
+
+function parse_number_input(raw: string): number {
+  const cleaned = raw.replace(/,/g, "").trim();
+  if (cleaned === "") return 0;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function format_number_input(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  // Use the user's locale for thousands separators.
+  return value.toLocaleString(undefined, { maximumFractionDigits: 20 });
+}
+
+function parse_percent_input(raw: string): number {
+  // UI shows 5 for 5%, store 0.05 in the model.
+  const cleaned = raw.replace(/,/g, "").trim();
+  if (cleaned === "") return 0;
+  const value = Number(cleaned);
+  if (!Number.isFinite(value)) return 0;
+  return value / 100;
+}
+
+function format_percent_input(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  return (value * 100).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function NumberInput({
+  control,
+  name,
+  step,
+  min,
+  placeholder
+}: {
+  control: any;
+  name: string;
+  step?: number | string;
+  min?: number;
+  placeholder?: string;
+}) {
+  return (
+    <Controller
+      control={control}
+      name={name as any}
+      render={({ field }) => (
+        <input
+          className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+          inputMode="decimal"
+          placeholder={placeholder}
+          value={format_number_input(Number(field.value ?? 0))}
+          onChange={(e) => field.onChange(parse_number_input(e.target.value))}
+          step={step as any}
+          min={min as any}
+        />
+      )}
+    />
+  );
+}
+
+function AnnualFromMonthlyInput({
+  control,
+  monthly_name,
+  setValue
+}: {
+  control: any;
+  monthly_name: string;
+  setValue: (name: any, value: any, options?: any) => void;
+}) {
+  const monthly = useWatch({ control, name: monthly_name as any }) as number | undefined;
+  const annual = Number(monthly ?? 0) * 12;
+
+  return (
+    <input
+      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+      inputMode="decimal"
+      value={format_number_input(annual)}
+      onChange={(e) => {
+        const nextAnnual = parse_number_input(e.target.value);
+        setValue(monthly_name as any, nextAnnual / 12, { shouldDirty: true, shouldValidate: true });
+      }}
+    />
+  );
+}
+
+function PercentInput({
+  control,
+  name,
+  placeholder
+}: {
+  control: any;
+  name: string;
+  placeholder?: string;
+}) {
+  return (
+    <Controller
+      control={control}
+      name={name as any}
+      render={({ field }) => (
+        <div className="relative">
+          <input
+            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+            inputMode="decimal"
+            placeholder={placeholder}
+            value={format_percent_input(Number(field.value ?? 0))}
+            onChange={(e) => field.onChange(parse_percent_input(e.target.value))}
+          />
+          <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">
+            %
+          </div>
+        </div>
+      )}
+    />
+  );
+}
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span
+      className="ml-2 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-300"
+      title={text}
+      aria-label={text}
+    >
+      ?
+    </span>
+  );
+}
 
 const schema = z.object({
   name: z.string().min(1).max(200),
@@ -195,7 +322,9 @@ type Props = {
 
 export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props) {
   const default_values = useMemo(() => to_form_values(scenario), [scenario]);
-  const [tab, setTab] = useState<"assumptions" | "people" | "income_assets" | "housing_expenses">("assumptions");
+  const [tab, setTab] = useState<"assumptions" | "people" | "income" | "assets" | "housing" | "expenses">(
+    "assumptions"
+  );
 
   const form = useForm<FormValues>({
     mode: "onChange",
@@ -218,8 +347,10 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         {[
           ["assumptions", "Assumptions"],
           ["people", "People"],
-          ["income_assets", "Income & Assets"],
-          ["housing_expenses", "Housing & Expenses"]
+          ["income", "Income"],
+          ["assets", "Assets"],
+          ["housing", "Housing"],
+          ["expenses", "Expenses"]
         ].map(([key, label]) => (
           <button
             key={key}
@@ -255,23 +386,36 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "assumptions" && (
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Inflation rate</label>
+              <div className="mt-1">
+                <PercentInput control={form.control} name="assumptions.inflation_rate" placeholder="e.g. 2" />
+              </div>
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Equity return mean</label>
+              <div className="mt-1">
+                <PercentInput control={form.control} name="assumptions.equity_return_mean" placeholder="e.g. 5" />
+              </div>
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Equity return std dev</label>
+              <div className="mt-1">
+                <PercentInput control={form.control} name="assumptions.equity_return_std" placeholder="e.g. 10" />
+              </div>
+            </div>
             {[
-              ["assumptions.inflation_rate", "Inflation rate", "e.g. 0.02"],
-              ["assumptions.equity_return_mean", "Equity return mean", "e.g. 0.05"],
-              ["assumptions.equity_return_std", "Equity return std dev", "e.g. 0.10"],
-              ["assumptions.isa_annual_limit", "ISA annual limit", "e.g. 20000"],
-              ["assumptions.state_pension_annual", "State pension annual", "e.g. 11500"],
+              ["assumptions.isa_annual_limit", "ISA annual limit", "e.g. 20,000"],
+              ["assumptions.state_pension_annual", "State pension annual", "e.g. 11,500"],
               ["assumptions.start_year", "Start year", "e.g. 2026"],
               ["assumptions.end_year", "End year", "e.g. 2086"],
-              ["assumptions.annual_spend_target", "Annual spend target", "e.g. 30000"]
+              ["assumptions.annual_spend_target", "Annual spend target", "e.g. 30,000"]
             ].map(([path, label, placeholder]) => (
               <div key={path} className="rounded border border-slate-800 bg-slate-900/30 p-4">
                 <label className="block text-sm font-medium">{label}</label>
-                <input
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder={placeholder}
-                  {...form.register(path as any)}
-                />
+                <div className="mt-1">
+                  <NumberInput control={form.control} name={path} placeholder={placeholder} />
+                </div>
               </div>
             ))}
           </div>
@@ -346,265 +490,233 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
           </div>
         )}
 
-        {tab === "income_assets" && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Income</div>
-              {incomes.fields.map((income, idx) => (
-                <div key={income.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Income {idx + 1}</div>
-                    {incomes.fields.length > 1 && (
-                      <button
-                        type="button"
-                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
-                        onClick={() => incomes.remove(idx)}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid gap-3">
-                    <div>
-                      <label className="block text-sm font-medium">Assigned to</label>
-                      <select
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        {...form.register(`incomes.${idx}.person_id` as any)}
-                      >
-                        <option value="">Household</option>
-                        {scenario.people.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Kind</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        placeholder="salary"
-                        {...form.register(`incomes.${idx}.kind` as any)}
-                      />
-                    </div>
-                    {[
-                      [`incomes.${idx}.gross_annual`, "Gross annual"],
-                      [`incomes.${idx}.annual_growth_rate`, "Annual growth rate"],
-                      [`incomes.${idx}.employee_pension_pct`, "Employee pension % (0..1)"],
-                      [`incomes.${idx}.employer_pension_pct`, "Employer pension % (0..1)"]
-                    ].map(([path, label]) => (
-                      <div key={path}>
-                        <label className="block text-sm font-medium">{label}</label>
-                        <input
-                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                          type="number"
-                          step="0.01"
-                          {...form.register(path as any)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
-                onClick={() =>
-                  incomes.append({
-                    person_id: "",
-                    kind: "salary",
-                    gross_annual: 0,
-                    annual_growth_rate: 0.0,
-                    employee_pension_pct: 0.0,
-                    employer_pension_pct: 0.0
-                  } as any)
-                }
-              >
-                Add income
-              </button>
-            </div>
-
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Assets</div>
-              {assets.fields.map((asset, idx) => (
-                <div key={asset.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Asset {idx + 1}</div>
-                    {assets.fields.length > 1 && (
-                      <button
-                        type="button"
-                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
-                        onClick={() => assets.remove(idx)}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid gap-3">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium">Type</label>
-                        <select
-                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                          {...form.register(`assets.${idx}.asset_type` as any)}
-                        >
-                          <option value="CASH">Cash</option>
-                          <option value="ISA">ISA</option>
-                          <option value="GIA">GIA</option>
-                          <option value="PENSION">Pension</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium">Withdrawal priority (lower = earlier)</label>
-                        <input
-                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                          type="number"
-                          {...form.register(`assets.${idx}.withdrawal_priority` as any)}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Name</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        {...form.register(`assets.${idx}.name`)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Assigned to</label>
-                      <select
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        {...form.register(`assets.${idx}.person_id`)}
-                      >
-                        <option value="">Household</option>
-                        {scenario.people.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Starting balance</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        {...form.register(`assets.${idx}.balance`)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Annual contribution</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        {...form.register(`assets.${idx}.annual_contribution`)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Growth rate mean (e.g. 0.05)</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        step="0.01"
-                        {...form.register(`assets.${idx}.growth_rate_mean`)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Growth rate std dev (risk, e.g. 0.10)</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        step="0.01"
-                        {...form.register(`assets.${idx}.growth_rate_std`)}
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        {...form.register(`assets.${idx}.contributions_end_at_retirement`)}
-                      />
-                      Contributions end at retirement
-                    </label>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
-                onClick={() =>
-                  assets.append({
-                    name: "New asset",
-                    asset_type: "GIA",
-                    withdrawal_priority: 100,
-                    balance: 0,
-                    annual_contribution: 0,
-                    growth_rate_mean: 0.05,
-                    growth_rate_std: 0.10,
-                    contributions_end_at_retirement: false,
-                    person_id: ""
-                  })
-                }
-              >
-                Add asset
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === "housing_expenses" && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Mortgage</div>
-              <div className="mt-3 grid gap-3">
-                {[
-                  ["mortgage.balance", "Balance"],
-                  ["mortgage.annual_interest_rate", "Annual interest rate"],
-                  ["mortgage.monthly_payment", "Monthly payment"],
-                  ["mortgage.months_remaining", "Months remaining"]
-                ].map(([path, label]) => (
-                  <div key={path}>
-                    <label className="block text-sm font-medium">{label}</label>
+        {tab === "income" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="text-sm font-semibold">Income</div>
+            <div className="mt-3 overflow-auto">
+              <div className="hidden min-w-[980px] grid-cols-7 gap-3 text-xs text-slate-400 md:grid">
+                <div>Assigned_to</div>
+                <div>Kind</div>
+                <div>Gross_annual</div>
+                <div>Growth_rate</div>
+                <div>Employee_pension_pct</div>
+                <div>Employer_pension_pct</div>
+                <div></div>
+              </div>
+              <div className="min-w-[980px] space-y-2">
+                {incomes.fields.map((income, idx) => (
+                  <div key={income.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
+                    <select
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`incomes.${idx}.person_id` as any)}
+                    >
+                      <option value="">Household</option>
+                      {scenario.people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
                     <input
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      {...form.register(path as any)}
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      placeholder="salary"
+                      {...form.register(`incomes.${idx}.kind` as any)}
                     />
+                    <NumberInput control={form.control} name={`incomes.${idx}.gross_annual`} min={0} />
+                    <PercentInput control={form.control} name={`incomes.${idx}.annual_growth_rate`} placeholder="%" />
+                    <PercentInput control={form.control} name={`incomes.${idx}.employee_pension_pct`} placeholder="%" />
+                    <PercentInput control={form.control} name={`incomes.${idx}.employer_pension_pct`} placeholder="%" />
+                    <div className="flex items-center justify-end">
+                      {incomes.fields.length > 1 && (
+                        <button
+                          type="button"
+                          className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                          onClick={() => incomes.remove(idx)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+            <button
+              type="button"
+              className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              onClick={() =>
+                incomes.append({
+                  person_id: "",
+                  kind: "salary",
+                  gross_annual: 0,
+                  annual_growth_rate: 0.0,
+                  employee_pension_pct: 0.0,
+                  employer_pension_pct: 0.0
+                } as any)
+              }
+            >
+              Add income
+            </button>
+          </div>
+        )}
 
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Expenses</div>
-              {expenses.fields.map((expense, idx) => (
-                <div key={expense.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Expense {idx + 1}</div>
-                    {expenses.fields.length > 1 && (
-                      <button
-                        type="button"
-                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
-                        onClick={() => expenses.remove(idx)}
-                      >
-                        Remove
-                      </button>
-                    )}
+        {tab === "assets" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="text-sm font-semibold">Assets</div>
+            <div className="mt-3 overflow-auto">
+              <div className="hidden min-w-[1320px] grid-cols-10 gap-3 text-xs text-slate-400 md:grid">
+                <div>Assigned_to</div>
+                <div>Name</div>
+                <div>Type</div>
+                <div>Withdraw_priority</div>
+                <div>Start_balance</div>
+                <div>Annual_invest_cap</div>
+                <div>Growth_mean</div>
+                <div>Growth_std</div>
+                <div className="flex items-center">
+                  End_at_retire
+                  <InfoTip text="If enabled, this asset stops receiving new investments once everyone is retired. Existing balance still grows and can still be withdrawn." />
+                </div>
+                <div></div>
+              </div>
+              <div className="min-w-[1320px] space-y-2">
+                {assets.fields.map((asset, idx) => (
+                  <div key={asset.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-10">
+                    <select
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`assets.${idx}.person_id`)}
+                    >
+                      <option value="">Household</option>
+                      {scenario.people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`assets.${idx}.name`)}
+                    />
+                    <select
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`assets.${idx}.asset_type` as any)}
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="ISA">ISA</option>
+                      <option value="GIA">GIA</option>
+                      <option value="PENSION">Pension</option>
+                    </select>
+                    <NumberInput control={form.control} name={`assets.${idx}.withdrawal_priority`} min={0} />
+                    <NumberInput control={form.control} name={`assets.${idx}.balance`} min={0} />
+                    <div>
+                      <NumberInput control={form.control} name={`assets.${idx}.annual_contribution`} min={0} />
+                      <div className="mt-1 text-xs text-slate-400">0 = no cap</div>
+                    </div>
+                    <PercentInput control={form.control} name={`assets.${idx}.growth_rate_mean`} placeholder="%" />
+                    <PercentInput control={form.control} name={`assets.${idx}.growth_rate_std`} placeholder="%" />
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          {...form.register(`assets.${idx}.contributions_end_at_retirement`)}
+                        />
+                        <span
+                          className="md:hidden"
+                          title="If enabled, this asset stops receiving new investments once everyone is retired. Existing balance still grows and can still be withdrawn."
+                        >
+                          End at retire
+                        </span>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-end">
+                      {assets.fields.length > 1 && (
+                        <button
+                          type="button"
+                          className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                          onClick={() => assets.remove(idx)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="grid gap-3">
-                    <div>
-                      <label className="block text-sm font-medium">Name</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        {...form.register(`expenses.${idx}.name`)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium">Monthly amount</label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        {...form.register(`expenses.${idx}.monthly_amount`)}
-                      />
-                    </div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              onClick={() =>
+                assets.append({
+                  name: "New asset",
+                  asset_type: "GIA",
+                  withdrawal_priority: 100,
+                  balance: 0,
+                  annual_contribution: 0,
+                  growth_rate_mean: 0.05,
+                  growth_rate_std: 0.1,
+                  contributions_end_at_retirement: false,
+                  person_id: ""
+                } as any)
+              }
+            >
+              Add asset
+            </button>
+          </div>
+        )}
+
+        {tab === "housing" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="text-sm font-semibold">Mortgage</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-4">
+              <div>
+                <label className="block text-sm font-medium">Balance</label>
+                <NumberInput control={form.control} name="mortgage.balance" min={0} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Annual interest rate</label>
+                <PercentInput control={form.control} name="mortgage.annual_interest_rate" placeholder="e.g. 4" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Monthly payment</label>
+                <NumberInput control={form.control} name="mortgage.monthly_payment" min={0} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Months remaining</label>
+                <NumberInput control={form.control} name="mortgage.months_remaining" min={0} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "expenses" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="text-sm font-semibold">Expenses</div>
+            <div className="mt-3 overflow-auto">
+              <div className="hidden min-w-[980px] grid-cols-5 gap-3 text-xs text-slate-400 md:grid">
+                <div>Name</div>
+                <div>Monthly_amount</div>
+                <div>Annual_amount</div>
+                <div>Inflation_linked</div>
+                <div></div>
+              </div>
+              <div className="min-w-[980px] space-y-2">
+                {expenses.fields.map((expense, idx) => (
+                  <div
+                    key={expense.id}
+                    className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-5"
+                  >
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`expenses.${idx}.name`)}
+                    />
+                    <NumberInput control={form.control} name={`expenses.${idx}.monthly_amount`} min={0} />
+                    <AnnualFromMonthlyInput
+                      control={form.control}
+                      monthly_name={`expenses.${idx}.monthly_amount`}
+                      setValue={form.setValue}
+                    />
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -613,23 +725,34 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                       />
                       Inflation linked
                     </label>
+                    <div className="flex items-center justify-end">
+                      {expenses.fields.length > 1 && (
+                        <button
+                          type="button"
+                          className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                          onClick={() => expenses.remove(idx)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
-                onClick={() =>
-                  expenses.append({
-                    name: "New expense",
-                    monthly_amount: 0,
-                    is_inflation_linked: true
-                  })
-                }
-              >
-                Add expense
-              </button>
+                ))}
+              </div>
             </div>
+            <button
+              type="button"
+              className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              onClick={() =>
+                expenses.append({
+                  name: "New expense",
+                  monthly_amount: 0,
+                  is_inflation_linked: true
+                } as any)
+              }
+            >
+              Add expense
+            </button>
           </div>
         )}
 
