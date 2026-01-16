@@ -66,6 +66,14 @@ export type SimulationRequest = {
   end_year?: number | null;
 };
 
+export type SimulationInitRequest = {
+  scenario_id: string;
+  iterations?: number;
+  seed?: number;
+  annual_spend_target?: number | null;
+  end_year?: number | null;
+};
+
 export type SimulationResponse = {
   years: number[];
   net_worth_p10: number[];
@@ -109,3 +117,12 @@ export type SimulationResponse = {
   is_depleted_median: number[];  // percentage of runs where assets are depleted
 };
 
+export type SimulationInitResponse = SimulationResponse & {
+  session_id: string;
+};
+
+export type SimulationRecalcRequest = {
+  session_id: string;
+  annual_spend_target?: number | null;
+  retirement_age_offset?: number | null;
+};

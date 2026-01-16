@@ -1,16 +1,50 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NetWorthChart } from "./charts/NetWorthChart";
+import { ExpensesChart } from "./charts/ExpensesChart";
+import { IncomeChart } from "./charts/IncomeChart";
+import { AssetsChart } from "./charts/AssetsChart";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 
 export function Dashboard() {
   const { scenarios, is_loading, error } = useScenarioList();
-  const { result, is_loading: is_running, error: run_error, run } = useSimulation();
+  const { result, session_id, is_loading: is_running, error: run_error, init, recalc } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(30000);
   const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
+  const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
+
+  // Initialize cached simulation session when scenario changes.
+  useEffect(() => {
+    if (!selected) return;
+    init({
+      scenario_id: selected.id,
+      iterations: 1000,
+      seed: 0,
+      annual_spend_target,
+      end_year
+    }).catch(() => {
+      // error is handled in hook state
+    });
+    // Intentionally not re-initializing on spend/end_year changes; use the button for that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  // Debounced recalc for spend + retirement age offset.
+  useEffect(() => {
+    if (!selected || !session_id) return;
+    const t = window.setTimeout(() => {
+      recalc({
+        annual_spend_target,
+        retirement_age_offset
+      }).catch(() => {
+        // error is handled in hook state
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [selected, session_id, annual_spend_target, retirement_age_offset, recalc]);
 
   function export_csv() {
     if (!result) return;
@@ -143,14 +177,43 @@ export function Dashboard() {
 
           <div className="min-w-[240px]">
             <label className="block text-sm font-medium">Annual spend (retired)</label>
-            <input
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={annual_spend_target}
-              onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
-              type="number"
-              min={0}
-              step={500}
-            />
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                className="w-full"
+                value={annual_spend_target}
+                onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
+                type="range"
+                min={10000}
+                max={100000}
+                step={1000}
+              />
+              <input
+                className="w-[120px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                value={annual_spend_target}
+                onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
+                type="number"
+                min={0}
+                step={500}
+              />
+            </div>
+          </div>
+
+          <div className="min-w-[240px]">
+            <label className="block text-sm font-medium">Retirement age offset</label>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                className="w-full"
+                value={retirement_age_offset}
+                onChange={(e) => setRetirementAgeOffset(Number(e.target.value))}
+                type="range"
+                min={-10}
+                max={10}
+                step={1}
+              />
+              <div className="w-[120px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-center">
+                {retirement_age_offset >= 0 ? `+${retirement_age_offset}` : retirement_age_offset}
+              </div>
+            </div>
           </div>
 
           <div className="min-w-[200px]">
@@ -171,7 +234,7 @@ export function Dashboard() {
             disabled={!selected || is_running}
             onClick={async () => {
               if (!selected) return;
-              await run({
+              await init({
                 scenario_id: selected.id,
                 iterations: 1000,
                 seed: 0,
@@ -180,7 +243,7 @@ export function Dashboard() {
               });
             }}
           >
-            {is_running ? "Running..." : "Run simulation"}
+            {is_running ? "Updating..." : session_id ? "Reinitialize" : "Initialize"}
           </button>
           <button
             className="rounded bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700 disabled:opacity-50"
@@ -189,19 +252,55 @@ export function Dashboard() {
           >
             Export CSV
           </button>
+          {session_id && (
+            <div className="text-xs text-slate-400">
+              {is_running ? "Recalculating…" : "Realtime mode: on"}
+            </div>
+          )}
         </div>
       </div>
 
       {result && (
-        <NetWorthChart
-          years={result.years}
-          net_worth_p10={result.net_worth_p10}
-          net_worth_median={result.net_worth_median}
-          net_worth_p90={result.net_worth_p90}
-          income_median={result.income_median}
-          spend_median={result.spend_median}
-          retirement_years={result.retirement_years}
-        />
+        <div className="space-y-6">
+          <NetWorthChart
+            years={result.years}
+            net_worth_p10={result.net_worth_p10}
+            net_worth_median={result.net_worth_median}
+            net_worth_p90={result.net_worth_p90}
+            retirement_years={result.retirement_years}
+            isa_balance_median={result.isa_balance_median}
+            pension_balance_median={result.pension_balance_median}
+            cash_balance_median={result.cash_balance_median}
+            total_assets_median={result.total_assets_median}
+          />
+          <ExpensesChart
+            years={result.years}
+            total_expenses_median={result.total_expenses_median}
+            mortgage_payment_median={result.mortgage_payment_median}
+            pension_contributions_median={result.pension_contributions_median}
+            total_tax_median={result.total_tax_median}
+            spend_median={result.spend_median}
+            retirement_years={result.retirement_years}
+          />
+          <IncomeChart
+            years={result.years}
+            salary_gross_median={result.salary_gross_median}
+            salary_net_median={result.salary_net_median}
+            pension_income_median={result.pension_income_median}
+            state_pension_income_median={result.state_pension_income_median}
+            investment_returns_median={result.investment_returns_median}
+            total_income_median={result.total_income_median}
+            retirement_years={result.retirement_years}
+          />
+          <AssetsChart
+            years={result.years}
+            isa_balance_median={result.isa_balance_median}
+            pension_balance_median={result.pension_balance_median}
+            cash_balance_median={result.cash_balance_median}
+            total_assets_median={result.total_assets_median}
+            retirement_years={result.retirement_years}
+          />
+        </div>
       )}
     </div>
   );

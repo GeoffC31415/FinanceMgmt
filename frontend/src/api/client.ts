@@ -1,4 +1,12 @@
-import type { ScenarioCreate, ScenarioRead, SimulationRequest, SimulationResponse } from "../types";
+import type {
+  ScenarioCreate,
+  ScenarioRead,
+  SimulationInitRequest,
+  SimulationInitResponse,
+  SimulationRecalcRequest,
+  SimulationRequest,
+  SimulationResponse
+} from "../types";
 
 const apiHost =
   typeof window !== "undefined" && window.location?.hostname
@@ -67,3 +75,16 @@ export async function run_simulation(payload: SimulationRequest): Promise<Simula
   });
 }
 
+export async function init_simulation(payload: SimulationInitRequest): Promise<SimulationInitResponse> {
+  return await http<SimulationInitResponse>("/simulation/init", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function recalc_simulation(payload: SimulationRecalcRequest): Promise<SimulationResponse> {
+  return await http<SimulationResponse>("/simulation/recalc", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}

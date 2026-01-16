@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Area,
   CartesianGrid,
@@ -16,9 +17,11 @@ type Props = {
   net_worth_p10: number[];
   net_worth_median: number[];
   net_worth_p90: number[];
-  income_median: number[];
-  spend_median: number[];
   retirement_years: number[];
+  isa_balance_median?: number[];
+  pension_balance_median?: number[];
+  cash_balance_median?: number[];
+  total_assets_median?: number[];
 };
 
 export function NetWorthChart({
@@ -26,27 +29,62 @@ export function NetWorthChart({
   net_worth_p10,
   net_worth_median,
   net_worth_p90,
-  income_median,
-  spend_median,
-  retirement_years
+  retirement_years,
+  isa_balance_median = [],
+  pension_balance_median = [],
+  cash_balance_median = [],
+  total_assets_median = []
 }: Props) {
+  // Get the last year's values for legend display
+  const lastIdx = years.length - 1;
+  const lastP10 = lastIdx >= 0 ? net_worth_p10[lastIdx] ?? 0 : 0;
+  const lastP90 = lastIdx >= 0 ? net_worth_p90[lastIdx] ?? 0 : 0;
+  const lastMedian = lastIdx >= 0 ? net_worth_median[lastIdx] ?? 0 : 0;
+
+  const formatCurrency = (value: number) => `£${Math.round(value).toLocaleString()}`;
+  const [useLogScale, setUseLogScale] = useState(false);
+
+  // Clamp values for log scale (must be > 0)
+  const LOG_MIN = 10000;
+  const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
+
   const data = years.map((year, idx) => {
     const p10 = net_worth_p10[idx] ?? 0;
     const p90 = net_worth_p90[idx] ?? 0;
+    const isa = isa_balance_median[idx] ?? 0;
+    const pension = pension_balance_median[idx] ?? 0;
+    const cash = cash_balance_median[idx] ?? 0;
+    const totalAssets = total_assets_median[idx] ?? 0;
+    // GIA = total assets - ISA - pension - cash
+    const gia = totalAssets - isa - pension - cash;
+    
     return {
       year,
-      net_worth_median: net_worth_median[idx] ?? 0,
-      net_worth_p10: p10,
-      net_worth_p90: p90,
-      net_worth_p10_p90_band: p90 - p10,
-      income_median: income_median[idx] ?? 0,
-      spend_median: spend_median[idx] ?? 0
+      net_worth_median: clampForLog(net_worth_median[idx] ?? 0),
+      net_worth_p10: clampForLog(p10),
+      net_worth_p90: clampForLog(p90),
+      net_worth_p10_p90_band: clampForLog(p90 - p10),
+      isa_balance: clampForLog(isa),
+      pension_balance: clampForLog(pension),
+      cash_balance: clampForLog(cash),
+      gia_balance: clampForLog(gia)
     };
   });
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-      <div className="mb-3 text-sm font-semibold">Net worth (median)</div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold">Net worth (median)</div>
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={useLogScale}
+            onChange={(e) => setUseLogScale(e.target.checked)}
+            className="rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+          />
+          Log scale
+        </label>
+      </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
@@ -55,12 +93,9 @@ export function NetWorthChart({
             <YAxis
               yAxisId="left"
               stroke="#94a3b8"
-              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              stroke="#94a3b8"
+              scale={useLogScale ? "log" : "linear"}
+              domain={useLogScale ? [LOG_MIN, "auto"] : ["auto", "auto"]}
+              allowDataOverflow={useLogScale}
               tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
             />
             <Tooltip
@@ -71,11 +106,15 @@ export function NetWorthChart({
                     ? "P10 net worth"
                     : name === "net_worth_p90"
                       ? "P90 net worth"
-                  : name === "income_median"
-                    ? "Median income"
-                    : name === "spend_median"
-                      ? "Median spending"
-                      : "Median net worth";
+                      : name === "cash_balance"
+                        ? "Cash"
+                        : name === "isa_balance"
+                          ? "ISA"
+                          : name === "pension_balance"
+                            ? "Pension"
+                            : name === "gia_balance"
+                              ? "GIA"
+                              : "Median net worth";
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -85,9 +124,13 @@ export function NetWorthChart({
               iconType="line"
               formatter={(value) => {
                 if (value === "net_worth_p10_p90") return "P10-P90 net worth range";
-                if (value === "net_worth_median") return "Median net worth";
-                if (value === "income_median") return "Median income";
-                if (value === "spend_median") return "Median spending";
+                if (value === "net_worth_p10") return `P10 net worth (${formatCurrency(lastP10)})`;
+                if (value === "net_worth_median") return `Median net worth (${formatCurrency(lastMedian)})`;
+                if (value === "net_worth_p90") return `P90 net worth (${formatCurrency(lastP90)})`;
+                if (value === "cash_balance") return "Cash";
+                if (value === "isa_balance") return "ISA";
+                if (value === "pension_balance") return "Pension";
+                if (value === "gia_balance") return "GIA";
                 if (value === "retirement") return "Retirement year";
                 return value;
               }}
@@ -125,6 +168,17 @@ export function NetWorthChart({
             />
             <Line
               type="monotone"
+              dataKey="net_worth_p10"
+              stroke="#8b5cf6"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              dot={false}
+              yAxisId="left"
+              name="net_worth_p10"
+              connectNulls={false}
+            />
+            <Line
+              type="monotone"
               dataKey="net_worth_median"
               stroke="#a78bfa"
               strokeWidth={2}
@@ -134,21 +188,49 @@ export function NetWorthChart({
             />
             <Line
               type="monotone"
-              dataKey="income_median"
-              stroke="#22c55e"
-              strokeWidth={2}
+              dataKey="net_worth_p90"
+              stroke="#8b5cf6"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
               dot={false}
-              yAxisId="right"
-              name="income_median"
+              yAxisId="left"
+              name="net_worth_p90"
             />
             <Line
               type="monotone"
-              dataKey="spend_median"
-              stroke="#ef4444"
-              strokeWidth={2}
+              dataKey="cash_balance"
+              stroke="#60a5fa"
+              strokeWidth={1.5}
               dot={false}
-              yAxisId="right"
-              name="spend_median"
+              yAxisId="left"
+              name="cash_balance"
+            />
+            <Line
+              type="monotone"
+              dataKey="isa_balance"
+              stroke="#34d399"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="isa_balance"
+            />
+            <Line
+              type="monotone"
+              dataKey="pension_balance"
+              stroke="#fbbf24"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="pension_balance"
+            />
+            <Line
+              type="monotone"
+              dataKey="gia_balance"
+              stroke="#fb7185"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="gia_balance"
             />
           </ComposedChart>
         </ResponsiveContainer>

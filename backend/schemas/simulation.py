@@ -60,3 +60,22 @@ class SimulationResponse(BaseModel):
     mortgage_paid_off_median: list[float]  # percentage of runs where mortgage is paid off
     is_depleted_median: list[float]  # percentage of runs where assets are depleted
 
+
+class SimulationInitRequest(BaseModel):
+    scenario_id: str
+    iterations: int = Field(default=1000, ge=10, le=20000)
+    seed: int = Field(default=0, ge=0)
+
+    # Optional scenario-level knobs for initialization.
+    annual_spend_target: float | None = Field(default=None, ge=0.0)
+    end_year: int | None = Field(default=None, ge=1900, le=2200)
+
+
+class SimulationInitResponse(SimulationResponse):
+    session_id: str
+
+
+class SimulationRecalcRequest(BaseModel):
+    session_id: str
+    annual_spend_target: float | None = Field(default=None, ge=0.0)
+    retirement_age_offset: int | None = Field(default=0, ge=-30, le=30)

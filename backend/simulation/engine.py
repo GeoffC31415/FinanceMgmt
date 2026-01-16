@@ -53,6 +53,19 @@ class SimulationScenario:
     assumptions: SimulationAssumptions = SimulationAssumptions()
 
 
+@dataclass(frozen=True)
+class SimulationRunMatrices:
+    """
+    Compact simulation output for fast aggregation.
+
+    Each field is shaped (iterations, n_years) and stored as float64.
+    Boolean-like outputs are stored as 0.0/1.0 for fast averaging.
+    """
+
+    years: list[int]
+    fields: dict[str, np.ndarray]
+
+
 def _sum_dicts(items: list[dict[str, float]]) -> dict[str, float]:
     out: dict[str, float] = {}
     for item in items:
@@ -251,11 +264,10 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         )
         salary_net = salary_gross_total - tax_breakdown.total_tax - employee_pension_total
 
-        # Step pensions
+        # Step pensions - use each pension's configured growth rate
         for pension in pension_by_person.values():
-            # Use default equity return for pensions (can be made configurable later)
             pension.annual_return = float(
-                rng.normal(loc=scenario.assumptions.equity_return_mean, scale=scenario.assumptions.equity_return_std)
+                rng.normal(loc=pension.growth_rate_mean, scale=pension.growth_rate_std)
             )
 
         # Mortgage + expenses
@@ -289,13 +301,17 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         cgt_paid = 0.0
         cgt_allowance_remaining = scenario.assumptions.cgt_annual_allowance
 
+        # Calculate emergency fund target BEFORE processing cash flows
+        monthly_outflows = total_outflows / 12.0 if total_outflows > 0 else 0.0
+        emergency_target = monthly_outflows * scenario.assumptions.emergency_fund_months
+
         # Start with cash inflows/outflows
         primary_cash.balance += salary_net + state_pension_income
         primary_cash.balance -= total_outflows
 
-        # If cash negative, withdraw from assets (user-defined priority) and then pension (if needed)
-        if primary_cash.balance < 0:
-            remaining_shortfall = -primary_cash.balance
+        # If cash below emergency fund target, withdraw from assets to maintain the reserve
+        if primary_cash.balance < emergency_target:
+            remaining_shortfall = emergency_target - primary_cash.balance
 
             withdrawal_assets = sorted(
                 [a for a in assets if a.asset_type != "CASH"],
@@ -354,14 +370,11 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                             proportion = pension.balance / total_pension_balance
                             pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
-            # Clamp cash at 0 if we couldn't cover everything
+            # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
             if primary_cash.balance < 0:
                 primary_cash.balance = 0.0
 
         # If cash above emergency fund, save excess in tax-optimal order: ISA (to limit) then GIA
-        monthly_outflows = total_outflows / 12.0 if total_outflows > 0 else 0.0
-        emergency_target = monthly_outflows * scenario.assumptions.emergency_fund_months
-
         investable = max(0.0, primary_cash.balance - emergency_target)
         if investable > 0:
             # ISA first (up to annual limit)
@@ -435,4 +448,348 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         snapshots.append(snapshot)
 
     return RunResult(snapshots=snapshots)
+
+
+def run_with_cached_returns(
+    *,
+    scenario: SimulationScenario,
+    returns: "ReturnsMatrix",
+) -> SimulationRunMatrices:
+    """
+    Faster Monte Carlo runner:
+    - Uses precomputed random returns from `returns`
+    - Stores outputs in numpy matrices (no YearlySnapshot objects)
+
+    This is designed for UI-driven "recalc" calls where the stochastic inputs
+    stay fixed but scenario parameters (e.g. spending/retirement) change.
+    """
+    years = list(range(scenario.start_year, scenario.end_year + 1))
+    if len(years) != int(returns.asset_returns.shape[1]):
+        raise ValueError("Returns matrix year span does not match scenario year span")
+
+    iterations = int(returns.asset_returns.shape[0])
+
+    field_names = [
+        "net_worth",
+        "salary_gross",
+        "salary_net",
+        "pension_income",
+        "state_pension_income",
+        "investment_returns",
+        "total_income",
+        "total_expenses",
+        "mortgage_payment",
+        "pension_contributions",
+        "income_tax_paid",
+        "ni_paid",
+        "total_tax",
+        "isa_balance",
+        "pension_balance",
+        "cash_balance",
+        "total_assets",
+        "mortgage_balance",
+        "total_liabilities",
+        "mortgage_paid_off",
+        "is_depleted",
+    ]
+
+    out: dict[str, np.ndarray] = {name: np.zeros((iterations, len(years)), dtype=np.float64) for name in field_names}
+    for it in range(iterations):
+        _simulate_single_run_to_matrices(scenario=scenario, returns=returns, iteration_idx=it, out=out)
+
+    return SimulationRunMatrices(years=years, fields=out)
+
+
+def _apply_asset_growth_with_return(*, asset: AssetAccount, annual_return: float) -> None:
+    annual_return_f = float(annual_return)
+    # Internal perf shortcut: keep cashflow reporting consistent without calling RNG.
+    asset._investment_return = asset.balance * annual_return_f  # type: ignore[attr-defined]
+    asset.balance += asset._investment_return
+
+
+def _simulate_single_run_to_matrices(
+    *,
+    scenario: SimulationScenario,
+    returns: "ReturnsMatrix",
+    iteration_idx: int,
+    out: dict[str, np.ndarray],
+) -> None:
+    # Deterministic context; all stochasticity comes from `returns`.
+    rng = np.random.default_rng(0)
+    tax = TaxCalculator()
+
+    people = [PersonEntity(**p.__dict__) for p in scenario.people]
+    salary_by_person = {k: [SalaryIncome(**s.__dict__) for s in v] for k, v in scenario.salary_by_person.items()}
+    pension_by_person = {k: PensionPot(**v.__dict__) for k, v in scenario.pension_by_person.items()}
+
+    assets = [
+        AssetAccount(
+            name=asset.name,
+            asset_type=getattr(asset, "asset_type", "GIA"),
+            withdrawal_priority=getattr(asset, "withdrawal_priority", 100),
+            balance=asset.balance,
+            annual_contribution=asset.annual_contribution,
+            growth_rate_mean=asset.growth_rate_mean,
+            growth_rate_std=asset.growth_rate_std,
+            contributions_end_at_retirement=asset.contributions_end_at_retirement,
+            cost_basis=getattr(asset, "cost_basis", asset.balance),
+        )
+        for asset in scenario.assets
+    ]
+
+    cash_assets = [a for a in assets if a.asset_type == "CASH"]
+    if not cash_assets:
+        assets.append(
+            AssetAccount(
+                name="Cash",
+                asset_type="CASH",
+                withdrawal_priority=0,
+                balance=0.0,
+                annual_contribution=0.0,
+                growth_rate_mean=0.0,
+                growth_rate_std=0.0,
+                contributions_end_at_retirement=False,
+                cost_basis=0.0,
+            )
+        )
+        cash_assets = [a for a in assets if a.asset_type == "CASH"]
+    primary_cash = cash_assets[0]
+
+    if int(returns.asset_returns.shape[2]) != len(assets):
+        raise ValueError("Returns matrix asset axis does not match scenario assets (+cash) ordering")
+
+    mortgage = None
+    if scenario.mortgage is not None:
+        mortgage = MortgageAccount(
+            balance=scenario.mortgage.balance,
+            annual_interest_rate=scenario.mortgage.annual_interest_rate,
+            monthly_payment=scenario.mortgage.monthly_payment,
+            months_remaining=scenario.mortgage.months_remaining,
+        )
+    expenses = [ExpenseItem(**e.__dict__) for e in scenario.expenses]
+
+    pension_keys = list(getattr(returns, "pension_keys", []))
+    pension_returns = getattr(returns, "pension_returns", None)
+
+    for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
+        context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
+
+        for asset in assets:
+            asset.begin_year()
+        for pension in pension_by_person.values():
+            pension.begin_year()
+
+        salary_gross_total = 0.0
+        employee_pension_total = 0.0
+        employer_pension_total = 0.0
+        is_all_retired = all(person.is_retired_in_year(year=year) for person in people) if people else False
+
+        for person in people:
+            if person.is_retired_in_year(year=year):
+                continue
+
+            salaries = salary_by_person.get(person.key, [])
+            if not salaries:
+                continue
+
+            pension = pension_by_person.get(person.key)
+            for salary in salaries:
+                salary.step(context=context)
+                salary_gross_total += salary.get_cash_flows().get("salary_gross", 0.0)
+
+                employee_contrib = salary.gross_annual * salary.employee_pension_pct
+                employer_contrib = salary.gross_annual * salary.employer_pension_pct
+                employee_pension_total += employee_contrib
+                employer_pension_total += employer_contrib
+
+                if pension is not None:
+                    pension.contribute(amount=employee_contrib + employer_contrib)
+
+        tax_breakdown = tax.calculate_for_salary(
+            gross_salary=salary_gross_total,
+            employee_pension_contribution=employee_pension_total,
+        )
+        salary_net = salary_gross_total - tax_breakdown.total_tax - employee_pension_total
+
+        # Apply cached pension returns (per pension key).
+        if pension_returns is not None and pension_keys:
+            for p_idx, p_key in enumerate(pension_keys):
+                pension = pension_by_person.get(p_key)
+                if pension is None:
+                    continue
+                pension.annual_return = float(pension_returns[iteration_idx, year_idx, p_idx])
+
+        if mortgage is not None:
+            mortgage.step(context=context)
+        for expense in expenses:
+            expense.step(context=context)
+
+        state_pension_income = 0.0
+        for person in people:
+            if person.is_state_pension_eligible_in_year(year=year):
+                state_pension_income += scenario.assumptions.state_pension_annual
+
+        expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
+        mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
+
+        extra_retirement_spend = 0.0
+        if is_all_retired:
+            extra_retirement_spend = max(0.0, scenario.annual_spend_target - expense_total)
+
+        total_outflows = expense_total + mortgage_payment + extra_retirement_spend
+
+        pension_income_net = 0.0
+        pension_income_tax = 0.0
+        cgt_paid = 0.0
+        cgt_allowance_remaining = scenario.assumptions.cgt_annual_allowance
+
+        # Calculate emergency fund target BEFORE processing cash flows
+        monthly_outflows = total_outflows / 12.0 if total_outflows > 0 else 0.0
+        emergency_target = monthly_outflows * scenario.assumptions.emergency_fund_months
+
+        primary_cash.balance += salary_net + state_pension_income
+        primary_cash.balance -= total_outflows
+
+        # If cash below emergency fund target, withdraw from assets to maintain the reserve
+        if primary_cash.balance < emergency_target:
+            remaining_shortfall = emergency_target - primary_cash.balance
+
+            withdrawal_assets = sorted(
+                [a for a in assets if a.asset_type != "CASH"],
+                key=lambda a: (a.withdrawal_priority, a.name.lower()),
+            )
+
+            for asset in withdrawal_assets:
+                if remaining_shortfall <= 0:
+                    break
+
+                if asset.asset_type == "ISA":
+                    res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
+                    asset.withdraw(amount=res.gross_withdrawal)
+                    primary_cash.balance += res.net_withdrawal
+                    remaining_shortfall -= res.net_withdrawal
+                    continue
+
+                if asset.asset_type == "GIA":
+                    res = calculate_gia_withdrawal(
+                        requested=remaining_shortfall,
+                        balance=asset.balance,
+                        cost_basis=asset.cost_basis,
+                        cgt_allowance_remaining=cgt_allowance_remaining,
+                        cgt_rate=scenario.assumptions.cgt_rate,
+                    )
+                    asset.withdraw(amount=res.gross_withdrawal)
+                    cgt_allowance_remaining = res.cgt_allowance_remaining
+                    cgt_paid += res.tax_paid
+                    primary_cash.balance += res.net_withdrawal
+                    remaining_shortfall -= res.net_withdrawal
+                    continue
+
+                res = calculate_tax_free_withdrawal(requested=remaining_shortfall, balance=asset.balance)
+                asset.withdraw(amount=res.gross_withdrawal)
+                primary_cash.balance += res.net_withdrawal
+                remaining_shortfall -= res.net_withdrawal
+
+            if remaining_shortfall > 0 and pension_by_person:
+                total_pension_balance = sum(p.balance for p in pension_by_person.values())
+                if total_pension_balance > 0:
+                    drawdown_result = calculate_pension_drawdown(
+                        target_net_income=remaining_shortfall,
+                        other_taxable_income=state_pension_income,
+                        pension_balance=total_pension_balance,
+                    )
+                    pension_income_net += drawdown_result.net_income
+                    pension_income_tax += drawdown_result.tax_paid
+                    primary_cash.balance += drawdown_result.net_income
+                    remaining_shortfall -= drawdown_result.net_income
+
+                    if drawdown_result.gross_withdrawal > 0 and total_pension_balance > 0:
+                        for pension in pension_by_person.values():
+                            proportion = pension.balance / total_pension_balance
+                            pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
+
+            # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
+            if primary_cash.balance < 0:
+                primary_cash.balance = 0.0
+
+        # If cash above emergency fund, save excess in tax-optimal order: ISA (to limit) then GIA
+        investable = max(0.0, primary_cash.balance - emergency_target)
+        if investable > 0:
+            isa_assets = [a for a in assets if a.asset_type == "ISA"]
+            isa_remaining = scenario.assumptions.isa_annual_limit
+            for isa in sorted(isa_assets, key=lambda a: (-a.annual_contribution, a.name.lower())):
+                if investable <= 0 or isa_remaining <= 0:
+                    break
+                cap = isa.annual_contribution if isa.annual_contribution > 0 else isa_remaining
+                amount = min(investable, isa_remaining, cap)
+                if amount <= 0:
+                    continue
+                isa.deposit(amount=amount)
+                primary_cash.balance -= amount
+                investable -= amount
+                isa_remaining -= amount
+
+            gia_assets = [a for a in assets if a.asset_type == "GIA"]
+            for gia in sorted(gia_assets, key=lambda a: (-a.annual_contribution, a.name.lower())):
+                if investable <= 0:
+                    break
+                cap = gia.annual_contribution if gia.annual_contribution > 0 else investable
+                amount = min(investable, cap)
+                if amount <= 0:
+                    continue
+                gia.deposit(amount=amount)
+                primary_cash.balance -= amount
+                investable -= amount
+
+        for asset_idx, asset in enumerate(assets):
+            _apply_asset_growth_with_return(asset=asset, annual_return=returns.asset_returns[iteration_idx, year_idx, asset_idx])
+        for pension in pension_by_person.values():
+            pension.step(context=context)
+
+        pension_balance = sum(p.balance for p in pension_by_person.values())
+        mortgage_balance = mortgage.balance if mortgage is not None else 0.0
+
+        isa_balance = sum(a.balance for a in assets if a.asset_type == "ISA")
+        cash_balance = sum(a.balance for a in assets if a.asset_type == "CASH")
+        total_assets = sum(a.balance for a in assets) + pension_balance
+        total_liabilities = mortgage_balance
+        net_worth = total_assets - total_liabilities
+
+        pension_investment_return = sum(p.get_cash_flows().get("pension_investment_return", 0.0) for p in pension_by_person.values())
+        investment_returns = sum(a.get_cash_flows().get(f"{a.name}_investment_return", 0.0) for a in assets) + pension_investment_return
+
+        total_income = salary_net + pension_income_net + state_pension_income
+
+        income_tax_paid = tax_breakdown.income_tax + pension_income_tax + cgt_paid
+        ni_paid = tax_breakdown.national_insurance
+        total_tax = income_tax_paid + ni_paid
+
+        total_expenses = expense_total + mortgage_payment + extra_retirement_spend
+        pension_contributions = employee_pension_total + employer_pension_total
+
+        is_depleted = total_assets <= 0
+        mortgage_paid_off = mortgage is None or mortgage.balance <= 0
+
+        out["net_worth"][iteration_idx, year_idx] = net_worth
+        out["salary_gross"][iteration_idx, year_idx] = salary_gross_total
+        out["salary_net"][iteration_idx, year_idx] = salary_net
+        out["pension_income"][iteration_idx, year_idx] = pension_income_net
+        out["state_pension_income"][iteration_idx, year_idx] = state_pension_income
+        out["investment_returns"][iteration_idx, year_idx] = investment_returns
+        out["total_income"][iteration_idx, year_idx] = total_income
+        out["total_expenses"][iteration_idx, year_idx] = total_expenses
+        out["mortgage_payment"][iteration_idx, year_idx] = mortgage_payment
+        out["pension_contributions"][iteration_idx, year_idx] = pension_contributions
+        out["income_tax_paid"][iteration_idx, year_idx] = income_tax_paid
+        out["ni_paid"][iteration_idx, year_idx] = ni_paid
+        out["total_tax"][iteration_idx, year_idx] = total_tax
+        out["isa_balance"][iteration_idx, year_idx] = isa_balance
+        out["pension_balance"][iteration_idx, year_idx] = pension_balance
+        out["cash_balance"][iteration_idx, year_idx] = cash_balance
+        out["total_assets"][iteration_idx, year_idx] = total_assets
+        out["mortgage_balance"][iteration_idx, year_idx] = mortgage_balance
+        out["total_liabilities"][iteration_idx, year_idx] = total_liabilities
+        out["mortgage_paid_off"][iteration_idx, year_idx] = 1.0 if mortgage_paid_off else 0.0
+        out["is_depleted"][iteration_idx, year_idx] = 1.0 if is_depleted else 0.0
+
 
