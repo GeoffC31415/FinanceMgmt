@@ -41,6 +41,8 @@ function applyInflationAdjustment(result: SimulationResponse): SimulationRespons
     spend_median: adjust(result.spend_median),
     salary_gross_median: adjust(result.salary_gross_median),
     salary_net_median: adjust(result.salary_net_median),
+    rental_income_median: adjust(result.rental_income_median),
+    gift_income_median: adjust(result.gift_income_median),
     pension_income_median: adjust(result.pension_income_median),
     state_pension_income_median: adjust(result.state_pension_income_median),
     investment_returns_median: adjust(result.investment_returns_median),
@@ -70,6 +72,7 @@ export function Dashboard() {
   const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
   const [realtime_mode, setRealtimeMode] = useState<boolean>(true);
   const [show_real_values, setShowRealValues] = useState<boolean>(false);
+  const [percentile, setPercentile] = useState<number>(50);
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
   
@@ -95,19 +98,20 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  // Debounced recalc for spend + retirement age offset (only when realtime mode is on).
+  // Debounced recalc for spend + retirement age offset + percentile (only when realtime mode is on).
   useEffect(() => {
     if (!realtime_mode || !selected || !session_id) return;
     const t = window.setTimeout(() => {
       recalc({
         annual_spend_target,
-        retirement_age_offset
+        retirement_age_offset,
+        percentile
       }).catch(() => {
         // error is handled in hook state
       });
     }, 120);
     return () => window.clearTimeout(t);
-  }, [realtime_mode, selected, session_id, annual_spend_target, retirement_age_offset, recalc]);
+  }, [realtime_mode, selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
 
   function export_csv() {
     if (!result) return;
@@ -126,6 +130,8 @@ export function Dashboard() {
       // Incomes
       "salary_gross_median",
       "salary_net_median",
+      "rental_income_median",
+      "gift_income_median",
       "pension_income_median",
       "state_pension_income_median",
       "investment_returns_median",
@@ -165,6 +171,8 @@ export function Dashboard() {
       // Incomes
       getValue(result.salary_gross_median, idx),
       getValue(result.salary_net_median, idx),
+      getValue(result.rental_income_median, idx),
+      getValue(result.gift_income_median, idx),
       getValue(result.pension_income_median, idx),
       getValue(result.state_pension_income_median, idx),
       getValue(result.investment_returns_median, idx),
@@ -219,7 +227,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+      <div className="sticky top-0 z-10 rounded border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-[240px]">
             <label className="block text-sm font-medium">Scenario</label>
@@ -290,6 +298,48 @@ export function Dashboard() {
               max={2200}
               step={1}
             />
+          </div>
+
+          <div className="min-w-[240px]">
+            <label className="block text-sm font-medium">
+              Percentile
+              <span className="ml-2 text-xs text-slate-400">
+                {percentile === 50 ? "(median)" : percentile < 50 ? "(pessimistic)" : "(optimistic)"}
+              </span>
+            </label>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                className="w-full accent-amber-500"
+                value={percentile}
+                onChange={(e) => setPercentile(Number(e.target.value))}
+                type="range"
+                min={1}
+                max={99}
+                step={1}
+              />
+              <input
+                className="w-[80px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-center"
+                value={percentile}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val >= 1 && val <= 99) setPercentile(val);
+                }}
+                type="number"
+                min={1}
+                max={99}
+              />
+              <button
+                className={`rounded px-3 py-2 text-xs font-medium transition-colors ${
+                  percentile === 50
+                    ? "bg-amber-600 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+                onClick={() => setPercentile(50)}
+                title="Set to median (50th percentile)"
+              >
+                Median
+              </button>
+            </div>
           </div>
 
           <button
@@ -363,11 +413,60 @@ export function Dashboard() {
               {is_running ? "Recalculating…" : realtime_mode ? "Realtime: on" : "Realtime: off"}
             </button>
           )}
+          {result && (() => {
+            const lastIdx = result.years.length - 1;
+            const depletionPct = lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
+            const finalP10 = lastIdx >= 0 ? result.net_worth_p10[lastIdx] : 0;
+            const depletionColor = depletionPct === 0 
+              ? "text-emerald-400" 
+              : depletionPct < 10 
+                ? "text-amber-400" 
+                : "text-rose-400";
+            const p10Color = finalP10 > 0 
+              ? "text-emerald-400" 
+              : "text-rose-400";
+            return (
+              <div className="flex items-center gap-4 text-xs">
+                <div 
+                  className={`flex items-center gap-2 ${depletionColor}`}
+                  title={`${depletionPct.toFixed(1)}% of simulations run out of investable assets (ISA, pension, cash, GIA all depleted). This is different from net worth which also includes liabilities like mortgages.`}
+                >
+                  <span className="text-slate-400">Asset depletion:</span>
+                  <span className="font-semibold">
+                    {depletionPct === 0 ? "0%" : `${depletionPct.toFixed(1)}%`}
+                  </span>
+                </div>
+                <div 
+                  className={`flex items-center gap-2 ${p10Color}`}
+                  title="Net worth at the 10th percentile in the final year. If this is positive, 90% of simulations end with positive net worth."
+                >
+                  <span className="text-slate-400">P10 final:</span>
+                  <span className="font-semibold">
+                    £{Math.round(finalP10).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
       {display_result && (
         <div className="space-y-6">
+          {percentile !== 50 && (
+            <div className="rounded border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+              <strong>Viewing {percentile}th percentile:</strong>{" "}
+              {percentile < 50 
+                ? `This shows a more pessimistic scenario where ${percentile}% of simulations perform worse.`
+                : `This shows a more optimistic scenario where ${100 - percentile}% of simulations perform better.`}
+              <button
+                className="ml-3 rounded bg-amber-700/50 px-2 py-0.5 text-xs hover:bg-amber-700"
+                onClick={() => setPercentile(50)}
+              >
+                Reset to median
+              </button>
+            </div>
+          )}
           {show_real_values && (
             <div className="rounded border border-cyan-800/50 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-200">
               <strong>Today's value mode:</strong> All amounts are adjusted for {((result?.inflation_rate ?? 0.02) * 100).toFixed(1)}% annual inflation, 
@@ -384,6 +483,7 @@ export function Dashboard() {
             pension_balance_median={display_result.pension_balance_median}
             cash_balance_median={display_result.cash_balance_median}
             total_assets_median={display_result.total_assets_median}
+            percentile={percentile}
           />
           <ExpensesChart
             years={display_result.years}
@@ -393,16 +493,20 @@ export function Dashboard() {
             total_tax_median={display_result.total_tax_median}
             spend_median={display_result.spend_median}
             retirement_years={display_result.retirement_years}
+            percentile={percentile}
           />
           <IncomeChart
             years={display_result.years}
             salary_gross_median={display_result.salary_gross_median}
             salary_net_median={display_result.salary_net_median}
+            rental_income_median={display_result.rental_income_median}
+            gift_income_median={display_result.gift_income_median}
             pension_income_median={display_result.pension_income_median}
             state_pension_income_median={display_result.state_pension_income_median}
             investment_returns_median={display_result.investment_returns_median}
             total_income_median={display_result.total_income_median}
             retirement_years={display_result.retirement_years}
+            percentile={percentile}
           />
           <AssetsChart
             years={display_result.years}
@@ -411,6 +515,7 @@ export function Dashboard() {
             cash_balance_median={display_result.cash_balance_median}
             total_assets_median={display_result.total_assets_median}
             retirement_years={display_result.retirement_years}
+            percentile={percentile}
           />
         </div>
       )}

@@ -25,7 +25,7 @@ from backend.simulation.engine import (
     run_with_cached_returns,
 )
 from backend.simulation.returns_cache import create_session, get_session
-from backend.simulation.entities import ExpenseItem, MortgageAccount, PensionPot, PersonEntity, SalaryIncome
+from backend.simulation.entities import ExpenseItem, GiftIncome, MortgageAccount, PensionPot, PersonEntity, RentalIncome, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
 
 router = APIRouter()
@@ -98,21 +98,43 @@ def _build_simulation_scenario(
     ]
 
     salary_by_person: dict[str, list[SalaryIncome]] = {}
+    rental_incomes: list[RentalIncome] = []
+    gift_incomes: list[GiftIncome] = []
+
     for income in scenario.incomes:
-        if income.kind != "salary":
-            continue
-        # If person_id missing, attach to first person (simple default).
-        person_key = next((p.label for p in scenario.people if p.id == income.person_id), scenario.people[0].label)
-        salary_by_person.setdefault(person_key, []).append(
-            SalaryIncome(
-                gross_annual=income.gross_annual,
-                annual_growth_rate=income.annual_growth_rate,
-                employee_pension_pct=income.employee_pension_pct,
-                employer_pension_pct=income.employer_pension_pct,
-                start_year=income.start_year,
-                end_year=income.end_year,
+        if income.kind == "salary":
+            # If person_id missing, attach to first person (simple default).
+            person_key = next((p.label for p in scenario.people if p.id == income.person_id), scenario.people[0].label)
+            salary_by_person.setdefault(person_key, []).append(
+                SalaryIncome(
+                    gross_annual=income.gross_annual,
+                    annual_growth_rate=income.annual_growth_rate,
+                    employee_pension_pct=income.employee_pension_pct,
+                    employer_pension_pct=income.employer_pension_pct,
+                    start_year=income.start_year,
+                    end_year=income.end_year,
+                )
             )
-        )
+        elif income.kind == "rental":
+            # Rental income: taxable as personal income, no NI, no pension contributions
+            rental_incomes.append(
+                RentalIncome(
+                    gross_annual=income.gross_annual,
+                    annual_growth_rate=income.annual_growth_rate,
+                    start_year=income.start_year,
+                    end_year=income.end_year,
+                )
+            )
+        elif income.kind == "gift":
+            # Gift income: completely tax-free
+            gift_incomes.append(
+                GiftIncome(
+                    gross_annual=income.gross_annual,
+                    annual_growth_rate=income.annual_growth_rate,
+                    start_year=income.start_year,
+                    end_year=income.end_year,
+                )
+            )
 
     pension_by_person: dict[str, PensionPot] = {}
     assets: list[AssetAccount] = []
@@ -182,6 +204,8 @@ def _build_simulation_scenario(
         assets=assets,
         mortgage=mortgage,
         expenses=expenses,
+        rental_incomes=rental_incomes,
+        gift_incomes=gift_incomes,
         annual_spend_target=annual_spend_target,
         planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
         pension_withdrawal_priority=pension_withdrawal_priority,
@@ -200,14 +224,11 @@ def _response_from_matrices(
     people: list[PersonEntity],
     inflation_rate: float,
     start_year: int,
+    pct: int = 50,
 ) -> SimulationResponse:
-    def median(field_name: str) -> list[float]:
+    def at_percentile(field_name: str, p: int = pct) -> list[float]:
         m = mats.get(field_name)
-        return np.median(m, axis=0).tolist() if m is not None and m.size else []
-
-    def percentile(field_name: str, pct: int) -> list[float]:
-        m = mats.get(field_name)
-        return np.percentile(m, pct, axis=0).tolist() if m is not None and m.size else []
+        return np.percentile(m, p, axis=0).tolist() if m is not None and m.size else []
 
     def percentage(field_name: str) -> list[float]:
         m = mats.get(field_name)
@@ -215,38 +236,40 @@ def _response_from_matrices(
 
     return SimulationResponse(
         years=years,
-        net_worth_p10=percentile("net_worth", 10),
-        net_worth_median=median("net_worth"),
-        net_worth_p90=percentile("net_worth", 90),
-        income_median=median("total_income"),
-        spend_median=median("total_expenses"),
+        net_worth_p10=at_percentile("net_worth", 10),
+        net_worth_median=at_percentile("net_worth"),
+        net_worth_p90=at_percentile("net_worth", 90),
+        income_median=at_percentile("total_income"),
+        spend_median=at_percentile("total_expenses"),
         retirement_years=_retirement_years_from_people(people=people),
         inflation_rate=inflation_rate,
         start_year=start_year,
-        # Detailed incomes
-        salary_gross_median=median("salary_gross"),
-        salary_net_median=median("salary_net"),
-        pension_income_median=median("pension_income"),
-        state_pension_income_median=median("state_pension_income"),
-        investment_returns_median=median("investment_returns"),
-        total_income_median=median("total_income"),
-        # Detailed expenses
-        total_expenses_median=median("total_expenses"),
-        mortgage_payment_median=median("mortgage_payment"),
-        pension_contributions_median=median("pension_contributions"),
-        # Tax
-        income_tax_paid_median=median("income_tax_paid"),
-        ni_paid_median=median("ni_paid"),
-        total_tax_median=median("total_tax"),
-        # Assets
-        isa_balance_median=median("isa_balance"),
-        pension_balance_median=median("pension_balance"),
-        cash_balance_median=median("cash_balance"),
-        total_assets_median=median("total_assets"),
-        # Liabilities
-        mortgage_balance_median=median("mortgage_balance"),
-        total_liabilities_median=median("total_liabilities"),
-        # Other
+        # Detailed incomes (use selected percentile)
+        salary_gross_median=at_percentile("salary_gross"),
+        salary_net_median=at_percentile("salary_net"),
+        rental_income_median=at_percentile("rental_income"),
+        gift_income_median=at_percentile("gift_income"),
+        pension_income_median=at_percentile("pension_income"),
+        state_pension_income_median=at_percentile("state_pension_income"),
+        investment_returns_median=at_percentile("investment_returns"),
+        total_income_median=at_percentile("total_income"),
+        # Detailed expenses (use selected percentile)
+        total_expenses_median=at_percentile("total_expenses"),
+        mortgage_payment_median=at_percentile("mortgage_payment"),
+        pension_contributions_median=at_percentile("pension_contributions"),
+        # Tax (use selected percentile)
+        income_tax_paid_median=at_percentile("income_tax_paid"),
+        ni_paid_median=at_percentile("ni_paid"),
+        total_tax_median=at_percentile("total_tax"),
+        # Assets (use selected percentile)
+        isa_balance_median=at_percentile("isa_balance"),
+        pension_balance_median=at_percentile("pension_balance"),
+        cash_balance_median=at_percentile("cash_balance"),
+        total_assets_median=at_percentile("total_assets"),
+        # Liabilities (use selected percentile)
+        mortgage_balance_median=at_percentile("mortgage_balance"),
+        total_liabilities_median=at_percentile("total_liabilities"),
+        # Other (these remain as percentages of runs, not percentiles)
         mortgage_paid_off_median=percentage("mortgage_paid_off"),
         is_depleted_median=percentage("is_depleted"),
     )
@@ -312,6 +335,8 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         # Detailed incomes
         salary_gross_median=get_median("salary_gross"),
         salary_net_median=get_median("salary_net"),
+        rental_income_median=get_median("rental_income"),
+        gift_income_median=get_median("gift_income"),
         pension_income_median=get_median("pension_income"),
         state_pension_income_median=get_median("state_pension_income"),
         investment_returns_median=get_median("investment_returns"),
@@ -407,6 +432,8 @@ async def recalc_simulation(
         assets=base.assets,
         mortgage=base.mortgage,
         expenses=base.expenses,
+        rental_incomes=base.rental_incomes,
+        gift_incomes=base.gift_incomes,
         annual_spend_target=float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target,
         planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
         pension_withdrawal_priority=base.pension_withdrawal_priority,
@@ -414,11 +441,13 @@ async def recalc_simulation(
     )
 
     mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
+    pct = payload.percentile if payload.percentile is not None else 50
     return _response_from_matrices(
         years=mats.years,
         mats=mats.fields,
         people=sim_scenario.people,
         inflation_rate=sim_scenario.assumptions.inflation_rate,
         start_year=sim_scenario.start_year,
+        pct=pct,
     )
 

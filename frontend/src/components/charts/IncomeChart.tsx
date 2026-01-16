@@ -15,22 +15,28 @@ type Props = {
   years: number[];
   salary_gross_median: number[];
   salary_net_median: number[];
+  rental_income_median: number[];
+  gift_income_median: number[];
   pension_income_median: number[];
   state_pension_income_median: number[];
   investment_returns_median: number[];
   total_income_median: number[];
   retirement_years: number[];
+  percentile?: number;
 };
 
 export function IncomeChart({
   years,
   salary_gross_median,
   salary_net_median,
+  rental_income_median,
+  gift_income_median,
   pension_income_median,
   state_pension_income_median,
   investment_returns_median,
   total_income_median,
-  retirement_years
+  retirement_years,
+  percentile = 50
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
 
@@ -42,6 +48,8 @@ export function IncomeChart({
     year,
     salary_gross: clampForLog(salary_gross_median[idx] ?? 0),
     salary_net: clampForLog(salary_net_median[idx] ?? 0),
+    rental_income: clampForLog(rental_income_median[idx] ?? 0),
+    gift_income: clampForLog(gift_income_median[idx] ?? 0),
     pension_income: clampForLog(pension_income_median[idx] ?? 0),
     state_pension_income: clampForLog(state_pension_income_median[idx] ?? 0),
     investment_returns: clampForLog(investment_returns_median[idx] ?? 0),
@@ -51,7 +59,14 @@ export function IncomeChart({
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold">Income by Source</div>
+        <div className="text-sm font-semibold">
+          Income by Source
+          {percentile !== 50 && (
+            <span className="ml-2 text-xs font-normal text-amber-400">
+              (P{percentile})
+            </span>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
@@ -78,20 +93,17 @@ export function IncomeChart({
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}
               formatter={(value, name) => {
-                const label =
-                  name === "total_income"
-                    ? "Total income"
-                    : name === "salary_gross"
-                      ? "Salary (gross)"
-                      : name === "salary_net"
-                        ? "Salary (net)"
-                        : name === "pension_income"
-                          ? "Pension income"
-                          : name === "state_pension_income"
-                            ? "State pension"
-                            : name === "investment_returns"
-                              ? "Investment returns"
-                              : name;
+                const labelMap: Record<string, string> = {
+                  total_income: "Total income",
+                  salary_gross: "Salary (gross)",
+                  salary_net: "Salary (net)",
+                  rental_income: "Rental income",
+                  gift_income: "Gift income",
+                  pension_income: "Pension income",
+                  state_pension_income: "State pension",
+                  investment_returns: "Investment returns"
+                };
+                const label = labelMap[name as string] ?? name;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -100,6 +112,19 @@ export function IncomeChart({
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
               contentStyle={{ color: "#e2e8f0" }}
+              formatter={(value) => {
+                const labelMap: Record<string, string> = {
+                  total_income: "Total income",
+                  salary_gross: "Salary (gross)",
+                  salary_net: "Salary (net)",
+                  rental_income: "Rental income",
+                  gift_income: "Gift income",
+                  pension_income: "Pension income",
+                  state_pension_income: "State pension",
+                  investment_returns: "Investment returns"
+                };
+                return labelMap[value] ?? value;
+              }}
             />
             {retirement_years.map((year) => (
               <ReferenceLine
@@ -136,6 +161,24 @@ export function IncomeChart({
               dot={false}
               yAxisId="left"
               name="salary_net"
+            />
+            <Line
+              type="monotone"
+              dataKey="rental_income"
+              stroke="#a78bfa"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="rental_income"
+            />
+            <Line
+              type="monotone"
+              dataKey="gift_income"
+              stroke="#f472b6"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="gift_income"
             />
             <Line
               type="monotone"

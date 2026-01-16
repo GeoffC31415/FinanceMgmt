@@ -362,102 +362,120 @@ export function ConfigWizard() {
             <div className="space-y-3">
               <div className="text-sm font-semibold">Income</div>
               <StepIntro>
-                Define salary income for each person. Salary is subject to income tax and National Insurance. Pension contributions are deducted before tax, reducing your tax bill while building retirement savings.
+                Define income sources for your household. Different income types have different tax treatments:
               </StepIntro>
               
-              <div className="hidden md:grid md:grid-cols-6 md:gap-3 text-xs text-slate-400">
-                <Label tooltip="Link this income to a specific person's retirement timeline">Person</Label>
-                <Label tooltip="Label for this income source (e.g. salary, bonus, freelance)">Type</Label>
-                <Label tooltip="Annual salary before tax. Tax and NI are calculated automatically.">Gross Annual (£)</Label>
-                <Label tooltip="How much salary increases each year (e.g. 0.02 = 2%). Applied at the start of each simulated year.">Growth Rate</Label>
-                <Label tooltip="Percentage of gross salary you contribute to pension. Deducted before tax, so reduces your tax bill.">Employee Pension %</Label>
-                <Label tooltip="Percentage of gross salary your employer adds to your pension. Free money that boosts your retirement pot.">Employer Pension %</Label>
+              {/* Income type explanations */}
+              <div className="rounded border border-sky-800/50 bg-sky-950/30 p-3 text-sm text-sky-200/90">
+                <div className="font-medium text-sky-100">Income Types</div>
+                <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
+                  <li><strong>Salary:</strong> Employment income subject to Income Tax and National Insurance. Automatically ends at the person's retirement age. Pension contributions can be deducted before tax.</li>
+                  <li><strong>Rental:</strong> Property rental income subject to Income Tax only (no National Insurance). Can continue into retirement — use start/end years in the full config to limit the period.</li>
+                  <li><strong>Gift:</strong> Tax-free income (e.g., regular gifts from family, expected inheritance). No taxes apply. Can be one-off or recurring.</li>
+                </ul>
               </div>
-              {draft.incomes.map((inc, idx) => (
-                <div key={idx} className="grid gap-3 md:grid-cols-6">
-                  <select
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={inc.person_id ?? ""}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, person_id: e.target.value || null } : x))
-                      }))
-                    }
-                  >
-                    <option value="">Household</option>
-                    {draft.people.map((p) => (
-                      <option key={p.id ?? p.label} value={p.id ?? ""}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={inc.kind}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, kind: e.target.value } : x))
-                      }))
-                    }
-                    placeholder="salary"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    value={inc.gross_annual}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, gross_annual: Number(e.target.value) } : x))
-                      }))
-                    }
-                    placeholder="60000"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    step="0.01"
-                    value={inc.annual_growth_rate}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, annual_growth_rate: Number(e.target.value) } : x))
-                      }))
-                    }
-                    placeholder="0.02"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    step="0.01"
-                    value={inc.employee_pension_pct}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employee_pension_pct: Number(e.target.value) } : x))
-                      }))
-                    }
-                    placeholder="0.05"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    step="0.01"
-                    value={inc.employer_pension_pct}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employer_pension_pct: Number(e.target.value) } : x))
-                      }))
-                    }
-                    placeholder="0.05"
-                  />
-                </div>
-              ))}
+              
+              <div className="hidden md:grid md:grid-cols-6 md:gap-3 text-xs text-slate-400">
+                <Label tooltip="Link this income to a specific person's retirement timeline (for salary only)">Person</Label>
+                <Label tooltip="Salary: taxed with NI, ends at retirement. Rental: income tax only. Gift: tax-free.">Type</Label>
+                <Label tooltip="Annual amount before any tax deductions.">Gross Annual (£)</Label>
+                <Label tooltip="How much this income increases each year (e.g. 0.02 = 2%).">Growth Rate</Label>
+                <Label tooltip="Salary only: Percentage you contribute to pension. Deducted before tax.">Employee Pension %</Label>
+                <Label tooltip="Salary only: Percentage your employer adds to your pension.">Employer Pension %</Label>
+              </div>
+              {draft.incomes.map((inc, idx) => {
+                const isSalary = inc.kind === "salary";
+                return (
+                  <div key={idx} className="grid gap-3 md:grid-cols-6">
+                    <select
+                      className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      value={inc.person_id ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, person_id: e.target.value || null } : x))
+                        }))
+                      }
+                    >
+                      <option value="">Household</option>
+                      {draft.people.map((p) => (
+                        <option key={p.id ?? p.label} value={p.id ?? ""}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      value={inc.kind}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, kind: e.target.value } : x))
+                        }))
+                      }
+                    >
+                      <option value="salary">Salary</option>
+                      <option value="rental">Rental</option>
+                      <option value="gift">Gift</option>
+                    </select>
+                    <input
+                      className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      type="number"
+                      value={inc.gross_annual}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, gross_annual: Number(e.target.value) } : x))
+                        }))
+                      }
+                      placeholder="60000"
+                    />
+                    <input
+                      className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      type="number"
+                      step="0.01"
+                      value={inc.annual_growth_rate}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, annual_growth_rate: Number(e.target.value) } : x))
+                        }))
+                      }
+                      placeholder="0.02"
+                    />
+                    <input
+                      className={`rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm ${isSalary ? "" : "opacity-40"}`}
+                      type="number"
+                      step="0.01"
+                      value={inc.employee_pension_pct}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employee_pension_pct: Number(e.target.value) } : x))
+                        }))
+                      }
+                      placeholder="0.05"
+                      disabled={!isSalary}
+                    />
+                    <input
+                      className={`rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm ${isSalary ? "" : "opacity-40"}`}
+                      type="number"
+                      step="0.01"
+                      value={inc.employer_pension_pct}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employer_pension_pct: Number(e.target.value) } : x))
+                        }))
+                      }
+                      placeholder="0.05"
+                      disabled={!isSalary}
+                    />
+                  </div>
+                );
+              })}
               <Hint>
-                Income stops when the assigned person retires. Use decimal format for percentages (0.05 = 5%). Combined pension contributions go into the person's pension pot.
+                Salary income stops when the assigned person retires. Rental and gift income can continue — use the full config editor to set start/end years. Use decimal format for percentages (0.05 = 5%).
               </Hint>
               <button
                 type="button"

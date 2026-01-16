@@ -1,3 +1,4 @@
+"""Tax calculator for UK income tax and National Insurance."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -48,3 +49,28 @@ class TaxCalculator:
             national_insurance=national_insurance,
         )
 
+    def calculate_income_tax_on_additional_income(
+        self,
+        *,
+        base_taxable_income: float,
+        additional_income: float,
+    ) -> float:
+        """
+        Calculate marginal income tax on additional income (e.g., rental income).
+
+        This calculates the difference in income tax when adding additional income
+        to an existing base taxable income. Used for income sources that are subject
+        to income tax but not National Insurance (like rental income).
+        """
+        if additional_income <= 0:
+            return 0.0
+
+        tax_on_base = calculate_income_tax(
+            taxable_income=max(0.0, base_taxable_income),
+            bands=self.income_tax_bands,
+        )
+        tax_on_total = calculate_income_tax(
+            taxable_income=max(0.0, base_taxable_income + additional_income),
+            bands=self.income_tax_bands,
+        )
+        return tax_on_total - tax_on_base
