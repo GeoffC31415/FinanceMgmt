@@ -533,14 +533,27 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         {tab === "income" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
             <div className="text-sm font-semibold">Income</div>
+
+            {/* Helper text explaining income types */}
+            <div className="mt-3 rounded border border-sky-800/50 bg-sky-950/30 p-3 text-sm text-sky-200/90">
+              <div className="font-medium text-sky-100">Income Configuration</div>
+              <p className="mt-1 text-xs leading-relaxed">
+                Currently only <strong>salary</strong> income is supported. The "Type" field must be set to "salary" 
+                for income to appear in the simulation. Salary income stops at the person's planned retirement age.
+              </p>
+            </div>
+
             <div className="mt-3 overflow-auto">
               <div className="hidden min-w-[980px] grid-cols-7 gap-3 text-xs text-slate-400 md:grid">
                 <div>Assigned_to</div>
-                <div>Kind</div>
+                <div className="flex items-center">
+                  Type
+                  <InfoTip text="Must be 'salary' for income to be processed. Other income types coming soon." />
+                </div>
                 <div>Gross_annual</div>
                 <div>Growth_rate</div>
-                <div>Employee_pension_pct</div>
-                <div>Employer_pension_pct</div>
+                <div>Employee_pension_%</div>
+                <div>Employer_pension_%</div>
                 <div></div>
               </div>
               <div className="min-w-[980px] space-y-2">
@@ -557,11 +570,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                         </option>
                       ))}
                     </select>
-                    <input
+                    <select
                       className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      placeholder="salary"
                       {...form.register(`incomes.${idx}.kind` as any)}
-                    />
+                    >
+                      <option value="salary">salary</option>
+                    </select>
                     <NumberInput control={form.control} name={`incomes.${idx}.gross_annual`} min={0} />
                     <PercentInput control={form.control} name={`incomes.${idx}.annual_growth_rate`} placeholder="%" />
                     <PercentInput control={form.control} name={`incomes.${idx}.employee_pension_pct`} placeholder="%" />
@@ -603,12 +617,49 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         {tab === "assets" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
             <div className="text-sm font-semibold">Assets</div>
+
+            {/* Helper text explaining withdrawal priority */}
+            <div className="mt-3 rounded border border-amber-800/50 bg-amber-950/30 p-3 text-sm text-amber-200/90">
+              <div className="font-medium text-amber-100">Withdrawal Priority</div>
+              <p className="mt-1 text-xs leading-relaxed">
+                <strong>Higher number = withdraw first.</strong> When you need money, the simulation draws from assets 
+                in priority order. Typical best order for tax efficiency:
+              </p>
+              <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
+                <li><strong>ISA (30):</strong> Withdraw first — completely tax-free growth and withdrawals.</li>
+                <li><strong>GIA (20):</strong> Withdraw second — gains may be subject to Capital Gains Tax.</li>
+                <li><strong>Pension (10):</strong> Withdraw last — see note below about access restrictions.</li>
+              </ul>
+            </div>
+
+            {/* Special note about pensions */}
+            <div className="mt-3 rounded border border-indigo-800/50 bg-indigo-950/30 p-3 text-sm text-indigo-200/90">
+              <div className="font-medium text-indigo-100">About Pensions</div>
+              <p className="mt-1 text-xs leading-relaxed">
+                Pensions work differently from other assets:
+              </p>
+              <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
+                <li><strong>Age restriction:</strong> You cannot access your pension until age 55 (57 from 2028). 
+                    Even with a high priority, the simulation won't withdraw from pensions before this age.</li>
+                <li><strong>Taxed as income:</strong> Pension withdrawals are treated as taxable income, reducing 
+                    the net amount you receive. 25% can usually be taken tax-free (not yet modelled here).</li>
+                <li><strong>Priority still matters:</strong> Once accessible, pension priority determines whether 
+                    it's used before or after ISAs/GIAs.</li>
+              </ul>
+              <p className="mt-2 text-xs italic opacity-80">
+                Contributions come from salary pension percentages set in the Income tab.
+              </p>
+            </div>
+
             <div className="mt-3 overflow-auto">
               <div className="hidden min-w-[1320px] grid-cols-10 gap-3 text-xs text-slate-400 md:grid">
                 <div>Assigned_to</div>
                 <div>Name</div>
                 <div>Type</div>
-                <div>Withdraw_priority</div>
+                <div className="flex items-center">
+                  Priority
+                  <InfoTip text="Higher number = withdraw first. Suggested: ISA 30, GIA 20, Pension 10." />
+                </div>
                 <div>Start_balance</div>
                 <div>Annual_invest_cap</div>
                 <div>Growth_mean</div>
@@ -691,7 +742,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                 assets.append({
                   name: "New asset",
                   asset_type: "GIA",
-                  withdrawal_priority: 100,
+                  withdrawal_priority: 20,
                   balance: 0,
                   annual_contribution: 0,
                   growth_rate_mean: 0.05,

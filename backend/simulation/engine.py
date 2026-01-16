@@ -225,13 +225,14 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
 
     # Pre-compute sorted withdrawal order once per run (assets + pension slot)
     # Pension is represented as None in the list; we check balance at withdrawal time
+    # Sort descending by priority (higher priority = withdraw first), then ascending by name
     withdrawal_order: list[tuple[int, str, AssetAccount | None]] = [
         (a.withdrawal_priority, a.name.lower(), a)
         for a in assets
         if a.asset_type != "CASH"
     ]
     withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
-    withdrawal_order.sort(key=lambda x: (x[0], x[1]))
+    withdrawal_order.sort(key=lambda x: (-x[0], x[1]))
 
     for year in range(scenario.start_year, scenario.end_year + 1):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
@@ -586,13 +587,14 @@ def _simulate_single_run_to_matrices(
     pension_returns = getattr(returns, "pension_returns", None)
 
     # Pre-compute sorted withdrawal order once per run (assets + pension slot)
+    # Sort descending by priority (higher priority = withdraw first), then ascending by name
     withdrawal_order: list[tuple[int, str, AssetAccount | None]] = [
         (a.withdrawal_priority, a.name.lower(), a)
         for a in assets
         if a.asset_type != "CASH"
     ]
     withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
-    withdrawal_order.sort(key=lambda x: (x[0], x[1]))
+    withdrawal_order.sort(key=lambda x: (-x[0], x[1]))
 
     for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
