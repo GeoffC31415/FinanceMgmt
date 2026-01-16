@@ -55,6 +55,73 @@ function DeleteConfirmModal({
   );
 }
 
+function RenameModal({
+  current_name,
+  is_open,
+  is_saving,
+  on_confirm,
+  on_cancel
+}: {
+  current_name: string;
+  is_open: boolean;
+  is_saving: boolean;
+  on_confirm: (new_name: string) => void;
+  on_cancel: () => void;
+}) {
+  const [name, setName] = useState(current_name);
+
+  useEffect(() => {
+    if (is_open) setName(current_name);
+  }, [is_open, current_name]);
+
+  if (!is_open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="mx-4 w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-900/50">
+            <svg className="h-5 w-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-white">Rename Scenario</h3>
+        </div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-300 mb-2">Scenario name</label>
+          <input
+            type="text"
+            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) on_confirm(name.trim());
+              if (e.key === "Escape") on_cancel();
+            }}
+            autoFocus
+          />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button
+            className="rounded px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            onClick={on_cancel}
+            disabled={is_saving}
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            onClick={() => on_confirm(name.trim())}
+            disabled={is_saving || !name.trim()}
+          >
+            {is_saving ? "Saving..." : "Rename"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const EMPTY_SCENARIO: ScenarioCreate = {
   name: "My Scenario",
   assumptions: {
@@ -105,6 +172,9 @@ export function ScenarioConfigPage() {
   const [show_delete_modal, setShowDeleteModal] = useState(false);
   const [is_deleting, setIsDeleting] = useState(false);
   const [delete_error, setDeleteError] = useState<string | null>(null);
+  const [show_rename_modal, setShowRenameModal] = useState(false);
+  const [is_renaming, setIsRenaming] = useState(false);
+  const [is_cloning, setIsCloning] = useState(false);
 
   const selected_label = useMemo(() => scenarios.find((s) => s.id === selected_id)?.name ?? "", [scenarios, selected_id]);
 
@@ -185,13 +255,80 @@ export function ScenarioConfigPage() {
               <div className="text-xs text-slate-400">{selected_label}</div>
             </div>
             {selected_id && scenario && (
-              <button
-                className="rounded border border-rose-800 bg-rose-950/50 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-900/50 disabled:opacity-50"
-                onClick={() => setShowDeleteModal(true)}
-                disabled={is_deleting}
-              >
-                Delete
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className="rounded border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700/50 disabled:opacity-50"
+                  onClick={() => setShowRenameModal(true)}
+                  disabled={is_renaming}
+                >
+                  Rename
+                </button>
+                <button
+                  className="rounded border border-indigo-700 bg-indigo-950/50 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-900/50 disabled:opacity-50"
+                  onClick={async () => {
+                    if (!scenario) return;
+                    setIsCloning(true);
+                    try {
+                      const clone_payload: ScenarioCreate = {
+                        name: `Copy of ${scenario.name}`,
+                        assumptions: scenario.assumptions,
+                        people: scenario.people.map((p) => ({
+                          label: p.label,
+                          birth_date: p.birth_date,
+                          planned_retirement_age: p.planned_retirement_age,
+                          state_pension_age: p.state_pension_age
+                        })),
+                        incomes: scenario.incomes.map((i) => ({
+                          person_label: scenario.people.find((p) => p.id === i.person_id)?.label,
+                          kind: i.kind,
+                          gross_annual: i.gross_annual,
+                          annual_growth_rate: i.annual_growth_rate,
+                          employee_pension_pct: i.employee_pension_pct,
+                          employer_pension_pct: i.employer_pension_pct,
+                          start_year: i.start_year,
+                          end_year: i.end_year
+                        })),
+                        assets: scenario.assets.map((a) => ({
+                          person_label: scenario.people.find((p) => p.id === a.person_id)?.label,
+                          name: a.name,
+                          asset_type: (a as any).asset_type ?? "GIA",
+                          withdrawal_priority: (a as any).withdrawal_priority ?? 100,
+                          balance: a.balance,
+                          annual_contribution: a.annual_contribution,
+                          growth_rate_mean: a.growth_rate_mean,
+                          growth_rate_std: a.growth_rate_std,
+                          contributions_end_at_retirement: a.contributions_end_at_retirement
+                        })),
+                        mortgage: scenario.mortgage ?? null,
+                        expenses: scenario.expenses.map((e) => ({
+                          name: e.name,
+                          monthly_amount: e.monthly_amount,
+                          start_year: e.start_year,
+                          end_year: e.end_year,
+                          is_inflation_linked: e.is_inflation_linked
+                        }))
+                      };
+                      const created = await create(clone_payload);
+                      await refresh();
+                      setSelectedId(created.id);
+                    } catch (e) {
+                      setDeleteError(e instanceof Error ? e.message : "Failed to clone scenario");
+                    } finally {
+                      setIsCloning(false);
+                    }
+                  }}
+                  disabled={is_cloning}
+                >
+                  {is_cloning ? "Cloning..." : "Clone"}
+                </button>
+                <button
+                  className="rounded border border-rose-800 bg-rose-950/50 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-900/50 disabled:opacity-50"
+                  onClick={() => setShowDeleteModal(true)}
+                  disabled={is_deleting}
+                >
+                  Delete
+                </button>
+              </div>
             )}
           </div>
           <div className="p-4">
@@ -245,6 +382,66 @@ export function ScenarioConfigPage() {
           }
         }}
         on_cancel={() => setShowDeleteModal(false)}
+      />
+
+      <RenameModal
+        current_name={selected_label}
+        is_open={show_rename_modal}
+        is_saving={is_renaming}
+        on_confirm={async (new_name) => {
+          if (!scenario) return;
+          setIsRenaming(true);
+          try {
+            await save({
+              ...scenario,
+              name: new_name,
+              assumptions: scenario.assumptions,
+              people: scenario.people.map((p) => ({
+                id: p.id,
+                label: p.label,
+                birth_date: p.birth_date,
+                planned_retirement_age: p.planned_retirement_age,
+                state_pension_age: p.state_pension_age
+              })),
+              incomes: scenario.incomes.map((i) => ({
+                person_id: i.person_id,
+                kind: i.kind,
+                gross_annual: i.gross_annual,
+                annual_growth_rate: i.annual_growth_rate,
+                employee_pension_pct: i.employee_pension_pct,
+                employer_pension_pct: i.employer_pension_pct,
+                start_year: i.start_year,
+                end_year: i.end_year
+              })),
+              assets: scenario.assets.map((a) => ({
+                person_id: a.person_id,
+                name: a.name,
+                asset_type: (a as any).asset_type ?? "GIA",
+                withdrawal_priority: (a as any).withdrawal_priority ?? 100,
+                balance: a.balance,
+                annual_contribution: a.annual_contribution,
+                growth_rate_mean: a.growth_rate_mean,
+                growth_rate_std: a.growth_rate_std,
+                contributions_end_at_retirement: a.contributions_end_at_retirement
+              })),
+              mortgage: scenario.mortgage ?? null,
+              expenses: scenario.expenses.map((e) => ({
+                name: e.name,
+                monthly_amount: e.monthly_amount,
+                start_year: e.start_year,
+                end_year: e.end_year,
+                is_inflation_linked: e.is_inflation_linked
+              }))
+            });
+            await refresh();
+            setShowRenameModal(false);
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : "Failed to rename scenario");
+          } finally {
+            setIsRenaming(false);
+          }
+        }}
+        on_cancel={() => setShowRenameModal(false)}
       />
     </div>
   );
