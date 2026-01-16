@@ -223,6 +223,16 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
 
     snapshots: list[YearlySnapshot] = []
 
+    # Pre-compute sorted withdrawal order once per run (assets + pension slot)
+    # Pension is represented as None in the list; we check balance at withdrawal time
+    withdrawal_order: list[tuple[int, str, AssetAccount | None]] = [
+        (a.withdrawal_priority, a.name.lower(), a)
+        for a in assets
+        if a.asset_type != "CASH"
+    ]
+    withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
+    withdrawal_order.sort(key=lambda x: (x[0], x[1]))
+
     for year in range(scenario.start_year, scenario.end_year + 1):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -313,22 +323,7 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         if primary_cash.balance < emergency_target:
             remaining_shortfall = emergency_target - primary_cash.balance
 
-            # Build unified withdrawal sources: assets + pension (as synthetic "PENSION" source)
-            # Sort by priority so pension can be drawn before or after other assets as configured.
-            withdrawal_sources: list[tuple[int, str, AssetAccount | None]] = []
-
-            for a in assets:
-                if a.asset_type != "CASH":
-                    withdrawal_sources.append((a.withdrawal_priority, a.name.lower(), a))
-
-            # Include pension as a synthetic source with configured priority
-            total_pension_balance = sum(p.balance for p in pension_by_person.values())
-            if pension_by_person and total_pension_balance > 0:
-                withdrawal_sources.append((scenario.pension_withdrawal_priority, "pension", None))
-
-            withdrawal_sources.sort(key=lambda x: (x[0], x[1]))
-
-            for priority, name, asset in withdrawal_sources:
+            for priority, name, asset in withdrawal_order:
                 if remaining_shortfall <= 0:
                     break
 
@@ -581,6 +576,15 @@ def _simulate_single_run_to_matrices(
     pension_keys = list(getattr(returns, "pension_keys", []))
     pension_returns = getattr(returns, "pension_returns", None)
 
+    # Pre-compute sorted withdrawal order once per run (assets + pension slot)
+    withdrawal_order: list[tuple[int, str, AssetAccount | None]] = [
+        (a.withdrawal_priority, a.name.lower(), a)
+        for a in assets
+        if a.asset_type != "CASH"
+    ]
+    withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
+    withdrawal_order.sort(key=lambda x: (x[0], x[1]))
+
     for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -664,22 +668,7 @@ def _simulate_single_run_to_matrices(
         if primary_cash.balance < emergency_target:
             remaining_shortfall = emergency_target - primary_cash.balance
 
-            # Build unified withdrawal sources: assets + pension (as synthetic "PENSION" source)
-            # Sort by priority so pension can be drawn before or after other assets as configured.
-            withdrawal_sources: list[tuple[int, str, AssetAccount | None]] = []
-
-            for a in assets:
-                if a.asset_type != "CASH":
-                    withdrawal_sources.append((a.withdrawal_priority, a.name.lower(), a))
-
-            # Include pension as a synthetic source with configured priority
-            total_pension_balance = sum(p.balance for p in pension_by_person.values())
-            if pension_by_person and total_pension_balance > 0:
-                withdrawal_sources.append((scenario.pension_withdrawal_priority, "pension", None))
-
-            withdrawal_sources.sort(key=lambda x: (x[0], x[1]))
-
-            for priority, name, asset in withdrawal_sources:
+            for priority, name, asset in withdrawal_order:
                 if remaining_shortfall <= 0:
                     break
 
