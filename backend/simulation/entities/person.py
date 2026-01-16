@@ -22,6 +22,10 @@ class PersonEntity:
     def is_state_pension_eligible_in_year(self, *, year: int) -> bool:
         return self.age_in_year(year=year) >= self.state_pension_age
 
+    def can_access_pension_in_year(self, *, year: int, min_access_age: int = 55) -> bool:
+        """Check if person can access their private pension (minimum age 55 in UK)."""
+        return self.age_in_year(year=year) >= min_access_age
+
     def step(self, *, context: SimContext) -> None:
         return None
 
