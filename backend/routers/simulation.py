@@ -22,8 +22,9 @@ from backend.simulation.engine import (
     SimulationAssumptions,
     SimulationScenario,
     run_monte_carlo,
-    run_with_cached_returns,
 )
+from backend.simulation.engine import run_with_cached_returns
+from backend.simulation.engine_fast import FastEngineConfig, run_with_cached_returns_fast
 from backend.simulation.returns_cache import create_session, get_session
 from backend.simulation.entities import ExpenseItem, GiftIncome, MortgageAccount, PensionPot, PersonEntity, RentalIncome, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
@@ -392,7 +393,12 @@ async def init_simulation(
     if cached is None:
         raise HTTPException(status_code=500, detail="Failed to initialize simulation session")
 
-    mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
+    use_fast = getattr(payload, "use_fast_engine", True)
+    mats = run_with_cached_returns_fast(
+        scenario=sim_scenario,
+        returns=cached.returns,
+        config=FastEngineConfig(enable_numba=use_fast),
+    )
     response = _response_from_matrices(
         years=mats.years,
         mats=mats.fields,
@@ -441,7 +447,12 @@ async def recalc_simulation(
         assumptions=base.assumptions,
     )
 
-    mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
+    use_fast = getattr(payload, "use_fast_engine", True)
+    mats = run_with_cached_returns_fast(
+        scenario=sim_scenario,
+        returns=cached.returns,
+        config=FastEngineConfig(enable_numba=use_fast),
+    )
     pct = payload.percentile if payload.percentile is not None else 50
     return _response_from_matrices(
         years=mats.years,

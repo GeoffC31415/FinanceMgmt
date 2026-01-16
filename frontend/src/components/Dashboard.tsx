@@ -99,7 +99,7 @@ export function Dashboard() {
   }, [selected?.id]);
 
   // Debounced recalc for spend + retirement age offset + percentile (only when realtime mode is on).
-  // Use 1s debounce to prevent backlog when rapidly changing sliders or typing numbers.
+  // Fast engine enables low debounce for near-instant feedback.
   useEffect(() => {
     if (!realtime_mode || !selected || !session_id) return;
     const t = window.setTimeout(() => {
@@ -110,7 +110,7 @@ export function Dashboard() {
       }).catch(() => {
         // error is handled in hook state
       });
-    }, 1000);
+    }, 100);
     return () => window.clearTimeout(t);
   }, [realtime_mode, selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
 

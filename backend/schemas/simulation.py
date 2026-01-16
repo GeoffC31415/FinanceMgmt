@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class SimulationRequest(BaseModel):
     scenario_id: str
-    iterations: int = Field(default=100, ge=10, le=20000)
+    iterations: int = Field(default=1000, ge=10, le=20000)
     seed: int = Field(default=0, ge=0)
 
     # Scenario-level knobs for quick experiments (RORO style).
@@ -76,6 +76,9 @@ class SimulationInitRequest(BaseModel):
     annual_spend_target: float | None = Field(default=None, ge=0.0)
     end_year: int | None = Field(default=None, ge=1900, le=2200)
 
+    # Engine selection (True = Numba fast engine, False = Python reference engine)
+    use_fast_engine: bool = Field(default=True)
+
 
 class SimulationInitResponse(SimulationResponse):
     session_id: str
@@ -86,3 +89,6 @@ class SimulationRecalcRequest(BaseModel):
     annual_spend_target: float | None = Field(default=None, ge=0.0)
     retirement_age_offset: int | None = Field(default=0, ge=-30, le=30)
     percentile: int | None = Field(default=50, ge=1, le=99)
+
+    # Engine selection (True = Numba fast engine, False = Python reference engine)
+    use_fast_engine: bool = Field(default=True)
