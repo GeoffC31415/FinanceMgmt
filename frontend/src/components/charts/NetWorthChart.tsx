@@ -189,7 +189,7 @@ export function NetWorthChart({
               type="monotone"
               dataKey="net_worth_median"
               stroke="#a78bfa"
-              strokeWidth={2}
+              strokeWidth={3}
               dot={false}
               yAxisId="left"
               name="net_worth_median"
@@ -246,4 +246,3 @@ export function NetWorthChart({
     </div>
   );
 }
-

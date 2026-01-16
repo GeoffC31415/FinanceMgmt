@@ -45,18 +45,19 @@ F_TOTAL_INCOME = 8
 F_TOTAL_EXPENSES = 9
 F_MORTGAGE_PAYMENT = 10
 F_PENSION_CONTRIBUTIONS = 11
-F_INCOME_TAX_PAID = 12
-F_NI_PAID = 13
-F_TOTAL_TAX = 14
-F_ISA_BALANCE = 15
-F_PENSION_BALANCE = 16
-F_CASH_BALANCE = 17
-F_TOTAL_ASSETS = 18
-F_MORTGAGE_BALANCE = 19
-F_TOTAL_LIABILITIES = 20
-F_MORTGAGE_PAID_OFF = 21
-F_IS_DEPLETED = 22
-N_FIELDS = 23
+F_FUN_FUND = 12
+F_INCOME_TAX_PAID = 13
+F_NI_PAID = 14
+F_TOTAL_TAX = 15
+F_ISA_BALANCE = 16
+F_PENSION_BALANCE = 17
+F_CASH_BALANCE = 18
+F_TOTAL_ASSETS = 19
+F_MORTGAGE_BALANCE = 20
+F_TOTAL_LIABILITIES = 21
+F_MORTGAGE_PAID_OFF = 22
+F_IS_DEPLETED = 23
+N_FIELDS = 24
 
 # Asset type codes
 ASSET_CASH = 0
@@ -213,10 +214,10 @@ def _run_monte_carlo_fast(
     field_names = [
         "net_worth", "salary_gross", "salary_net", "rental_income", "gift_income",
         "pension_income", "state_pension_income", "investment_returns", "total_income",
-        "total_expenses", "mortgage_payment", "pension_contributions", "income_tax_paid",
-        "ni_paid", "total_tax", "isa_balance", "pension_balance", "cash_balance",
-        "total_assets", "mortgage_balance", "total_liabilities", "mortgage_paid_off",
-        "is_depleted",
+        "total_expenses", "mortgage_payment", "pension_contributions", "fun_fund",
+        "income_tax_paid", "ni_paid", "total_tax", "isa_balance", "pension_balance",
+        "cash_balance", "total_assets", "mortgage_balance", "total_liabilities",
+        "mortgage_paid_off", "is_depleted",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -710,6 +711,7 @@ if _HAS_NUMBA:
                 out[it, y_idx, F_TOTAL_EXPENSES] = total_outflows
                 out[it, y_idx, F_MORTGAGE_PAYMENT] = mortgage_payment
                 out[it, y_idx, F_PENSION_CONTRIBUTIONS] = employee_pension_total + employer_pension_total
+                out[it, y_idx, F_FUN_FUND] = extra_retirement_spend
                 out[it, y_idx, F_INCOME_TAX_PAID] = income_tax + rental_income_tax + pension_income_tax + cgt_paid
                 out[it, y_idx, F_NI_PAID] = ni_paid
                 out[it, y_idx, F_TOTAL_TAX] = total_tax

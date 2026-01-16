@@ -162,6 +162,7 @@ def _safe_yearly_snapshot(
         total_expenses=total_expenses,
         mortgage_payment=mortgage_payment,
         pension_contributions=pension_contributions,
+        fun_fund=annual_spend,
         income_tax_paid=income_tax_paid,
         ni_paid=ni_paid,
         total_tax=total_tax,
@@ -547,6 +548,7 @@ def run_with_cached_returns(
         "total_expenses",
         "mortgage_payment",
         "pension_contributions",
+        "fun_fund",
         "income_tax_paid",
         "ni_paid",
         "total_tax",
@@ -892,6 +894,7 @@ def _simulate_single_run_to_matrices(
         out["total_expenses"][iteration_idx, year_idx] = total_expenses
         out["mortgage_payment"][iteration_idx, year_idx] = mortgage_payment
         out["pension_contributions"][iteration_idx, year_idx] = pension_contributions
+        out["fun_fund"][iteration_idx, year_idx] = extra_retirement_spend
         out["income_tax_paid"][iteration_idx, year_idx] = income_tax_paid
         out["ni_paid"][iteration_idx, year_idx] = ni_paid
         out["total_tax"][iteration_idx, year_idx] = total_tax

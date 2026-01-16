@@ -259,6 +259,7 @@ def _response_from_matrices(
         total_expenses_median=at_percentile("total_expenses"),
         mortgage_payment_median=at_percentile("mortgage_payment"),
         pension_contributions_median=at_percentile("pension_contributions"),
+        fun_fund_median=at_percentile("fun_fund"),
         # Tax (use selected percentile)
         income_tax_paid_median=at_percentile("income_tax_paid"),
         ni_paid_median=at_percentile("ni_paid"),
@@ -347,6 +348,7 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         total_expenses_median=get_median("total_expenses"),
         mortgage_payment_median=get_median("mortgage_payment"),
         pension_contributions_median=get_median("pension_contributions"),
+        fun_fund_median=get_median("fun_fund"),
         # Tax
         income_tax_paid_median=get_median("income_tax_paid"),
         ni_paid_median=get_median("ni_paid"),

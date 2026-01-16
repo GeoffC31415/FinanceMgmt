@@ -30,6 +30,7 @@ class YearlySnapshot:
     total_expenses: float
     mortgage_payment: float
     pension_contributions: float
+    fun_fund: float
 
     income_tax_paid: float
     ni_paid: float

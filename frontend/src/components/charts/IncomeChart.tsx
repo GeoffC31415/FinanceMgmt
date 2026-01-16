@@ -139,7 +139,7 @@ export function IncomeChart({
               type="monotone"
               dataKey="total_income"
               stroke="#22c55e"
-              strokeWidth={2}
+              strokeWidth={3}
               dot={false}
               yAxisId="left"
               name="total_income"

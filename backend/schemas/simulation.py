@@ -46,6 +46,7 @@ class SimulationResponse(BaseModel):
     total_expenses_median: list[float]
     mortgage_payment_median: list[float]
     pension_contributions_median: list[float]
+    fun_fund_median: list[float]
     
     # Tax
     income_tax_paid_median: list[float]

@@ -101,6 +101,7 @@ export type SimulationResponse = {
   total_expenses_median: number[];
   mortgage_payment_median: number[];
   pension_contributions_median: number[];
+  fun_fund_median: number[];
   
   // Tax
   income_tax_paid_median: number[];
