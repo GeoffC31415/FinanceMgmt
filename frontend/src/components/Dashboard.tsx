@@ -67,7 +67,7 @@ export function Dashboard() {
   const { scenarios, is_loading, error } = useScenarioList();
   const { result, session_id, is_loading: is_running, error: run_error, init, recalc } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
-  const [annual_spend_target, setAnnualSpendTarget] = useState<number>(30000);
+  const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
   const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
   const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
   const [realtime_mode, setRealtimeMode] = useState<boolean>(true);
@@ -247,14 +247,14 @@ export function Dashboard() {
           </div>
 
           <div className="min-w-[240px]">
-            <label className="block text-sm font-medium">Annual spend (retired)</label>
+            <label className="block text-sm font-medium">Extra spend (retired)</label>
             <div className="mt-2 flex items-center gap-3">
               <input
                 className="w-full"
                 value={annual_spend_target}
                 onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
                 type="range"
-                min={10000}
+                min={0}
                 max={100000}
                 step={1000}
               />
