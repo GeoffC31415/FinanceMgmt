@@ -344,22 +344,6 @@ export function Dashboard() {
           </div>
 
           <button
-            className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50"
-            disabled={!selected || is_running}
-            onClick={async () => {
-              if (!selected) return;
-              await init({
-                scenario_id: selected.id,
-                iterations: 2000,
-                seed: 0,
-                annual_spend_target,
-                end_year
-              });
-            }}
-          >
-            {is_running ? "Updating..." : session_id ? "Reinitialize" : "Initialize"}
-          </button>
-          <button
             className="rounded bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700 disabled:opacity-50"
             disabled={!result}
             onClick={export_csv}
