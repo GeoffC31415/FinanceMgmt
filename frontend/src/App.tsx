@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { Dashboard } from "./components/Dashboard";
 import { ScenarioConfigPage } from "./components/config/ScenarioConfigPage";
 import { ConfigWizard } from "./components/config/ConfigWizard";
+import { HelpPage } from "./components/HelpPage";
 
 export function App() {
   return (
@@ -27,6 +28,14 @@ export function App() {
             >
               Config
             </NavLink>
+            <NavLink
+              to="/help"
+              className={({ isActive }) =>
+                `rounded px-3 py-2 ${isActive ? "bg-slate-800" : "hover:bg-slate-900"}`
+              }
+            >
+              Help
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -36,6 +45,7 @@ export function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/config" element={<ScenarioConfigPage />} />
           <Route path="/config/wizard" element={<ConfigWizard />} />
+          <Route path="/help" element={<HelpPage />} />
         </Routes>
       </main>
     </div>
