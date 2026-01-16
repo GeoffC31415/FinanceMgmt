@@ -25,6 +25,8 @@ export type AssetCreate = {
   growth_rate_mean: number;
   growth_rate_std: number;
   contributions_end_at_retirement: boolean;
+  asset_type?: "CASH" | "ISA" | "GIA" | "PENSION";
+  withdrawal_priority?: number;
 };
 
 export type MortgageCreate = {

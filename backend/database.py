@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.models.base import Base
+from backend.migrations import run_migrations
 
 
 def build_async_engine(*, sqlite_path: str) -> AsyncEngine:
@@ -22,6 +23,7 @@ def build_sessionmaker(*, engine: AsyncEngine) -> async_sessionmaker[AsyncSessio
 async def init_db(*, engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await run_migrations(conn=conn)
 
 
 async def provide_session(*, sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:

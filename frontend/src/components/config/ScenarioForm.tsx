@@ -42,6 +42,8 @@ const schema = z.object({
     z.object({
       person_id: z.string().nullable().optional(),
       name: z.string().min(1).max(200),
+      asset_type: z.enum(["CASH", "ISA", "GIA", "PENSION"]).default("GIA"),
+      withdrawal_priority: z.coerce.number().int().min(0).max(10000).default(100),
       balance: z.coerce.number().min(0),
       annual_contribution: z.coerce.number(),
       growth_rate_mean: z.coerce.number(),
@@ -108,15 +110,29 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       employer_pension_pct: i.employer_pension_pct,
       person_id: i.person_id ?? ""
     })),
-    assets: scenario.assets.map((a) => ({
-      name: a.name,
-      balance: a.balance,
-      annual_contribution: a.annual_contribution,
-      growth_rate_mean: a.growth_rate_mean,
-      growth_rate_std: a.growth_rate_std,
-      contributions_end_at_retirement: a.contributions_end_at_retirement,
-      person_id: a.person_id ?? ""
-    })),
+    assets: scenario.assets.map((a) => {
+      const existingType = (a as any).asset_type as string | undefined;
+      const inferred =
+        existingType ??
+        (a.name.toLowerCase().includes("cash")
+          ? "CASH"
+          : a.name.toLowerCase().includes("isa")
+            ? "ISA"
+            : a.name.toLowerCase().includes("pension")
+              ? "PENSION"
+              : "GIA");
+      return {
+        name: a.name,
+        asset_type: inferred as any,
+        withdrawal_priority: ((a as any).withdrawal_priority ?? 100) as number,
+        balance: a.balance,
+        annual_contribution: a.annual_contribution,
+        growth_rate_mean: a.growth_rate_mean,
+        growth_rate_std: a.growth_rate_std,
+        contributions_end_at_retirement: a.contributions_end_at_retirement,
+        person_id: a.person_id ?? ""
+      };
+    }),
     mortgage: scenario.mortgage ?? null,
     expenses: scenario.expenses.map((e) => ({
       name: e.name,
@@ -152,6 +168,8 @@ function to_scenario_create(values: FormValues, original: ScenarioRead): Scenari
     })),
     assets: values.assets.map((a) => ({
       name: a.name,
+      asset_type: a.asset_type,
+      withdrawal_priority: a.withdrawal_priority,
       balance: a.balance,
       annual_contribution: a.annual_contribution,
       growth_rate_mean: a.growth_rate_mean,
@@ -380,6 +398,28 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                     )}
                   </div>
                   <div className="grid gap-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium">Type</label>
+                        <select
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                          {...form.register(`assets.${idx}.asset_type` as any)}
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="ISA">ISA</option>
+                          <option value="GIA">GIA</option>
+                          <option value="PENSION">Pension</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Withdrawal priority (lower = earlier)</label>
+                        <input
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                          type="number"
+                          {...form.register(`assets.${idx}.withdrawal_priority` as any)}
+                        />
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-sm font-medium">Name</label>
                       <input
@@ -452,6 +492,8 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                 onClick={() =>
                   assets.append({
                     name: "New asset",
+                    asset_type: "GIA",
+                    withdrawal_priority: 100,
                     balance: 0,
                     annual_contribution: 0,
                     growth_rate_mean: 0.05,

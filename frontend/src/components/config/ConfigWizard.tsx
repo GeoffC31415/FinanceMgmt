@@ -41,9 +41,9 @@ function default_draft(): ScenarioCreate {
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
     assets: [
-      { name: "ISA", balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
-      { name: "Pension", balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
-      { name: "Cash", balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, person_id: null }
+      { name: "ISA", asset_type: "ISA", withdrawal_priority: 20, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
+      { name: "Pension", asset_type: "PENSION", withdrawal_priority: 30, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
+      { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, person_id: null }
     ],
     mortgage: null,
     expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
@@ -71,6 +71,8 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
     })),
     assets: scenario.assets.map((a) => ({
       name: a.name,
+      asset_type: ((a as any).asset_type ?? (a.name.toLowerCase().includes("cash") ? "CASH" : a.name.toLowerCase().includes("isa") ? "ISA" : a.name.toLowerCase().includes("pension") ? "PENSION" : "GIA")) as any,
+      withdrawal_priority: ((a as any).withdrawal_priority ?? 100) as number,
       balance: a.balance,
       annual_contribution: a.annual_contribution,
       growth_rate_mean: a.growth_rate_mean,
@@ -429,9 +431,11 @@ export function ConfigWizard() {
           {step === "assets" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Assets</div>
-              <div className="hidden md:grid md:grid-cols-7 md:gap-3 text-xs text-slate-400">
+              <div className="hidden md:grid md:grid-cols-9 md:gap-3 text-xs text-slate-400">
                 <div>Person</div>
                 <div>Name</div>
+                <div>Type</div>
+                <div>Withdraw_priority</div>
                 <div>Balance</div>
                 <div>Annual_contrib</div>
                 <div>Growth_mean</div>
@@ -439,7 +443,7 @@ export function ConfigWizard() {
                 <div>End_at_retire</div>
               </div>
               {draft.assets.map((a, idx) => (
-                <div key={idx} className="grid gap-3 md:grid-cols-7 items-center">
+                <div key={idx} className="grid gap-3 md:grid-cols-9 items-center">
                   <select
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     value={a.person_id ?? ""}
@@ -467,6 +471,33 @@ export function ConfigWizard() {
                       }))
                     }
                     placeholder="name"
+                  />
+                  <select
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    value={(a as any).asset_type ?? "GIA"}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, asset_type: e.target.value as any } : x))
+                      }))
+                    }
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="ISA">ISA</option>
+                    <option value="GIA">GIA</option>
+                    <option value="PENSION">Pension</option>
+                  </select>
+                  <input
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    type="number"
+                    value={(a as any).withdrawal_priority ?? 100}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, withdrawal_priority: Number(e.target.value) } : x))
+                      }))
+                    }
+                    placeholder="priority"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -538,7 +569,7 @@ export function ConfigWizard() {
                 onClick={() =>
                   setDraft((d) => ({
                     ...d,
-                    assets: [...d.assets, { name: "New asset", balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null }]
+                    assets: [...d.assets, { name: "New asset", asset_type: "GIA", withdrawal_priority: 100, balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null }]
                   }))
                 }
               >

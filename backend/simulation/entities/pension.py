@@ -14,6 +14,11 @@ class PensionPot:
     _contributions: float = 0.0
     _withdrawals: float = 0.0
 
+    def begin_year(self) -> None:
+        self._investment_return = 0.0
+        self._contributions = 0.0
+        self._withdrawals = 0.0
+
     def contribute(self, *, amount: float) -> None:
         if amount <= 0:
             return
@@ -29,6 +34,8 @@ class PensionPot:
         return withdrawn
 
     def step(self, *, context: SimContext) -> None:
+        # per-year tracking
+        self.begin_year()
         self._investment_return = self.balance * self.annual_return
         self.balance += self._investment_return
 

@@ -92,6 +92,8 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
                 growth_rate_mean=asset.growth_rate_mean,
                 growth_rate_std=asset.growth_rate_std,
                 contributions_end_at_retirement=asset.contributions_end_at_retirement,
+                asset_type=asset.asset_type,
+                withdrawal_priority=asset.withdrawal_priority,
             )
             for asset in payload.assets
         ]
@@ -206,6 +208,8 @@ async def update_scenario(
                 growth_rate_mean=asset.growth_rate_mean,
                 growth_rate_std=asset.growth_rate_std,
                 contributions_end_at_retirement=asset.contributions_end_at_retirement,
+                asset_type=asset.asset_type,
+                withdrawal_priority=asset.withdrawal_priority,
             )
             for asset in payload.assets
         ]
