@@ -83,6 +83,10 @@ export type SimulationResponse = {
   spend_median: number[];
   retirement_years: number[];
   
+  // Inflation adjustment parameters (for real-value toggle)
+  inflation_rate: number;
+  start_year: number;
+  
   // Detailed fields for export
   // Incomes
   salary_gross_median: number[];

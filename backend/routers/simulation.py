@@ -194,7 +194,14 @@ def _retirement_years_from_people(*, people: list[PersonEntity]) -> list[int]:
     return sorted({p.birth_date.year + p.planned_retirement_age for p in people})
 
 
-def _response_from_matrices(*, years: list[int], mats: dict[str, np.ndarray], people: list[PersonEntity]) -> SimulationResponse:
+def _response_from_matrices(
+    *,
+    years: list[int],
+    mats: dict[str, np.ndarray],
+    people: list[PersonEntity],
+    inflation_rate: float,
+    start_year: int,
+) -> SimulationResponse:
     def median(field_name: str) -> list[float]:
         m = mats.get(field_name)
         return np.median(m, axis=0).tolist() if m is not None and m.size else []
@@ -215,6 +222,8 @@ def _response_from_matrices(*, years: list[int], mats: dict[str, np.ndarray], pe
         income_median=median("total_income"),
         spend_median=median("total_expenses"),
         retirement_years=_retirement_years_from_people(people=people),
+        inflation_rate=inflation_rate,
+        start_year=start_year,
         # Detailed incomes
         salary_gross_median=median("salary_gross"),
         salary_net_median=median("salary_net"),
@@ -299,6 +308,8 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         income_median=get_median("total_income"),
         spend_median=get_median("total_expenses"),
         retirement_years=retirement_years,
+        inflation_rate=sim_scenario.assumptions.inflation_rate,
+        start_year=sim_scenario.start_year,
         # Detailed incomes
         salary_gross_median=get_median("salary_gross"),
         salary_net_median=get_median("salary_net"),
@@ -357,7 +368,13 @@ async def init_simulation(
         raise HTTPException(status_code=500, detail="Failed to initialize simulation session")
 
     mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
-    response = _response_from_matrices(years=mats.years, mats=mats.fields, people=sim_scenario.people)
+    response = _response_from_matrices(
+        years=mats.years,
+        mats=mats.fields,
+        people=sim_scenario.people,
+        inflation_rate=sim_scenario.assumptions.inflation_rate,
+        start_year=sim_scenario.start_year,
+    )
     return SimulationInitResponse(session_id=session_id, **response.model_dump())
 
 
@@ -398,5 +415,11 @@ async def recalc_simulation(
     )
 
     mats = run_with_cached_returns(scenario=sim_scenario, returns=cached.returns)
-    return _response_from_matrices(years=mats.years, mats=mats.fields, people=sim_scenario.people)
+    return _response_from_matrices(
+        years=mats.years,
+        mats=mats.fields,
+        people=sim_scenario.people,
+        inflation_rate=sim_scenario.assumptions.inflation_rate,
+        start_year=sim_scenario.start_year,
+    )
 

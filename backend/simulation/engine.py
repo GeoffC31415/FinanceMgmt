@@ -358,7 +358,16 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                     remaining_shortfall -= res.net_withdrawal
                 else:
                     # Pension withdrawal (synthetic source)
-                    current_pension_balance = sum(p.balance for p in pension_by_person.values())
+                    # Only include pensions from people aged 55+ (UK minimum pension access age)
+                    eligible_pensions = {
+                        person_key: pension
+                        for person_key, pension in pension_by_person.items()
+                        if any(
+                            p.key == person_key and p.can_access_pension_in_year(year=year)
+                            for p in people
+                        )
+                    }
+                    current_pension_balance = sum(p.balance for p in eligible_pensions.values())
                     if current_pension_balance > 0:
                         drawdown_result = calculate_pension_drawdown(
                             target_net_income=remaining_shortfall,
@@ -371,7 +380,7 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                         remaining_shortfall -= drawdown_result.net_income
 
                         if drawdown_result.gross_withdrawal > 0:
-                            for pension in pension_by_person.values():
+                            for pension in eligible_pensions.values():
                                 proportion = pension.balance / current_pension_balance
                                 pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
@@ -703,7 +712,16 @@ def _simulate_single_run_to_matrices(
                     remaining_shortfall -= res.net_withdrawal
                 else:
                     # Pension withdrawal (synthetic source)
-                    current_pension_balance = sum(p.balance for p in pension_by_person.values())
+                    # Only include pensions from people aged 55+ (UK minimum pension access age)
+                    eligible_pensions = {
+                        person_key: pension
+                        for person_key, pension in pension_by_person.items()
+                        if any(
+                            p.key == person_key and p.can_access_pension_in_year(year=year)
+                            for p in people
+                        )
+                    }
+                    current_pension_balance = sum(p.balance for p in eligible_pensions.values())
                     if current_pension_balance > 0:
                         drawdown_result = calculate_pension_drawdown(
                             target_net_income=remaining_shortfall,
@@ -716,7 +734,7 @@ def _simulate_single_run_to_matrices(
                         remaining_shortfall -= drawdown_result.net_income
 
                         if drawdown_result.gross_withdrawal > 0:
-                            for pension in pension_by_person.values():
+                            for pension in eligible_pensions.values():
                                 proportion = pension.balance / current_pension_balance
                                 pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 

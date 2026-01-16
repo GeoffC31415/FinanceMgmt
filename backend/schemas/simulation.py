@@ -27,6 +27,10 @@ class SimulationResponse(BaseModel):
     spend_median: list[float]
     retirement_years: list[int]
     
+    # Inflation adjustment parameters (for frontend real-value toggle)
+    inflation_rate: float
+    start_year: int
+    
     # Detailed fields for export
     # Incomes
     salary_gross_median: list[float]
