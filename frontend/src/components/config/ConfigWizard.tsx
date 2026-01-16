@@ -804,48 +804,63 @@ export function ConfigWizard() {
               
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Annual inflation rate as a decimal (0.02 = 2%). Affects inflation-linked expenses and real-value calculations.">Inflation Rate</Label>
-                  <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).inflation_rate ?? "")}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        assumptions: { ...(d.assumptions as any), inflation_rate: Number(e.target.value) }
-                      }))
-                    }
-                  />
+                  <Label tooltip="Annual inflation rate. Affects inflation-linked expenses and real-value calculations.">Inflation Rate (%)</Label>
+                  <div className="relative mt-1">
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                      type="number"
+                      step="0.1"
+                      value={((draft.assumptions as any).inflation_rate ?? 0) * 100}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          assumptions: { ...(d.assumptions as any), inflation_rate: Number(e.target.value) / 100 }
+                        }))
+                      }
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                  </div>
                   <Hint>UK long-term average: ~2%. Higher inflation erodes purchasing power faster.</Hint>
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Average annual equity return as a decimal (0.05 = 5%). Used as the 'mean' in Monte Carlo simulations for asset growth.">Equity Return Mean</Label>
-                  <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).equity_return_mean ?? "")}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        assumptions: { ...(d.assumptions as any), equity_return_mean: Number(e.target.value) }
-                      }))
-                    }
-                  />
+                  <Label tooltip="Average annual equity return. Used as the 'mean' in Monte Carlo simulations for asset growth.">Equity Return Mean (%)</Label>
+                  <div className="relative mt-1">
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                      type="number"
+                      step="0.1"
+                      value={((draft.assumptions as any).equity_return_mean ?? 0) * 100}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          assumptions: { ...(d.assumptions as any), equity_return_mean: Number(e.target.value) / 100 }
+                        }))
+                      }
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                  </div>
                   <Hint>Historical UK equities: ~5-7% real return. This is a default; assets can override.</Hint>
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Standard deviation of annual returns (0.10 = 10% volatility). Higher values create more variation between simulation runs.">Equity Return Std Dev</Label>
-                  <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).equity_return_std ?? "")}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        assumptions: { ...(d.assumptions as any), equity_return_std: Number(e.target.value) }
-                      }))
-                    }
-                  />
-                  <Hint>Typical stocks: 0.10-0.15. Higher = more "boom and bust" scenarios simulated.</Hint>
+                  <Label tooltip="Standard deviation of annual returns. Higher values create more variation between simulation runs.">Equity Return Std Dev (%)</Label>
+                  <div className="relative mt-1">
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                      type="number"
+                      step="0.1"
+                      value={((draft.assumptions as any).equity_return_std ?? 0) * 100}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          assumptions: { ...(d.assumptions as any), equity_return_std: Number(e.target.value) / 100 }
+                        }))
+                      }
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                  </div>
+                  <Hint>Typical stocks: 10-15%. Higher = more "boom and bust" scenarios simulated.</Hint>
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">

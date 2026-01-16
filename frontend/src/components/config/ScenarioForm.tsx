@@ -391,33 +391,73 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               <div className="mt-1">
                 <PercentInput control={form.control} name="assumptions.inflation_rate" placeholder="e.g. 2" />
               </div>
+              {form.formState.errors.assumptions?.inflation_rate && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.inflation_rate.message || "Must be 0-100%"}</div>
+              )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
               <label className="block text-sm font-medium">Equity return mean</label>
               <div className="mt-1">
                 <PercentInput control={form.control} name="assumptions.equity_return_mean" placeholder="e.g. 5" />
               </div>
+              {form.formState.errors.assumptions?.equity_return_mean && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.equity_return_mean.message || "Invalid value"}</div>
+              )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
               <label className="block text-sm font-medium">Equity return std dev</label>
               <div className="mt-1">
                 <PercentInput control={form.control} name="assumptions.equity_return_std" placeholder="e.g. 10" />
               </div>
+              {form.formState.errors.assumptions?.equity_return_std && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.equity_return_std.message || "Must be 0 or higher"}</div>
+              )}
             </div>
-            {[
-              ["assumptions.isa_annual_limit", "ISA annual limit", "e.g. 20,000"],
-              ["assumptions.state_pension_annual", "State pension annual", "e.g. 11,500"],
-              ["assumptions.start_year", "Start year", "e.g. 2026"],
-              ["assumptions.end_year", "End year", "e.g. 2086"],
-              ["assumptions.annual_spend_target", "Annual spend target", "e.g. 30,000"]
-            ].map(([path, label, placeholder]) => (
-              <div key={path} className="rounded border border-slate-800 bg-slate-900/30 p-4">
-                <label className="block text-sm font-medium">{label}</label>
-                <div className="mt-1">
-                  <NumberInput control={form.control} name={path} placeholder={placeholder} />
-                </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">ISA annual limit</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.isa_annual_limit" placeholder="e.g. 20,000" />
               </div>
-            ))}
+              {form.formState.errors.assumptions?.isa_annual_limit && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.isa_annual_limit.message || "Must be 0 or higher"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">State pension annual</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.state_pension_annual" placeholder="e.g. 11,500" />
+              </div>
+              {form.formState.errors.assumptions?.state_pension_annual && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.state_pension_annual.message || "Must be 0 or higher"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Start year</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.start_year" placeholder="e.g. 2026" />
+              </div>
+              {form.formState.errors.assumptions?.start_year && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.start_year.message || "Enter a valid year (1900-2200)"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">End year</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.end_year" placeholder="e.g. 2086" />
+              </div>
+              {form.formState.errors.assumptions?.end_year && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.end_year.message || "Enter a valid year (1900-2200)"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Annual spend target</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.annual_spend_target" placeholder="e.g. 30,000" />
+              </div>
+              {form.formState.errors.assumptions?.annual_spend_target && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.annual_spend_target.message || "Must be 0 or higher"}</div>
+              )}
+            </div>
           </div>
         )}
 
