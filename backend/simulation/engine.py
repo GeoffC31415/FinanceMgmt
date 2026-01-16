@@ -344,11 +344,11 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
 
         # Retirement spending target:
-        # Interpret `annual_spend_target` as a TOTAL non-mortgage spend target (not an extra).
-        # If explicit expenses already exceed the target, we don't add anything.
+        # Treat `annual_spend_target` as an EXTRA discretionary expense added when everyone is retired.
+        # This is on top of configured expenses - a "fun money" budget for retirement.
         extra_retirement_spend = 0.0
         if is_all_retired:
-            extra_retirement_spend = max(0.0, scenario.annual_spend_target - expense_total)
+            extra_retirement_spend = scenario.annual_spend_target
 
         total_outflows = expense_total + mortgage_payment + extra_retirement_spend
 
@@ -735,9 +735,8 @@ def _simulate_single_run_to_matrices(
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
 
-        extra_retirement_spend = 0.0
-        if is_all_retired:
-            extra_retirement_spend = max(0.0, scenario.annual_spend_target - expense_total)
+        # Treat `annual_spend_target` as an EXTRA discretionary expense added when everyone is retired.
+        extra_retirement_spend = scenario.annual_spend_target if is_all_retired else 0.0
 
         total_outflows = expense_total + mortgage_payment + extra_retirement_spend
 

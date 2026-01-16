@@ -462,8 +462,9 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <label className="block text-sm font-medium">Annual spend target</label>
-              <div className="mt-1">
+              <label className="block text-sm font-medium">Extra retirement spending</label>
+              <p className="text-xs text-slate-400 mt-1">Additional discretionary spending once everyone is retired (on top of configured expenses)</p>
+              <div className="mt-2">
                 <NumberInput control={form.control} name="assumptions.annual_spend_target" placeholder="e.g. 30,000" />
               </div>
               {form.formState.errors.assumptions?.annual_spend_target && (

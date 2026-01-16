@@ -106,11 +106,12 @@ export function HelpPage() {
       </div>
 
       <div className="rounded border border-slate-800 bg-slate-900/30 p-4 space-y-3">
-        <div className="text-sm font-semibold">Retirement spending target</div>
+        <div className="text-sm font-semibold">Retirement discretionary spending</div>
         <p className="text-sm text-slate-300">
-          In retirement, <span className="font-mono">annual_spend_target</span> is treated as a{" "}
-          <span className="font-semibold">total non-mortgage spend target</span>. If your explicit expenses already
-          exceed the target, the simulator does not add extra spend.
+          The <span className="font-mono">annual_spend_target</span> is an{" "}
+          <span className="font-semibold">extra discretionary expense</span> added on top of your configured expenses
+          once everyone in the household is retired. Think of it as "fun money" for travel, hobbies, etc.
+          Set it to 0 if you only want to use your configured expenses.
         </p>
       </div>
 
