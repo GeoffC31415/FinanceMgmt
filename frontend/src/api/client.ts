@@ -31,6 +31,11 @@ async function http<TResponse>(path: string, options?: RequestInit): Promise<TRe
       throw new Error(`HTTP ${response.status}: ${detail || response.statusText}`);
     }
 
+    // Handle 204 No Content responses (e.g., from DELETE)
+    if (response.status === 204) {
+      return undefined as TResponse;
+    }
+
     return (await response.json()) as TResponse;
   } catch (error) {
     if (error instanceof TypeError) {
