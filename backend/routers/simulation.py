@@ -17,7 +17,8 @@ from backend.simulation.engine import (
     SimulationScenario,
     run_monte_carlo,
 )
-from backend.simulation.entities import Cash, ExpenseItem, IsaAccount, MortgageAccount, PensionPot, PersonEntity, SalaryIncome
+from backend.simulation.entities import ExpenseItem, MortgageAccount, PensionPot, PersonEntity, SalaryIncome
+from backend.simulation.entities.asset import AssetAccount
 
 router = APIRouter()
 
@@ -102,21 +103,34 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
             employer_pension_pct=income.employer_pension_pct,
         )
 
+    # Separate pensions (they get contributions from salary) from other assets
     pension_by_person: dict[str, PensionPot] = {}
-    isa_balance = 0.0
-    isa_contrib = 0.0
-    cash_balance = 0.0
-    cash_interest = _coerce_float(assumptions_json.get("cash_interest_rate"), 0.0)
+    assets: list[AssetAccount] = []
 
     for asset in scenario.assets:
-        if asset.kind == "pension":
+        # Check if this is a pension by name (backward compatibility)
+        is_pension = "pension" in asset.name.lower()
+        
+        if is_pension and asset.person_id:
+            # Create pension pot (still handled separately for salary contributions)
             person_key = next((p.label for p in scenario.people if p.id == asset.person_id), scenario.people[0].label)
-            pension_by_person[person_key] = PensionPot(balance=asset.balance)
-        if asset.kind == "isa":
-            isa_balance += asset.balance
-            isa_contrib += asset.annual_contribution
-        if asset.kind == "cash":
-            cash_balance += asset.balance
+            if person_key not in pension_by_person:
+                pension_by_person[person_key] = PensionPot(balance=asset.balance)
+            else:
+                # Sum multiple pensions for same person
+                pension_by_person[person_key].balance += asset.balance
+        else:
+            # Create generic asset account
+            assets.append(
+                AssetAccount(
+                    name=asset.name,
+                    balance=asset.balance,
+                    annual_contribution=asset.annual_contribution,
+                    growth_rate_mean=asset.growth_rate_mean,
+                    growth_rate_std=asset.growth_rate_std,
+                    contributions_end_at_retirement=asset.contributions_end_at_retirement,
+                )
+            )
 
     mortgage = None
     if scenario.mortgage is not None:
@@ -142,8 +156,7 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         people=people,
         salary_by_person=salary_by_person,
         pension_by_person=pension_by_person,
-        isa=IsaAccount(balance=isa_balance, annual_contribution=min(assumptions.isa_annual_limit, isa_contrib)),
-        cash=Cash(balance=cash_balance, annual_interest_rate=cash_interest),
+        assets=assets,
         mortgage=mortgage,
         expenses=expenses,
         annual_spend_target=annual_spend_target,
@@ -154,22 +167,31 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
     results = run_monte_carlo(scenario=sim_scenario, iterations=payload.iterations, seed=payload.seed)
 
     years = [s.year for s in results.runs[0].snapshots] if results.runs else []
-    net_worth_matrix = np.array([[s.net_worth for s in run.snapshots] for run in results.runs], dtype=float)
-    income_matrix = np.array([[s.total_income for s in run.snapshots] for run in results.runs], dtype=float)
-    spend_matrix = np.array([[s.total_expenses for s in run.snapshots] for run in results.runs], dtype=float)
+    
+    # Helper function to extract matrix for a field
+    def get_matrix(field_name: str) -> np.ndarray:
+        return np.array([[getattr(s, field_name) for s in run.snapshots] for run in results.runs], dtype=float)
+    
+    # Helper function to get median
+    def get_median(field_name: str) -> list[float]:
+        matrix = get_matrix(field_name)
+        return np.median(matrix, axis=0).tolist() if matrix.size else []
+    
+    # Helper function to get percentage (for boolean fields)
+    def get_percentage(field_name: str) -> list[float]:
+        matrix = np.array([[float(getattr(s, field_name)) for s in run.snapshots] for run in results.runs], dtype=float)
+        return (np.mean(matrix, axis=0) * 100).tolist() if matrix.size else []
 
+    net_worth_matrix = get_matrix("net_worth")
+    
     if net_worth_matrix.size:
         p10 = np.percentile(net_worth_matrix, 10, axis=0).tolist()
         median = np.median(net_worth_matrix, axis=0).tolist()
         p90 = np.percentile(net_worth_matrix, 90, axis=0).tolist()
-        income_median = np.median(income_matrix, axis=0).tolist()
-        spend_median = np.median(spend_matrix, axis=0).tolist()
     else:
         p10 = []
         median = []
         p90 = []
-        income_median = []
-        spend_median = []
 
     retirement_years = sorted({person.birth_date.year + person.planned_retirement_age for person in scenario.people})
 
@@ -178,8 +200,34 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         net_worth_p10=p10,
         net_worth_median=median,
         net_worth_p90=p90,
-        income_median=income_median,
-        spend_median=spend_median,
+        income_median=get_median("total_income"),
+        spend_median=get_median("total_expenses"),
         retirement_years=retirement_years,
+        # Detailed incomes
+        salary_gross_median=get_median("salary_gross"),
+        salary_net_median=get_median("salary_net"),
+        pension_income_median=get_median("pension_income"),
+        state_pension_income_median=get_median("state_pension_income"),
+        investment_returns_median=get_median("investment_returns"),
+        total_income_median=get_median("total_income"),
+        # Detailed expenses
+        total_expenses_median=get_median("total_expenses"),
+        mortgage_payment_median=get_median("mortgage_payment"),
+        pension_contributions_median=get_median("pension_contributions"),
+        # Tax
+        income_tax_paid_median=get_median("income_tax_paid"),
+        ni_paid_median=get_median("ni_paid"),
+        total_tax_median=get_median("total_tax"),
+        # Assets
+        isa_balance_median=get_median("isa_balance"),
+        pension_balance_median=get_median("pension_balance"),
+        cash_balance_median=get_median("cash_balance"),
+        total_assets_median=get_median("total_assets"),
+        # Liabilities
+        mortgage_balance_median=get_median("mortgage_balance"),
+        total_liabilities_median=get_median("total_liabilities"),
+        # Other
+        mortgage_paid_off_median=get_percentage("mortgage_paid_off"),
+        is_depleted_median=get_percentage("is_depleted"),
     )
 

@@ -41,9 +41,12 @@ const schema = z.object({
   assets: z.array(
     z.object({
       person_id: z.string().nullable().optional(),
-      kind: z.string().min(1).max(50),
-      balance: z.coerce.number(),
-      annual_contribution: z.coerce.number()
+      name: z.string().min(1).max(200),
+      balance: z.coerce.number().min(0),
+      annual_contribution: z.coerce.number(),
+      growth_rate_mean: z.coerce.number(),
+      growth_rate_std: z.coerce.number().min(0),
+      contributions_end_at_retirement: z.coerce.boolean()
     })
   ),
   mortgage: z
@@ -106,9 +109,12 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       person_id: i.person_id ?? ""
     })),
     assets: scenario.assets.map((a) => ({
-      kind: a.kind,
+      name: a.name,
       balance: a.balance,
       annual_contribution: a.annual_contribution,
+      growth_rate_mean: a.growth_rate_mean,
+      growth_rate_std: a.growth_rate_std,
+      contributions_end_at_retirement: a.contributions_end_at_retirement,
       person_id: a.person_id ?? ""
     })),
     mortgage: scenario.mortgage ?? null,
@@ -145,9 +151,12 @@ function to_scenario_create(values: FormValues, original: ScenarioRead): Scenari
       person_id: normalize_person_id(i.person_id)
     })),
     assets: values.assets.map((a) => ({
-      kind: a.kind,
+      name: a.name,
       balance: a.balance,
       annual_contribution: a.annual_contribution,
+      growth_rate_mean: a.growth_rate_mean,
+      growth_rate_std: a.growth_rate_std,
+      contributions_end_at_retirement: a.contributions_end_at_retirement,
       person_id: normalize_person_id(a.person_id)
     })),
     mortgage: values.mortgage ?? null,
@@ -178,6 +187,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
   const people = useFieldArray({ control: form.control, name: "people" });
   const expenses = useFieldArray({ control: form.control, name: "expenses" });
+  const assets = useFieldArray({ control: form.control, name: "assets" });
 
   useEffect(() => {
     form.reset(default_values);
@@ -354,65 +364,105 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
             </div>
 
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Assets (ISA / Pension / Cash)</div>
-              <div className="mt-3 grid gap-3">
-        <div>
-          <label className="block text-sm font-medium">ISA assigned to</label>
-          <select
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            {...form.register("assets.0.person_id")}
-          >
-            <option value="">Household</option>
-            {scenario.people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Pension assigned to</label>
-          <select
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            {...form.register("assets.1.person_id")}
-          >
-            <option value="">Household</option>
-            {scenario.people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Cash assigned to</label>
-          <select
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            {...form.register("assets.2.person_id")}
-          >
-            <option value="">Household</option>
-            {scenario.people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {[
-          ["assets.0.balance", "ISA balance"],
-          ["assets.0.annual_contribution", "ISA annual contribution"],
-          ["assets.1.balance", "Pension balance"],
-          ["assets.2.balance", "Cash balance"]
-        ].map(([path, label]) => (
-          <div key={path}>
-            <label className="block text-sm font-medium">{label}</label>
-            <input
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              {...form.register(path as any)}
-            />
-          </div>
-        ))}
-              </div>
+              <div className="text-sm font-semibold">Assets</div>
+              {assets.fields.map((asset, idx) => (
+                <div key={asset.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Asset {idx + 1}</div>
+                    {assets.fields.length > 1 && (
+                      <button
+                        type="button"
+                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                        onClick={() => assets.remove(idx)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="block text-sm font-medium">Name</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        {...form.register(`assets.${idx}.name`)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Assigned to</label>
+                      <select
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        {...form.register(`assets.${idx}.person_id`)}
+                      >
+                        <option value="">Household</option>
+                        {scenario.people.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Starting balance</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        {...form.register(`assets.${idx}.balance`)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Annual contribution</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        {...form.register(`assets.${idx}.annual_contribution`)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Growth rate mean (e.g. 0.05)</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        {...form.register(`assets.${idx}.growth_rate_mean`)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Growth rate std dev (risk, e.g. 0.10)</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        {...form.register(`assets.${idx}.growth_rate_std`)}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        {...form.register(`assets.${idx}.contributions_end_at_retirement`)}
+                      />
+                      Contributions end at retirement
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                onClick={() =>
+                  assets.append({
+                    name: "New asset",
+                    balance: 0,
+                    annual_contribution: 0,
+                    growth_rate_mean: 0.05,
+                    growth_rate_std: 0.10,
+                    contributions_end_at_retirement: false,
+                    person_id: ""
+                  })
+                }
+              >
+                Add asset
+              </button>
             </div>
           </div>
         )}

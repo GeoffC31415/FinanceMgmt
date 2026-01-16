@@ -41,9 +41,9 @@ function default_draft(): ScenarioCreate {
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
     assets: [
-      { kind: "isa", balance: 50000, annual_contribution: 10000, person_id: null },
-      { kind: "pension", balance: 150000, annual_contribution: 0, person_id: null },
-      { kind: "cash", balance: 20000, annual_contribution: 0 }
+      { name: "ISA", balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
+      { name: "Pension", balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
+      { name: "Cash", balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, person_id: null }
     ],
     mortgage: null,
     expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
@@ -70,9 +70,12 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       person_id: i.person_id ?? null
     })),
     assets: scenario.assets.map((a) => ({
-      kind: a.kind,
+      name: a.name,
       balance: a.balance,
       annual_contribution: a.annual_contribution,
+      growth_rate_mean: a.growth_rate_mean,
+      growth_rate_std: a.growth_rate_std,
+      contributions_end_at_retirement: a.contributions_end_at_retirement,
       person_id: a.person_id ?? null
     })),
     mortgage: scenario.mortgage ?? null,
@@ -426,14 +429,17 @@ export function ConfigWizard() {
           {step === "assets" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Assets</div>
-              <div className="hidden md:grid md:grid-cols-4 md:gap-3 text-xs text-slate-400">
+              <div className="hidden md:grid md:grid-cols-7 md:gap-3 text-xs text-slate-400">
                 <div>Person</div>
-                <div>Type</div>
+                <div>Name</div>
                 <div>Balance</div>
-                <div>Annual_contribution</div>
+                <div>Annual_contrib</div>
+                <div>Growth_mean</div>
+                <div>Growth_std</div>
+                <div>End_at_retire</div>
               </div>
               {draft.assets.map((a, idx) => (
-                <div key={idx} className="grid gap-3 md:grid-cols-4">
+                <div key={idx} className="grid gap-3 md:grid-cols-7 items-center">
                   <select
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     value={a.person_id ?? ""}
@@ -453,14 +459,14 @@ export function ConfigWizard() {
                   </select>
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={a.kind}
+                    value={a.name}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assets: d.assets.map((x, i) => (i === idx ? { ...x, kind: e.target.value } : x))
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x))
                       }))
                     }
-                    placeholder="kind (isa/pension/cash)"
+                    placeholder="name"
                   />
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -486,6 +492,44 @@ export function ConfigWizard() {
                     }
                     placeholder="annual contribution"
                   />
+                  <input
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    type="number"
+                    step="0.01"
+                    value={a.growth_rate_mean}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, growth_rate_mean: Number(e.target.value) } : x))
+                      }))
+                    }
+                    placeholder="growth mean"
+                  />
+                  <input
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    type="number"
+                    step="0.01"
+                    value={a.growth_rate_std}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, growth_rate_std: Number(e.target.value) } : x))
+                      }))
+                    }
+                    placeholder="growth std"
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={a.contributions_end_at_retirement}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          assets: d.assets.map((x, i) => (i === idx ? { ...x, contributions_end_at_retirement: e.target.checked } : x))
+                        }))
+                      }
+                    />
+                  </label>
                 </div>
               ))}
               <button
@@ -494,7 +538,7 @@ export function ConfigWizard() {
                 onClick={() =>
                   setDraft((d) => ({
                     ...d,
-                    assets: [...d.assets, { kind: "isa", balance: 0, annual_contribution: 0, person_id: null }]
+                    assets: [...d.assets, { name: "New asset", balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null }]
                   }))
                 }
               >

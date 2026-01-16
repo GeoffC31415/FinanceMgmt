@@ -6,15 +6,14 @@ from datetime import date
 import numpy as np
 
 from backend.simulation.entities import (
-    Cash,
     ExpenseItem,
-    IsaAccount,
     MortgageAccount,
     PensionPot,
     PersonEntity,
     SalaryIncome,
     StatePension,
 )
+from backend.simulation.entities.asset import AssetAccount
 from backend.simulation.entities.base import SimContext
 from backend.simulation.results import RunResult, SimulationResults, YearlySnapshot
 from backend.simulation.tax import TaxCalculator
@@ -37,8 +36,7 @@ class SimulationScenario:
     salary_by_person: dict[str, SalaryIncome]
     pension_by_person: dict[str, PensionPot]
 
-    isa: IsaAccount
-    cash: Cash
+    assets: list[AssetAccount]
     mortgage: MortgageAccount | None
     expenses: list[ExpenseItem]
 
@@ -60,8 +58,7 @@ def _safe_yearly_snapshot(
     *,
     year: int,
     people: list[PersonEntity],
-    isa: IsaAccount,
-    cash: Cash,
+    assets: list[AssetAccount],
     pension_by_person: dict[str, PensionPot],
     mortgage: MortgageAccount | None,
     cash_flows: dict[str, float],
@@ -74,7 +71,12 @@ def _safe_yearly_snapshot(
     pension_balance = sum(p.balance for p in pension_by_person.values())
     mortgage_balance = mortgage.balance if mortgage is not None else 0.0
 
-    total_assets = isa.balance + cash.balance + pension_balance
+    # Calculate asset balances (for backward compatibility, identify ISA/Cash by name)
+    isa_balance = sum(a.balance for a in assets if "isa" in a.name.lower())
+    cash_balance = sum(a.balance for a in assets if "cash" in a.name.lower())
+    other_assets_balance = sum(a.balance for a in assets if "isa" not in a.name.lower() and "cash" not in a.name.lower())
+    
+    total_assets = sum(a.balance for a in assets) + pension_balance
     total_liabilities = mortgage_balance
     net_worth = total_assets - total_liabilities
 
@@ -88,11 +90,10 @@ def _safe_yearly_snapshot(
     state_pension_income = cash_flows.get("state_pension_income", 0.0)
     pension_income = cash_flows.get("pension_income", 0.0)
 
-    investment_returns = (
-        cash_flows.get("isa_investment_return", 0.0)
-        + cash_flows.get("pension_investment_return", 0.0)
-        + cash_flows.get("cash_interest", 0.0)
-    )
+    # Sum all investment returns from assets
+    investment_returns = sum(
+        cash_flows.get(f"{asset.name}_investment_return", 0.0) for asset in assets
+    ) + cash_flows.get("pension_investment_return", 0.0)
 
     total_income = cash_flows.get("salary_net", 0.0) + pension_income + state_pension_income
     mortgage_payment = cash_flows.get("mortgage_payment", 0.0)
@@ -100,15 +101,15 @@ def _safe_yearly_snapshot(
 
     salary_net = cash_flows.get("salary_net", 0.0)
 
-    is_depleted = cash.balance <= 0 and isa.balance <= 0 and pension_balance <= 0
+    is_depleted = total_assets <= 0
     mortgage_paid_off = mortgage is None or mortgage.balance <= 0
 
     return YearlySnapshot(
         year=year,
         ages=ages,
-        isa_balance=isa.balance,
+        isa_balance=isa_balance,
         pension_balance=pension_balance,
-        cash_balance=cash.balance,
+        cash_balance=cash_balance,
         total_assets=total_assets,
         mortgage_balance=mortgage_balance,
         total_liabilities=total_liabilities,
@@ -157,8 +158,22 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
     salary_by_person = {k: SalaryIncome(**v.__dict__) for k, v in scenario.salary_by_person.items()}
     pension_by_person = {k: PensionPot(**v.__dict__) for k, v in scenario.pension_by_person.items()}
 
-    isa = IsaAccount(balance=scenario.isa.balance, annual_contribution=scenario.isa.annual_contribution)
-    cash = Cash(balance=scenario.cash.balance, annual_interest_rate=scenario.cash.annual_interest_rate)
+    assets = [
+        AssetAccount(
+            name=asset.name,
+            balance=asset.balance,
+            annual_contribution=asset.annual_contribution,
+            growth_rate_mean=asset.growth_rate_mean,
+            growth_rate_std=asset.growth_rate_std,
+            contributions_end_at_retirement=asset.contributions_end_at_retirement,
+        )
+        for asset in scenario.assets
+    ]
+    
+    # Find cash asset for cash flow management
+    cash_assets = [a for a in assets if "cash" in a.name.lower()]
+    primary_cash = cash_assets[0] if cash_assets else None
+    
     mortgage = None
     if scenario.mortgage is not None:
         mortgage = MortgageAccount(
@@ -174,15 +189,11 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
     for year in range(scenario.start_year, scenario.end_year + 1):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
-        # Sample annual return for equity-like assets (ISA + pensions). (Simplified)
-        annual_return = float(
-            rng.normal(loc=scenario.assumptions.equity_return_mean, scale=scenario.assumptions.equity_return_std)
-        )
-
         # Salary + pension contributions (assume only while not retired)
         salary_gross_total = 0.0
         employee_pension_total = 0.0
         employer_pension_total = 0.0
+        is_all_retired = all(person.is_retired_in_year(year=year) for person in people) if people else False
 
         for person in people:
             is_retired = person.is_retired_in_year(year=year)
@@ -208,13 +219,20 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         )
         salary_net = salary_gross_total - tax_breakdown.total_tax - employee_pension_total
 
-        # Apply returns
-        isa.annual_return = annual_return
-        isa.step(context=context)
+        # Step assets (check if contributions should end at retirement)
+        for asset in assets:
+            should_contribute = asset.annual_contribution > 0 and (
+                not asset.contributions_end_at_retirement or not is_all_retired
+            )
+            asset.step(context=context, should_contribute=should_contribute)
+        
+        # Step pensions
         for pension in pension_by_person.values():
-            pension.annual_return = annual_return
+            # Use default equity return for pensions (can be made configurable later)
+            pension.annual_return = float(
+                rng.normal(loc=scenario.assumptions.equity_return_mean, scale=scenario.assumptions.equity_return_std)
+            )
             pension.step(context=context)
-        cash.step(context=context)
 
         # Mortgage + expenses
         if mortgage is not None:
@@ -229,36 +247,40 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                 state_pension_income += scenario.assumptions.state_pension_annual
 
         # Retirement spending target (simplified: once all retired)
-        is_all_retired = all(person.is_retired_in_year(year=year) for person in people) if people else False
         annual_spend = scenario.annual_spend_target if is_all_retired else 0.0
 
         # Cash flow: deposit salary/state pension into cash; withdraw expenses/spend from cash
-        cash.balance += salary_net + state_pension_income
+        if primary_cash is not None:
+            primary_cash.balance += salary_net + state_pension_income
 
-        expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
-        mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
-        total_outflows = expense_total + mortgage_payment + annual_spend
-        cash.balance -= total_outflows
+            expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
+            mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
+            total_outflows = expense_total + mortgage_payment + annual_spend
+            primary_cash.balance -= total_outflows
+
+        # Collect cash flows from all assets
+        asset_cash_flows = {}
+        for asset in assets:
+            asset_cf = asset.get_cash_flows()
+            asset_cash_flows.update(asset_cf)
 
         cash_flows = {
             "salary_gross": salary_gross_total,
             "salary_net": salary_net,
-            "expenses": expense_total,
-            "mortgage_payment": mortgage_payment,
+            "expenses": sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses),
+            "mortgage_payment": mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0,
             "pension_contributions": employee_pension_total + employer_pension_total,
             "state_pension_income": state_pension_income,
-            "isa_investment_return": isa.get_cash_flows().get("isa_investment_return", 0.0),
             "pension_investment_return": sum(p.get_cash_flows().get("pension_investment_return", 0.0) for p in pension_by_person.values()),
-            "cash_interest": cash.get_cash_flows().get("cash_interest", 0.0),
             "pension_income": 0.0,
+            **asset_cash_flows,
         }
         tax_out = {"income_tax_paid": tax_breakdown.income_tax, "ni_paid": tax_breakdown.national_insurance}
 
         snapshot = _safe_yearly_snapshot(
             year=year,
             people=people,
-            isa=isa,
-            cash=cash,
+            assets=assets,
             pension_by_person=pension_by_person,
             mortgage=mortgage,
             cash_flows=cash_flows,

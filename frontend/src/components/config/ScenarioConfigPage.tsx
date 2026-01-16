@@ -34,9 +34,9 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     }
   ],
   assets: [
-    { kind: "isa", balance: 50000, annual_contribution: 10000 },
-    { kind: "pension", balance: 150000, annual_contribution: 0 },
-    { kind: "cash", balance: 20000, annual_contribution: 0 }
+    { name: "ISA", balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false },
+    { name: "Pension", balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false },
+    { name: "Cash", balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false }
   ],
   mortgage: { balance: 200000, annual_interest_rate: 0.04, monthly_payment: 1200, months_remaining: 300 },
   expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]

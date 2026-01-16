@@ -19,9 +19,12 @@ export type IncomeCreate = {
 
 export type AssetCreate = {
   person_id?: string | null;
-  kind: string;
+  name: string;
   balance: number;
   annual_contribution: number;
+  growth_rate_mean: number;
+  growth_rate_std: number;
+  contributions_end_at_retirement: boolean;
 };
 
 export type MortgageCreate = {
@@ -69,5 +72,38 @@ export type SimulationResponse = {
   income_median: number[];
   spend_median: number[];
   retirement_years: number[];
+  
+  // Detailed fields for export
+  // Incomes
+  salary_gross_median: number[];
+  salary_net_median: number[];
+  pension_income_median: number[];
+  state_pension_income_median: number[];
+  investment_returns_median: number[];
+  total_income_median: number[];
+  
+  // Expenses
+  total_expenses_median: number[];
+  mortgage_payment_median: number[];
+  pension_contributions_median: number[];
+  
+  // Tax
+  income_tax_paid_median: number[];
+  ni_paid_median: number[];
+  total_tax_median: number[];
+  
+  // Assets
+  isa_balance_median: number[];
+  pension_balance_median: number[];
+  cash_balance_median: number[];
+  total_assets_median: number[];
+  
+  // Liabilities
+  mortgage_balance_median: number[];
+  total_liabilities_median: number[];
+  
+  // Other
+  mortgage_paid_off_median: number[];  // percentage of runs where mortgage is paid off
+  is_depleted_median: number[];  // percentage of runs where assets are depleted
 };
 
