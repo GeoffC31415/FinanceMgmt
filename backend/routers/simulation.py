@@ -93,17 +93,21 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         for person in scenario.people
     ]
 
-    salary_by_person: dict[str, SalaryIncome] = {}
+    salary_by_person: dict[str, list[SalaryIncome]] = {}
     for income in scenario.incomes:
         if income.kind != "salary":
             continue
         # If person_id missing, attach to first person (simple default).
         person_key = next((p.label for p in scenario.people if p.id == income.person_id), scenario.people[0].label)
-        salary_by_person[person_key] = SalaryIncome(
-            gross_annual=income.gross_annual,
-            annual_growth_rate=income.annual_growth_rate,
-            employee_pension_pct=income.employee_pension_pct,
-            employer_pension_pct=income.employer_pension_pct,
+        salary_by_person.setdefault(person_key, []).append(
+            SalaryIncome(
+                gross_annual=income.gross_annual,
+                annual_growth_rate=income.annual_growth_rate,
+                employee_pension_pct=income.employee_pension_pct,
+                employer_pension_pct=income.employer_pension_pct,
+                start_year=income.start_year,
+                end_year=income.end_year,
+            )
         )
 
     # Separate pensions (they get contributions from salary) from other assets

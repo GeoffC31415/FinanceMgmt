@@ -94,12 +94,12 @@ export function ScenarioConfigPage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded border border-slate-800 bg-slate-900/30">
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="rounded border border-slate-800 bg-slate-900/30 md:col-span-1">
           <div className="border-b border-slate-800 px-4 py-3">
             <div className="text-sm font-semibold">Saved scenarios</div>
           </div>
-          <div className="p-4">
+          <div className="p-4 max-h-[70vh] overflow-auto">
             {is_loading ? (
               <div className="text-sm text-slate-300">Loading...</div>
             ) : scenarios.length === 0 ? (
@@ -124,7 +124,7 @@ export function ScenarioConfigPage() {
           </div>
         </div>
 
-        <div className="rounded border border-slate-800 bg-slate-900/30">
+        <div className="rounded border border-slate-800 bg-slate-900/30 md:col-span-2">
           <div className="border-b border-slate-800 px-4 py-3">
             <div className="text-sm font-semibold">Selected scenario</div>
             <div className="text-xs text-slate-400">{selected_label}</div>
