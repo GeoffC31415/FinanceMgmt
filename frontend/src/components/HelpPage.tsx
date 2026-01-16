@@ -13,7 +13,9 @@ export function HelpPage() {
         <div className="text-sm font-semibold">High-level yearly sequence</div>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-200">
           <li>Salary income is applied for each person who is not retired (can be limited by income start/end year).</li>
-          <li>Salary tax/NI is calculated; net salary is what hits cash.</li>
+          <li>Rental income is applied (subject to Income Tax, no NI). Can continue into retirement.</li>
+          <li>Gift income is applied (tax-free). Can continue into retirement.</li>
+          <li>Tax is calculated: salary has Income Tax + NI; rental has Income Tax only; gifts are untaxed.</li>
           <li>Mortgage and expenses are stepped (expenses may inflate each year if inflation-linked).</li>
           <li>Cash pays outflows (expenses + mortgage + any extra retirement spend needed to reach the target).</li>
           <li>
@@ -24,6 +26,30 @@ export function HelpPage() {
           </li>
           <li>Growth is applied to assets and pensions at the end of the year.</li>
         </ol>
+      </div>
+
+      <div className="rounded border border-slate-800 bg-slate-900/30 p-4 space-y-3">
+        <div className="text-sm font-semibold">Income types</div>
+        <p className="text-sm text-slate-300">
+          The simulator supports three types of income, each with different tax treatment:
+        </p>
+        <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
+          <li>
+            <span className="font-semibold">Salary:</span> Employment income subject to Income Tax and National Insurance.
+            Automatically ends when the assigned person reaches their retirement age. Pension contributions (employee + employer)
+            are deducted before tax, reducing your tax bill while building retirement savings.
+          </li>
+          <li>
+            <span className="font-semibold">Rental:</span> Property rental income subject to Income Tax only (no National Insurance).
+            Can continue into retirement. Use start/end year fields to limit the income period (e.g., if you plan to sell the property).
+            Pension contributions do not apply to rental income.
+          </li>
+          <li>
+            <span className="font-semibold">Gift:</span> Tax-free income representing regular gifts from family, expected inheritance,
+            or other non-taxable income. No Income Tax or National Insurance applies. Can be one-off (set start and end year to the same value)
+            or recurring. Pension contributions do not apply.
+          </li>
+        </ul>
       </div>
 
       <div className="rounded border border-slate-800 bg-slate-900/30 p-4 space-y-3">

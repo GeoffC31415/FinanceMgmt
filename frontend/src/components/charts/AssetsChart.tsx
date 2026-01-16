@@ -18,6 +18,7 @@ type Props = {
   cash_balance_median: number[];
   total_assets_median: number[];
   retirement_years: number[];
+  percentile?: number;
 };
 
 export function AssetsChart({
@@ -26,7 +27,8 @@ export function AssetsChart({
   pension_balance_median,
   cash_balance_median,
   total_assets_median,
-  retirement_years
+  retirement_years,
+  percentile = 50
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
 
@@ -52,19 +54,17 @@ export function AssetsChart({
     };
   });
 
-  // Get last year's values for legend
-  const lastIdx = years.length - 1;
-  const formatCurrency = (value: number) => `£${Math.round(value).toLocaleString()}`;
-  const lastIsa = lastIdx >= 0 ? isa_balance_median[lastIdx] ?? 0 : 0;
-  const lastPension = lastIdx >= 0 ? pension_balance_median[lastIdx] ?? 0 : 0;
-  const lastCash = lastIdx >= 0 ? cash_balance_median[lastIdx] ?? 0 : 0;
-  const lastTotal = lastIdx >= 0 ? total_assets_median[lastIdx] ?? 0 : 0;
-  const lastGia = lastTotal - lastIsa - lastPension - lastCash;
-
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold">Asset Classes</div>
+        <div className="text-sm font-semibold">
+          Asset Classes
+          {percentile !== 50 && (
+            <span className="ml-2 text-xs font-normal text-amber-400">
+              (P{percentile})
+            </span>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
@@ -111,11 +111,11 @@ export function AssetsChart({
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
               formatter={(value) => {
-                if (value === "total_assets") return `Total assets (${formatCurrency(lastTotal)})`;
-                if (value === "cash_balance") return `Cash (${formatCurrency(lastCash)})`;
-                if (value === "isa_balance") return `ISA (${formatCurrency(lastIsa)})`;
-                if (value === "pension_balance") return `Pension (${formatCurrency(lastPension)})`;
-                if (value === "gia_balance") return `GIA (${formatCurrency(lastGia)})`;
+                if (value === "total_assets") return "Total assets";
+                if (value === "cash_balance") return "Cash";
+                if (value === "isa_balance") return "ISA";
+                if (value === "pension_balance") return "Pension";
+                if (value === "gia_balance") return "GIA";
                 return value;
               }}
               contentStyle={{ color: "#e2e8f0" }}

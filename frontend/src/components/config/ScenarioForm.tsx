@@ -535,11 +535,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
             {/* Helper text explaining income types */}
             <div className="mt-3 rounded border border-sky-800/50 bg-sky-950/30 p-3 text-sm text-sky-200/90">
-              <div className="font-medium text-sky-100">Income Configuration</div>
-              <p className="mt-1 text-xs leading-relaxed">
-                Currently only <strong>salary</strong> income is supported. The "Type" field must be set to "salary" 
-                for income to appear in the simulation. Salary income stops at the person's planned retirement age.
-              </p>
+              <div className="font-medium text-sky-100">Income Types</div>
+              <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
+                <li><strong>Salary:</strong> Employment income subject to Income Tax and National Insurance. Ends at retirement age. Pension contributions can be deducted.</li>
+                <li><strong>Rental:</strong> Property rental income subject to Income Tax only (no NI). Can continue into retirement. Pension contributions do not apply.</li>
+                <li><strong>Gift:</strong> Tax-free income (e.g., from family, inheritance). No taxes apply. Can be one-off or recurring.</li>
+              </ul>
             </div>
 
             <div className="mt-3 overflow-auto">
@@ -547,51 +548,67 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                 <div>Assigned_to</div>
                 <div className="flex items-center">
                   Type
-                  <InfoTip text="Must be 'salary' for income to be processed. Other income types coming soon." />
+                  <InfoTip text="Salary: taxed with NI, ends at retirement. Rental: income tax only, no retirement end. Gift: tax-free." />
                 </div>
                 <div>Gross_annual</div>
                 <div>Growth_rate</div>
-                <div>Employee_pension_%</div>
-                <div>Employer_pension_%</div>
+                <div className="flex items-center">
+                  Employee_pension_%
+                  <InfoTip text="Only applies to salary income. Leave at 0 for rental/gift." />
+                </div>
+                <div className="flex items-center">
+                  Employer_pension_%
+                  <InfoTip text="Only applies to salary income. Leave at 0 for rental/gift." />
+                </div>
                 <div></div>
               </div>
               <div className="min-w-[980px] space-y-2">
-                {incomes.fields.map((income, idx) => (
-                  <div key={income.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
-                    <select
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      {...form.register(`incomes.${idx}.person_id` as any)}
-                    >
-                      <option value="">Household</option>
-                      {scenario.people.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      {...form.register(`incomes.${idx}.kind` as any)}
-                    >
-                      <option value="salary">salary</option>
-                    </select>
-                    <NumberInput control={form.control} name={`incomes.${idx}.gross_annual`} min={0} />
-                    <PercentInput control={form.control} name={`incomes.${idx}.annual_growth_rate`} placeholder="%" />
-                    <PercentInput control={form.control} name={`incomes.${idx}.employee_pension_pct`} placeholder="%" />
-                    <PercentInput control={form.control} name={`incomes.${idx}.employer_pension_pct`} placeholder="%" />
-                    <div className="flex items-center justify-end">
-                      {incomes.fields.length > 1 && (
-                        <button
-                          type="button"
-                          className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
-                          onClick={() => incomes.remove(idx)}
-                        >
-                          Remove
-                        </button>
-                      )}
+                {incomes.fields.map((income, idx) => {
+                  const incomeKind = form.watch(`incomes.${idx}.kind`);
+                  const isSalary = incomeKind === "salary";
+                  return (
+                    <div key={income.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
+                      <select
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        {...form.register(`incomes.${idx}.person_id` as any)}
+                      >
+                        <option value="">Household</option>
+                        {scenario.people.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        {...form.register(`incomes.${idx}.kind` as any)}
+                      >
+                        <option value="salary">Salary</option>
+                        <option value="rental">Rental</option>
+                        <option value="gift">Gift</option>
+                      </select>
+                      <NumberInput control={form.control} name={`incomes.${idx}.gross_annual`} min={0} />
+                      <PercentInput control={form.control} name={`incomes.${idx}.annual_growth_rate`} placeholder="%" />
+                      <div className={isSalary ? "" : "opacity-40"}>
+                        <PercentInput control={form.control} name={`incomes.${idx}.employee_pension_pct`} placeholder="%" />
+                      </div>
+                      <div className={isSalary ? "" : "opacity-40"}>
+                        <PercentInput control={form.control} name={`incomes.${idx}.employer_pension_pct`} placeholder="%" />
+                      </div>
+                      <div className="flex items-center justify-end">
+                        {incomes.fields.length > 1 && (
+                          <button
+                            type="button"
+                            className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                            onClick={() => incomes.remove(idx)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <button

@@ -22,6 +22,7 @@ type Props = {
   pension_balance_median?: number[];
   cash_balance_median?: number[];
   total_assets_median?: number[];
+  percentile?: number;
 };
 
 export function NetWorthChart({
@@ -33,15 +34,9 @@ export function NetWorthChart({
   isa_balance_median = [],
   pension_balance_median = [],
   cash_balance_median = [],
-  total_assets_median = []
+  total_assets_median = [],
+  percentile = 50
 }: Props) {
-  // Get the last year's values for legend display
-  const lastIdx = years.length - 1;
-  const lastP10 = lastIdx >= 0 ? net_worth_p10[lastIdx] ?? 0 : 0;
-  const lastP90 = lastIdx >= 0 ? net_worth_p90[lastIdx] ?? 0 : 0;
-  const lastMedian = lastIdx >= 0 ? net_worth_median[lastIdx] ?? 0 : 0;
-
-  const formatCurrency = (value: number) => `£${Math.round(value).toLocaleString()}`;
   const [useLogScale, setUseLogScale] = useState(false);
 
   // Clamp values for log scale (must be > 0)
@@ -74,7 +69,14 @@ export function NetWorthChart({
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold">Net worth (median)</div>
+        <div className="text-sm font-semibold">
+          Net Worth
+          {percentile !== 50 && (
+            <span className="ml-2 text-xs font-normal text-amber-400">
+              (P{percentile})
+            </span>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
@@ -101,6 +103,7 @@ export function NetWorthChart({
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}
               formatter={(value, name) => {
+                const percentileLabel = percentile === 50 ? "Median" : `P${percentile}`;
                 const label =
                   name === "net_worth_p10"
                     ? "P10 net worth"
@@ -114,7 +117,7 @@ export function NetWorthChart({
                             ? "Pension"
                             : name === "gia_balance"
                               ? "GIA"
-                              : "Median net worth";
+                              : `${percentileLabel} net worth`;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -123,10 +126,11 @@ export function NetWorthChart({
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
               formatter={(value) => {
-                if (value === "net_worth_p10_p90") return "P10-P90 net worth range";
-                if (value === "net_worth_p10") return `P10 net worth (${formatCurrency(lastP10)})`;
-                if (value === "net_worth_median") return `Median net worth (${formatCurrency(lastMedian)})`;
-                if (value === "net_worth_p90") return `P90 net worth (${formatCurrency(lastP90)})`;
+                const percentileLabel = percentile === 50 ? "Median" : `P${percentile}`;
+                if (value === "net_worth_p10_p90") return "P10-P90 range";
+                if (value === "net_worth_p10") return "P10 net worth";
+                if (value === "net_worth_median") return `${percentileLabel} net worth`;
+                if (value === "net_worth_p90") return "P90 net worth";
                 if (value === "cash_balance") return "Cash";
                 if (value === "isa_balance") return "ISA";
                 if (value === "pension_balance") return "Pension";

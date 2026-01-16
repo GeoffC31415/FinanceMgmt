@@ -7,9 +7,11 @@ import numpy as np
 
 from backend.simulation.entities import (
     ExpenseItem,
+    GiftIncome,
     MortgageAccount,
     PensionPot,
     PersonEntity,
+    RentalIncome,
     SalaryIncome,
     StatePension,
 )
@@ -45,12 +47,25 @@ class SimulationScenario:
     mortgage: MortgageAccount | None
     expenses: list[ExpenseItem]
 
-    annual_spend_target: float
-    planned_retirement_age_by_person: dict[str, int]
+    # Additional income types (not tied to retirement)
+    rental_incomes: list[RentalIncome] = None  # type: ignore[assignment]
+    gift_incomes: list[GiftIncome] = None  # type: ignore[assignment]
+
+    annual_spend_target: float = 0.0
+    planned_retirement_age_by_person: dict[str, int] = None  # type: ignore[assignment]
 
     pension_withdrawal_priority: int = 100
 
     assumptions: SimulationAssumptions = SimulationAssumptions()
+
+    def __post_init__(self) -> None:
+        # Initialize mutable defaults properly for frozen dataclass
+        if self.rental_incomes is None:
+            object.__setattr__(self, "rental_incomes", [])
+        if self.gift_incomes is None:
+            object.__setattr__(self, "gift_incomes", [])
+        if self.planned_retirement_age_by_person is None:
+            object.__setattr__(self, "planned_retirement_age_by_person", {})
 
 
 @dataclass(frozen=True)
@@ -114,7 +129,9 @@ def _safe_yearly_snapshot(
         cash_flows.get(f"{asset.name}_investment_return", 0.0) for asset in assets
     ) + cash_flows.get("pension_investment_return", 0.0)
 
-    total_income = cash_flows.get("salary_net", 0.0) + pension_income + state_pension_income
+    rental_income_net = cash_flows.get("rental_income_net", 0.0)
+    gift_income = cash_flows.get("gift_income", 0.0)
+    total_income = cash_flows.get("salary_net", 0.0) + rental_income_net + gift_income + pension_income + state_pension_income
     mortgage_payment = cash_flows.get("mortgage_payment", 0.0)
     total_expenses = cash_flows.get("expenses", 0.0) + mortgage_payment + annual_spend
 
@@ -135,6 +152,8 @@ def _safe_yearly_snapshot(
         net_worth=net_worth,
         salary_gross=salary_gross,
         salary_net=salary_net,
+        rental_income=rental_income_net,
+        gift_income=gift_income,
         pension_income=pension_income,
         state_pension_income=state_pension_income,
         investment_returns=investment_returns,
@@ -176,6 +195,8 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
     people = [PersonEntity(**p.__dict__) for p in scenario.people]
     salary_by_person = {k: [SalaryIncome(**s.__dict__) for s in v] for k, v in scenario.salary_by_person.items()}
     pension_by_person = {k: PensionPot(**v.__dict__) for k, v in scenario.pension_by_person.items()}
+    rental_incomes = [RentalIncome(**r.__dict__) for r in (scenario.rental_incomes or [])]
+    gift_incomes = [GiftIncome(**g.__dict__) for g in (scenario.gift_incomes or [])]
 
     assets = [
         AssetAccount(
@@ -271,11 +292,30 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                 if pension is not None:
                     pension.contribute(amount=employee_contrib + employer_contrib)
 
+        # Process rental income (taxable as personal income, no NI)
+        rental_income_gross = 0.0
+        for rental in rental_incomes:
+            rental.step(context=context)
+            rental_income_gross += rental.get_cash_flows().get("rental_income_gross", 0.0)
+
+        # Process gift income (tax-free)
+        gift_income_total = 0.0
+        for gift in gift_incomes:
+            gift.step(context=context)
+            gift_income_total += gift.get_cash_flows().get("gift_income", 0.0)
+
+        # Calculate tax: salary has income tax + NI; rental income has income tax only
         tax_breakdown = tax.calculate_for_salary(
             gross_salary=salary_gross_total,
             employee_pension_contribution=employee_pension_total,
         )
+        # Calculate additional income tax on rental income (no NI)
+        rental_income_tax = tax.calculate_income_tax_on_additional_income(
+            base_taxable_income=salary_gross_total - employee_pension_total,
+            additional_income=rental_income_gross,
+        )
         salary_net = salary_gross_total - tax_breakdown.total_tax - employee_pension_total
+        rental_income_net = rental_income_gross - rental_income_tax
 
         # Step pensions - use each pension's configured growth rate
         for pension in pension_by_person.values():
@@ -322,7 +362,8 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         emergency_target = monthly_outflows * scenario.assumptions.emergency_fund_months
 
         # Start with cash inflows/outflows
-        primary_cash.balance += salary_net + state_pension_income
+        # Include: salary (net of tax/NI/pension), rental income (net of income tax), gifts (tax-free), state pension
+        primary_cash.balance += salary_net + rental_income_net + gift_income_total + state_pension_income
         primary_cash.balance -= total_outflows
 
         # If cash below emergency fund target, withdraw from assets to maintain the reserve
@@ -439,12 +480,15 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             asset_cf = asset.get_cash_flows()
             asset_cash_flows.update(asset_cf)
 
-        # Total income tax includes salary tax + pension income tax + CGT (simplified reporting)
-        total_income_tax = tax_breakdown.income_tax + pension_income_tax + cgt_paid
+        # Total income tax includes salary tax + rental income tax + pension income tax + CGT (simplified reporting)
+        total_income_tax = tax_breakdown.income_tax + rental_income_tax + pension_income_tax + cgt_paid
 
         cash_flows = {
             "salary_gross": salary_gross_total,
             "salary_net": salary_net,
+            "rental_income_gross": rental_income_gross,
+            "rental_income_net": rental_income_net,
+            "gift_income": gift_income_total,
             "expenses": expense_total,
             "mortgage_payment": mortgage_payment,
             "pension_contributions": employee_pension_total + employer_pension_total,
@@ -493,6 +537,8 @@ def run_with_cached_returns(
         "net_worth",
         "salary_gross",
         "salary_net",
+        "rental_income",
+        "gift_income",
         "pension_income",
         "state_pension_income",
         "investment_returns",
@@ -541,6 +587,8 @@ def _simulate_single_run_to_matrices(
     people = [PersonEntity(**p.__dict__) for p in scenario.people]
     salary_by_person = {k: [SalaryIncome(**s.__dict__) for s in v] for k, v in scenario.salary_by_person.items()}
     pension_by_person = {k: PensionPot(**v.__dict__) for k, v in scenario.pension_by_person.items()}
+    rental_incomes = [RentalIncome(**r.__dict__) for r in (scenario.rental_incomes or [])]
+    gift_incomes = [GiftIncome(**g.__dict__) for g in (scenario.gift_incomes or [])]
 
     assets = [
         AssetAccount(
@@ -637,11 +685,30 @@ def _simulate_single_run_to_matrices(
                 if pension is not None:
                     pension.contribute(amount=employee_contrib + employer_contrib)
 
+        # Process rental income (taxable as personal income, no NI)
+        rental_income_gross = 0.0
+        for rental in rental_incomes:
+            rental.step(context=context)
+            rental_income_gross += rental.get_cash_flows().get("rental_income_gross", 0.0)
+
+        # Process gift income (tax-free)
+        gift_income_total = 0.0
+        for gift in gift_incomes:
+            gift.step(context=context)
+            gift_income_total += gift.get_cash_flows().get("gift_income", 0.0)
+
+        # Calculate tax: salary has income tax + NI; rental income has income tax only
         tax_breakdown = tax.calculate_for_salary(
             gross_salary=salary_gross_total,
             employee_pension_contribution=employee_pension_total,
         )
+        # Calculate additional income tax on rental income (no NI)
+        rental_income_tax = tax.calculate_income_tax_on_additional_income(
+            base_taxable_income=salary_gross_total - employee_pension_total,
+            additional_income=rental_income_gross,
+        )
         salary_net = salary_gross_total - tax_breakdown.total_tax - employee_pension_total
+        rental_income_net = rental_income_gross - rental_income_tax
 
         # Apply cached pension returns (per pension key).
         if pension_returns is not None and pension_keys:
@@ -682,7 +749,8 @@ def _simulate_single_run_to_matrices(
         monthly_outflows = total_outflows / 12.0 if total_outflows > 0 else 0.0
         emergency_target = monthly_outflows * scenario.assumptions.emergency_fund_months
 
-        primary_cash.balance += salary_net + state_pension_income
+        # Include: salary (net of tax/NI/pension), rental income (net of income tax), gifts (tax-free), state pension
+        primary_cash.balance += salary_net + rental_income_net + gift_income_total + state_pension_income
         primary_cash.balance -= total_outflows
 
         # If cash below emergency fund target, withdraw from assets to maintain the reserve
@@ -800,9 +868,9 @@ def _simulate_single_run_to_matrices(
         pension_investment_return = sum(p.get_cash_flows().get("pension_investment_return", 0.0) for p in pension_by_person.values())
         investment_returns = sum(a.get_cash_flows().get(f"{a.name}_investment_return", 0.0) for a in assets) + pension_investment_return
 
-        total_income = salary_net + pension_income_net + state_pension_income
+        total_income = salary_net + rental_income_net + gift_income_total + pension_income_net + state_pension_income
 
-        income_tax_paid = tax_breakdown.income_tax + pension_income_tax + cgt_paid
+        income_tax_paid = tax_breakdown.income_tax + rental_income_tax + pension_income_tax + cgt_paid
         ni_paid = tax_breakdown.national_insurance
         total_tax = income_tax_paid + ni_paid
 
@@ -815,6 +883,8 @@ def _simulate_single_run_to_matrices(
         out["net_worth"][iteration_idx, year_idx] = net_worth
         out["salary_gross"][iteration_idx, year_idx] = salary_gross_total
         out["salary_net"][iteration_idx, year_idx] = salary_net
+        out["rental_income"][iteration_idx, year_idx] = rental_income_net
+        out["gift_income"][iteration_idx, year_idx] = gift_income_total
         out["pension_income"][iteration_idx, year_idx] = pension_income_net
         out["state_pension_income"][iteration_idx, year_idx] = state_pension_income
         out["investment_returns"][iteration_idx, year_idx] = investment_returns

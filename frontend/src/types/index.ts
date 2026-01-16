@@ -90,6 +90,8 @@ export type SimulationResponse = {
   // Incomes
   salary_gross_median: number[];
   salary_net_median: number[];
+  rental_income_median: number[];
+  gift_income_median: number[];
   pension_income_median: number[];
   state_pension_income_median: number[];
   investment_returns_median: number[];
@@ -128,4 +130,5 @@ export type SimulationRecalcRequest = {
   session_id: string;
   annual_spend_target?: number | null;
   retirement_age_offset?: number | null;
+  percentile?: number | null;
 };

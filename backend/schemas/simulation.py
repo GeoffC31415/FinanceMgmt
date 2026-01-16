@@ -35,6 +35,8 @@ class SimulationResponse(BaseModel):
     # Incomes
     salary_gross_median: list[float]
     salary_net_median: list[float]
+    rental_income_median: list[float]
+    gift_income_median: list[float]
     pension_income_median: list[float]
     state_pension_income_median: list[float]
     investment_returns_median: list[float]
@@ -83,3 +85,4 @@ class SimulationRecalcRequest(BaseModel):
     session_id: str
     annual_spend_target: float | None = Field(default=None, ge=0.0)
     retirement_age_offset: int | None = Field(default=0, ge=-30, le=30)
+    percentile: int | None = Field(default=50, ge=1, le=99)

@@ -20,6 +20,8 @@ class YearlySnapshot:
 
     salary_gross: float
     salary_net: float
+    rental_income: float
+    gift_income: float
     pension_income: float
     state_pension_income: float
     investment_returns: float

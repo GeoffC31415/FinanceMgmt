@@ -19,6 +19,7 @@ type Props = {
   total_tax_median: number[];
   spend_median: number[];
   retirement_years: number[];
+  percentile?: number;
 };
 
 export function ExpensesChart({
@@ -28,7 +29,8 @@ export function ExpensesChart({
   pension_contributions_median,
   total_tax_median,
   spend_median,
-  retirement_years
+  retirement_years,
+  percentile = 50
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
 
@@ -41,8 +43,7 @@ export function ExpensesChart({
     const mortgage_payment = mortgage_payment_median[idx] ?? 0;
     const pension_contributions = pension_contributions_median[idx] ?? 0;
     const total_tax = total_tax_median[idx] ?? 0;
-    const spend = spend_median[idx] ?? 0;
-    const other_expenses = Math.max(0, total_expenses - mortgage_payment - pension_contributions - total_tax - spend);
+    const other_expenses = Math.max(0, total_expenses - mortgage_payment - pension_contributions - total_tax);
     
     return {
       year,
@@ -50,7 +51,6 @@ export function ExpensesChart({
       mortgage_payment: clampForLog(mortgage_payment),
       pension_contributions: clampForLog(pension_contributions),
       total_tax: clampForLog(total_tax),
-      spend: clampForLog(spend),
       other_expenses: clampForLog(other_expenses)
     };
   });
@@ -58,7 +58,14 @@ export function ExpensesChart({
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold">Expenses Breakdown</div>
+        <div className="text-sm font-semibold">
+          Expenses Breakdown
+          {percentile !== 50 && (
+            <span className="ml-2 text-xs font-normal text-amber-400">
+              (P{percentile})
+            </span>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
@@ -94,11 +101,9 @@ export function ExpensesChart({
                         ? "Pension contributions"
                         : name === "total_tax"
                           ? "Total tax"
-                          : name === "spend"
-                            ? "Annual spending"
-                            : name === "other_expenses"
-                              ? "Other expenses"
-                              : name;
+                          : name === "other_expenses"
+                            ? "Other expenses"
+                            : name;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -107,6 +112,14 @@ export function ExpensesChart({
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
               contentStyle={{ color: "#e2e8f0" }}
+              formatter={(value) => {
+                if (value === "total_expenses") return "Total expenses";
+                if (value === "mortgage_payment") return "Mortgage payment";
+                if (value === "pension_contributions") return "Pension contributions";
+                if (value === "total_tax") return "Total tax";
+                if (value === "other_expenses") return "Other expenses";
+                return value;
+              }}
             />
             {retirement_years.map((year) => (
               <ReferenceLine
@@ -152,15 +165,6 @@ export function ExpensesChart({
               dot={false}
               yAxisId="left"
               name="total_tax"
-            />
-            <Line
-              type="monotone"
-              dataKey="spend"
-              stroke="#f472b6"
-              strokeWidth={1.5}
-              dot={false}
-              yAxisId="left"
-              name="spend"
             />
             <Line
               type="monotone"
