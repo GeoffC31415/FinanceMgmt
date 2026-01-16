@@ -339,6 +339,26 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
   const expenses = useFieldArray({ control: form.control, name: "expenses" });
   const assets = useFieldArray({ control: form.control, name: "assets" });
 
+  // Watch values for computing totals
+  const watched_incomes = useWatch({ control: form.control, name: "incomes" });
+  const watched_assets = useWatch({ control: form.control, name: "assets" });
+  const watched_expenses = useWatch({ control: form.control, name: "expenses" });
+
+  const income_total = useMemo(() => {
+    if (!watched_incomes) return 0;
+    return watched_incomes.reduce((sum, inc) => sum + (Number(inc?.gross_annual) || 0), 0);
+  }, [watched_incomes]);
+
+  const assets_total = useMemo(() => {
+    if (!watched_assets) return 0;
+    return watched_assets.reduce((sum, asset) => sum + (Number(asset?.balance) || 0), 0);
+  }, [watched_assets]);
+
+  const expenses_total = useMemo(() => {
+    if (!watched_expenses) return 0;
+    return watched_expenses.reduce((sum, exp) => sum + (Number(exp?.monthly_amount) || 0) * 12, 0);
+  }, [watched_expenses]);
+
   useEffect(() => {
     form.reset(default_values);
   }, [default_values, form]);
@@ -350,9 +370,9 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
           ["assumptions", "Assumptions"],
           ["people", "People"],
           ["income", "Income"],
+          ["expenses", "Expenses"],
           ["assets", "Assets"],
-          ["housing", "Housing"],
-          ["expenses", "Expenses"]
+          ["housing", "Housing"]
         ].map(([key, label]) => (
           <button
             key={key}
@@ -545,7 +565,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "income" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-            <div className="text-sm font-semibold">Income</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Income</div>
+              <div className="text-sm text-slate-300">
+                Annual total: <span className="font-semibold text-emerald-400">£{income_total.toLocaleString()}</span>
+              </div>
+            </div>
 
             {/* Helper text explaining income types */}
             <div className="mt-3 rounded border border-sky-800/50 bg-sky-950/30 p-3 text-sm text-sky-200/90">
@@ -646,7 +671,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "assets" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-            <div className="text-sm font-semibold">Assets</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Assets</div>
+              <div className="text-sm text-slate-300">
+                Total balance: <span className="font-semibold text-sky-400">£{assets_total.toLocaleString()}</span>
+              </div>
+            </div>
 
             {/* Helper text explaining withdrawal priority */}
             <div className="mt-3 rounded border border-amber-800/50 bg-amber-950/30 p-3 text-sm text-amber-200/90">
@@ -809,7 +839,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "expenses" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-            <div className="text-sm font-semibold">Expenses</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Expenses</div>
+              <div className="text-sm text-slate-300">
+                Annual total: <span className="font-semibold text-rose-400">£{expenses_total.toLocaleString()}</span>
+              </div>
+            </div>
             <div className="mt-3 overflow-auto">
               <div className="hidden min-w-[980px] grid-cols-5 gap-3 text-xs text-slate-400 md:grid">
                 <div>Name</div>
