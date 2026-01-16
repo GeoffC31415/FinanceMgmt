@@ -86,9 +86,12 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
             Asset(
                 scenario_id=scenario.id,
                 person_id=asset.person_id or label_to_person_id.get(asset.person_label or ""),
-                kind=asset.kind,
+                name=asset.name,
                 balance=asset.balance,
                 annual_contribution=asset.annual_contribution,
+                growth_rate_mean=asset.growth_rate_mean,
+                growth_rate_std=asset.growth_rate_std,
+                contributions_end_at_retirement=asset.contributions_end_at_retirement,
             )
             for asset in payload.assets
         ]
@@ -197,9 +200,12 @@ async def update_scenario(
             Asset(
                 scenario_id=scenario.id,
                 person_id=asset.person_id or label_to_person_id.get(asset.person_label or ""),
-                kind=asset.kind,
+                name=asset.name,
                 balance=asset.balance,
                 annual_contribution=asset.annual_contribution,
+                growth_rate_mean=asset.growth_rate_mean,
+                growth_rate_std=asset.growth_rate_std,
+                contributions_end_at_retirement=asset.contributions_end_at_retirement,
             )
             for asset in payload.assets
         ]

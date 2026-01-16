@@ -14,13 +14,90 @@ export function Dashboard() {
 
   function export_csv() {
     if (!result) return;
-    const headers = ["year", "net_worth_p10", "net_worth_median", "net_worth_p90"];
+    
+    // Helper to safely get value or 0
+    const getValue = (arr: number[] | undefined, idx: number): number => arr?.[idx] ?? 0;
+    
+    // Grouped headers for better organization
+    const headers = [
+      // Basic info
+      "year",
+      "net_worth_p10",
+      "net_worth_median",
+      "net_worth_p90",
+      
+      // Incomes
+      "salary_gross_median",
+      "salary_net_median",
+      "pension_income_median",
+      "state_pension_income_median",
+      "investment_returns_median",
+      "total_income_median",
+      
+      // Expenses
+      "total_expenses_median",
+      "mortgage_payment_median",
+      "pension_contributions_median",
+      
+      // Tax
+      "income_tax_paid_median",
+      "ni_paid_median",
+      "total_tax_median",
+      
+      // Assets
+      "isa_balance_median",
+      "pension_balance_median",
+      "cash_balance_median",
+      "total_assets_median",
+      
+      // Liabilities
+      "mortgage_balance_median",
+      "total_liabilities_median",
+      
+      // Other
+      "mortgage_paid_off_median_pct",
+      "is_depleted_median_pct",
+    ];
+    
     const rows = result.years.map((year, idx) => [
       year,
-      result.net_worth_p10[idx] ?? 0,
-      result.net_worth_median[idx] ?? 0,
-      result.net_worth_p90[idx] ?? 0
+      getValue(result.net_worth_p10, idx),
+      getValue(result.net_worth_median, idx),
+      getValue(result.net_worth_p90, idx),
+      
+      // Incomes
+      getValue(result.salary_gross_median, idx),
+      getValue(result.salary_net_median, idx),
+      getValue(result.pension_income_median, idx),
+      getValue(result.state_pension_income_median, idx),
+      getValue(result.investment_returns_median, idx),
+      getValue(result.total_income_median, idx),
+      
+      // Expenses
+      getValue(result.total_expenses_median, idx),
+      getValue(result.mortgage_payment_median, idx),
+      getValue(result.pension_contributions_median, idx),
+      
+      // Tax
+      getValue(result.income_tax_paid_median, idx),
+      getValue(result.ni_paid_median, idx),
+      getValue(result.total_tax_median, idx),
+      
+      // Assets
+      getValue(result.isa_balance_median, idx),
+      getValue(result.pension_balance_median, idx),
+      getValue(result.cash_balance_median, idx),
+      getValue(result.total_assets_median, idx),
+      
+      // Liabilities
+      getValue(result.mortgage_balance_median, idx),
+      getValue(result.total_liabilities_median, idx),
+      
+      // Other
+      getValue(result.mortgage_paid_off_median, idx),
+      getValue(result.is_depleted_median, idx),
     ]);
+    
     const lines = [headers.join(","), ...rows.map((row) => row.join(","))];
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);

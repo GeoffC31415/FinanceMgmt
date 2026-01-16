@@ -26,4 +26,37 @@ class SimulationResponse(BaseModel):
     income_median: list[float]
     spend_median: list[float]
     retirement_years: list[int]
+    
+    # Detailed fields for export
+    # Incomes
+    salary_gross_median: list[float]
+    salary_net_median: list[float]
+    pension_income_median: list[float]
+    state_pension_income_median: list[float]
+    investment_returns_median: list[float]
+    total_income_median: list[float]
+    
+    # Expenses
+    total_expenses_median: list[float]
+    mortgage_payment_median: list[float]
+    pension_contributions_median: list[float]
+    
+    # Tax
+    income_tax_paid_median: list[float]
+    ni_paid_median: list[float]
+    total_tax_median: list[float]
+    
+    # Assets
+    isa_balance_median: list[float]
+    pension_balance_median: list[float]
+    cash_balance_median: list[float]
+    total_assets_median: list[float]
+    
+    # Liabilities
+    mortgage_balance_median: list[float]
+    total_liabilities_median: list[float]
+    
+    # Other
+    mortgage_paid_off_median: list[float]  # percentage of runs where mortgage is paid off
+    is_depleted_median: list[float]  # percentage of runs where assets are depleted
 
