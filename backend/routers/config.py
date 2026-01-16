@@ -143,12 +143,7 @@ async def update_scenario(
     scenario.name = payload.name
     scenario.assumptions = payload.assumptions
 
-    # Replace nested collections for simplicity and determinism.
-    scenario.people.clear()
-    scenario.incomes.clear()
-    scenario.assets.clear()
-    scenario.expenses.clear()
-
+    # Keep person IDs stable across edits, otherwise income/asset assignment breaks.
     existing_people_by_id = {person.id: person for person in scenario.people}
     keep_ids: set[str] = set()
     created_people: list[Person] = []
@@ -179,6 +174,11 @@ async def update_scenario(
             scenario.people.remove(person)
 
     label_to_person_id = {person.label: person.id for person in scenario.people}
+
+    # Replace remaining nested collections deterministically.
+    scenario.incomes.clear()
+    scenario.assets.clear()
+    scenario.expenses.clear()
 
     scenario.incomes.extend(
         [

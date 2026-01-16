@@ -14,9 +14,10 @@ class ExpenseItem:
     _annual_spend: float = 0.0
 
     def step(self, *, context: SimContext) -> None:
+        # Spend this year at the current amount, then apply inflation for next year.
+        self._annual_spend = self.annual_amount
         if self.is_inflation_linked:
             self.annual_amount *= 1.0 + context.inflation_rate
-        self._annual_spend = self.annual_amount
 
     def get_balance_sheet(self) -> dict[str, float]:
         return {}

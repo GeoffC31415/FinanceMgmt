@@ -38,7 +38,7 @@ class SimulationScenario:
     start_year: int
     end_year: int
     people: list[PersonEntity]
-    salary_by_person: dict[str, SalaryIncome]
+    salary_by_person: dict[str, list[SalaryIncome]]
     pension_by_person: dict[str, PensionPot]
 
     assets: list[AssetAccount]
@@ -161,7 +161,7 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
 
     # Clone entity state per run (keep it simple: copy scalars)
     people = [PersonEntity(**p.__dict__) for p in scenario.people]
-    salary_by_person = {k: SalaryIncome(**v.__dict__) for k, v in scenario.salary_by_person.items()}
+    salary_by_person = {k: [SalaryIncome(**s.__dict__) for s in v] for k, v in scenario.salary_by_person.items()}
     pension_by_person = {k: PensionPot(**v.__dict__) for k, v in scenario.pension_by_person.items()}
 
     assets = [
@@ -224,23 +224,26 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
 
         for person in people:
             is_retired = person.is_retired_in_year(year=year)
-            salary = salary_by_person.get(person.key)
-            if salary is None:
-                continue
             if is_retired:
                 continue
 
-            salary.step(context=context)
-            salary_gross_total += salary.get_cash_flows().get("salary_gross", 0.0)
-
-            employee_contrib = salary.gross_annual * salary.employee_pension_pct
-            employer_contrib = salary.gross_annual * salary.employer_pension_pct
-            employee_pension_total += employee_contrib
-            employer_pension_total += employer_contrib
+            salaries = salary_by_person.get(person.key, [])
+            if not salaries:
+                continue
 
             pension = pension_by_person.get(person.key)
-            if pension is not None:
-                pension.contribute(amount=employee_contrib + employer_contrib)
+
+            for salary in salaries:
+                salary.step(context=context)
+                salary_gross_total += salary.get_cash_flows().get("salary_gross", 0.0)
+
+                employee_contrib = salary.gross_annual * salary.employee_pension_pct
+                employer_contrib = salary.gross_annual * salary.employer_pension_pct
+                employee_pension_total += employee_contrib
+                employer_pension_total += employer_contrib
+
+                if pension is not None:
+                    pension.contribute(amount=employee_contrib + employer_contrib)
 
         tax_breakdown = tax.calculate_for_salary(
             gross_salary=salary_gross_total,
@@ -267,13 +270,18 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             if person.is_state_pension_eligible_in_year(year=year):
                 state_pension_income += scenario.assumptions.state_pension_annual
 
-        # Retirement spending target (simplified: once all retired)
-        annual_spend = scenario.annual_spend_target if is_all_retired else 0.0
-
         # Calculate expenses before pension drawdown
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
-        total_outflows = expense_total + mortgage_payment + annual_spend
+
+        # Retirement spending target:
+        # Interpret `annual_spend_target` as a TOTAL non-mortgage spend target (not an extra).
+        # If explicit expenses already exceed the target, we don't add anything.
+        extra_retirement_spend = 0.0
+        if is_all_retired:
+            extra_retirement_spend = max(0.0, scenario.annual_spend_target - expense_total)
+
+        total_outflows = expense_total + mortgage_payment + extra_retirement_spend
 
         # Cashflow allocator
         pension_income_net = 0.0
@@ -422,7 +430,7 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             mortgage=mortgage,
             cash_flows=cash_flows,
             tax_breakdown=tax_out,
-            annual_spend=annual_spend,
+            annual_spend=extra_retirement_spend,
         )
         snapshots.append(snapshot)
 

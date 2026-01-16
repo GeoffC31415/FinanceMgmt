@@ -204,6 +204,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
   });
 
   const people = useFieldArray({ control: form.control, name: "people" });
+  const incomes = useFieldArray({ control: form.control, name: "incomes" });
   const expenses = useFieldArray({ control: form.control, name: "expenses" });
   const assets = useFieldArray({ control: form.control, name: "assets" });
 
@@ -348,37 +349,79 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         {tab === "income_assets" && (
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <div className="text-sm font-semibold">Income (first entry)</div>
-              <div className="mt-3 grid gap-3">
-        <div>
-          <label className="block text-sm font-medium">Assigned to</label>
-          <select
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            {...form.register("incomes.0.person_id")}
-          >
-            <option value="">Household</option>
-            {scenario.people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {[
-          ["incomes.0.gross_annual", "Gross annual"],
-          ["incomes.0.annual_growth_rate", "Annual growth rate"],
-          ["incomes.0.employee_pension_pct", "Employee pension % (0..1)"],
-          ["incomes.0.employer_pension_pct", "Employer pension % (0..1)"]
-        ].map(([path, label]) => (
-          <div key={path}>
-            <label className="block text-sm font-medium">{label}</label>
-            <input
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              {...form.register(path as any)}
-            />
-          </div>
-        ))}
-              </div>
+              <div className="text-sm font-semibold">Income</div>
+              {incomes.fields.map((income, idx) => (
+                <div key={income.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Income {idx + 1}</div>
+                    {incomes.fields.length > 1 && (
+                      <button
+                        type="button"
+                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                        onClick={() => incomes.remove(idx)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="block text-sm font-medium">Assigned to</label>
+                      <select
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        {...form.register(`incomes.${idx}.person_id` as any)}
+                      >
+                        <option value="">Household</option>
+                        {scenario.people.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium">Kind</label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        placeholder="salary"
+                        {...form.register(`incomes.${idx}.kind` as any)}
+                      />
+                    </div>
+                    {[
+                      [`incomes.${idx}.gross_annual`, "Gross annual"],
+                      [`incomes.${idx}.annual_growth_rate`, "Annual growth rate"],
+                      [`incomes.${idx}.employee_pension_pct`, "Employee pension % (0..1)"],
+                      [`incomes.${idx}.employer_pension_pct`, "Employer pension % (0..1)"]
+                    ].map(([path, label]) => (
+                      <div key={path}>
+                        <label className="block text-sm font-medium">{label}</label>
+                        <input
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                          type="number"
+                          step="0.01"
+                          {...form.register(path as any)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                onClick={() =>
+                  incomes.append({
+                    person_id: "",
+                    kind: "salary",
+                    gross_annual: 0,
+                    annual_growth_rate: 0.0,
+                    employee_pension_pct: 0.0,
+                    employer_pension_pct: 0.0
+                  } as any)
+                }
+              >
+                Add income
+              </button>
             </div>
 
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
