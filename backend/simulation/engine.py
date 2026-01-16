@@ -233,6 +233,9 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
     withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
     withdrawal_order.sort(key=lambda x: (-x[0], x[1]))
 
+    # Track state pension amount (grows with inflation each year)
+    current_state_pension_annual = scenario.assumptions.state_pension_annual
+
     for year in range(scenario.start_year, scenario.end_year + 1):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -286,11 +289,14 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         for expense in expenses:
             expense.step(context=context)
 
-        # State pension income (simplified)
+        # State pension income (grows with inflation)
         state_pension_income = 0.0
         for person in people:
             if person.is_state_pension_eligible_in_year(year=year):
-                state_pension_income += scenario.assumptions.state_pension_annual
+                state_pension_income += current_state_pension_annual
+        
+        # Apply inflation for next year
+        current_state_pension_annual *= 1.0 + scenario.assumptions.inflation_rate
 
         # Calculate expenses before pension drawdown
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
@@ -594,6 +600,9 @@ def _simulate_single_run_to_matrices(
     withdrawal_order.append((scenario.pension_withdrawal_priority, "pension", None))
     withdrawal_order.sort(key=lambda x: (-x[0], x[1]))
 
+    # Track state pension amount (grows with inflation each year)
+    current_state_pension_annual = scenario.assumptions.state_pension_annual
+
     for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -650,7 +659,10 @@ def _simulate_single_run_to_matrices(
         state_pension_income = 0.0
         for person in people:
             if person.is_state_pension_eligible_in_year(year=year):
-                state_pension_income += scenario.assumptions.state_pension_annual
+                state_pension_income += current_state_pension_annual
+        
+        # Apply inflation for next year
+        current_state_pension_annual *= 1.0 + scenario.assumptions.inflation_rate
 
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
