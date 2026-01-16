@@ -71,6 +71,7 @@ function default_draft(): ScenarioCreate {
       equity_return_std: 0.1,
       isa_annual_limit: 20000,
       state_pension_annual: 11500,
+      pension_access_age: 55,
       start_year: year,
       end_year: year + 60,
       annual_spend_target: 30000
@@ -895,6 +896,24 @@ export function ConfigWizard() {
                     }
                   />
                   <Hint>Full new state pension (2024): ~£11,500. Check gov.uk for your forecast.</Hint>
+                </div>
+                
+                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
+                  <Label tooltip="Minimum age to access private pension funds. UK is 55 now, rising to 57 in 2028.">Pension Access Age</Label>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    type="number"
+                    value={(draft.assumptions as any).pension_access_age ?? 55}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        assumptions: { ...(d.assumptions as any), pension_access_age: Number(e.target.value) }
+                      }))
+                    }
+                    min={50}
+                    max={75}
+                  />
+                  <Hint>The simulation won't allow pension withdrawals until each person reaches this age.</Hint>
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">

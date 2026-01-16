@@ -97,10 +97,10 @@ export function HelpPage() {
           </li>
           <li>
             <span className="font-semibold">Pension drawdown (if still short):</span> pension is drawn down to cover any
-            remaining gap, but <span className="font-semibold">only once the person is aged 55+</span> (UK minimum pension
-            access age). Withdrawals use the <span className="font-mono">25% tax-free</span> and{" "}
-            <span className="font-mono">75% taxable</span> split, with income tax calculated using personal allowance and
-            basic/higher rates.
+            remaining gap, but <span className="font-semibold">only once the person reaches the pension access age</span>{" "}
+            (configurable in Assumptions, default 55 — UK minimum, rising to 57 in 2028). Withdrawals use the{" "}
+            <span className="font-mono">25% tax-free</span> and <span className="font-mono">75% taxable</span> split,{" "}
+            with income tax calculated using personal allowance and basic/higher rates.
           </li>
         </ul>
       </div>

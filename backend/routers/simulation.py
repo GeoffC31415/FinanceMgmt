@@ -78,6 +78,7 @@ def _build_simulation_scenario(
         cgt_annual_allowance=_coerce_float(assumptions_json.get("cgt_annual_allowance"), 3_000.0),
         cgt_rate=_coerce_float(assumptions_json.get("cgt_rate"), 0.10),
         emergency_fund_months=_coerce_float(assumptions_json.get("emergency_fund_months"), 6.0),
+        pension_access_age=_coerce_int(assumptions_json.get("pension_access_age"), 55),
     )
 
     start_year = _coerce_int(assumptions_json.get("start_year"), date.today().year)

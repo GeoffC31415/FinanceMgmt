@@ -140,6 +140,7 @@ const schema = z.object({
     equity_return_std: z.coerce.number().min(0).max(2),
     isa_annual_limit: z.coerce.number().min(0),
     state_pension_annual: z.coerce.number().min(0),
+    pension_access_age: z.coerce.number().int().min(50).max(75),
     start_year: z.coerce.number().int().min(1900).max(2200),
     end_year: z.coerce.number().int().min(1900).max(2200),
     annual_spend_target: z.coerce.number().min(0)
@@ -205,6 +206,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
   const equity_return_std = (assumptions.equity_return_std ?? 0.1) as number;
   const isa_annual_limit = (assumptions.isa_annual_limit ?? 20000) as number;
   const state_pension_annual = (assumptions.state_pension_annual ?? 11500) as number;
+  const pension_access_age = (assumptions.pension_access_age ?? 55) as number;
   const start_year = (assumptions.start_year ?? new Date().getFullYear()) as number;
   const end_year = (assumptions.end_year ?? new Date().getFullYear() + 60) as number;
   const annual_spend_target = (assumptions.annual_spend_target ?? 30000) as number;
@@ -217,6 +219,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       equity_return_std,
       isa_annual_limit,
       state_pension_annual,
+      pension_access_age,
       start_year,
       end_year,
       annual_spend_target
@@ -428,6 +431,16 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               </div>
               {form.formState.errors.assumptions?.state_pension_annual && (
                 <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.state_pension_annual.message || "Must be 0 or higher"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Pension access age</label>
+              <div className="mt-1">
+                <NumberInput control={form.control} name="assumptions.pension_access_age" placeholder="e.g. 55" />
+              </div>
+              <div className="mt-1 text-xs text-slate-400">Minimum age to withdraw from private pensions. UK is currently 55 (rising to 57 in 2028).</div>
+              {form.formState.errors.assumptions?.pension_access_age && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.pension_access_age.message || "Must be between 50 and 75"}</div>
               )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">

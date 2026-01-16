@@ -33,6 +33,7 @@ class SimulationAssumptions:
     cgt_annual_allowance: float = 3_000.0
     cgt_rate: float = 0.10
     emergency_fund_months: float = 6.0
+    pension_access_age: int = 55  # UK minimum private pension access age
 
 
 @dataclass(frozen=True)
@@ -405,12 +406,12 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                     remaining_shortfall -= res.net_withdrawal
                 else:
                     # Pension withdrawal (synthetic source)
-                    # Only include pensions from people aged 55+ (UK minimum pension access age)
+                    # Only include pensions from people who have reached pension access age
                     eligible_pensions = {
                         person_key: pension
                         for person_key, pension in pension_by_person.items()
                         if any(
-                            p.key == person_key and p.can_access_pension_in_year(year=year)
+                            p.key == person_key and p.can_access_pension_in_year(year=year, min_access_age=scenario.assumptions.pension_access_age)
                             for p in people
                         )
                     }
@@ -792,12 +793,12 @@ def _simulate_single_run_to_matrices(
                     remaining_shortfall -= res.net_withdrawal
                 else:
                     # Pension withdrawal (synthetic source)
-                    # Only include pensions from people aged 55+ (UK minimum pension access age)
+                    # Only include pensions from people who have reached pension access age
                     eligible_pensions = {
                         person_key: pension
                         for person_key, pension in pension_by_person.items()
                         if any(
-                            p.key == person_key and p.can_access_pension_in_year(year=year)
+                            p.key == person_key and p.can_access_pension_in_year(year=year, min_access_age=scenario.assumptions.pension_access_age)
                             for p in people
                         )
                     }

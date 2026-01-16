@@ -130,6 +130,7 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     equity_return_std: 0.1,
     isa_annual_limit: 20000,
     state_pension_annual: 11500,
+    pension_access_age: 55,
     start_year: new Date().getFullYear(),
     end_year: new Date().getFullYear() + 60,
     annual_spend_target: 30000
