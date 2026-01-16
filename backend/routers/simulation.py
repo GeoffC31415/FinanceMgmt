@@ -162,7 +162,6 @@ def _build_simulation_scenario(
             balance=scenario.mortgage.balance,
             annual_interest_rate=scenario.mortgage.annual_interest_rate,
             monthly_payment=scenario.mortgage.monthly_payment,
-            months_remaining=scenario.mortgage.months_remaining,
         )
 
     expenses = [

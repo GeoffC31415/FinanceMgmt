@@ -217,7 +217,6 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             balance=scenario.mortgage.balance,
             annual_interest_rate=scenario.mortgage.annual_interest_rate,
             monthly_payment=scenario.mortgage.monthly_payment,
-            months_remaining=scenario.mortgage.months_remaining,
         )
     expenses = [ExpenseItem(**e.__dict__) for e in scenario.expenses]
 
@@ -579,7 +578,6 @@ def _simulate_single_run_to_matrices(
             balance=scenario.mortgage.balance,
             annual_interest_rate=scenario.mortgage.annual_interest_rate,
             monthly_payment=scenario.mortgage.monthly_payment,
-            months_remaining=scenario.mortgage.months_remaining,
         )
     expenses = [ExpenseItem(**e.__dict__) for e in scenario.expenses]
 

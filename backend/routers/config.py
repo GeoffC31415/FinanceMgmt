@@ -106,7 +106,6 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
                 balance=payload.mortgage.balance,
                 annual_interest_rate=payload.mortgage.annual_interest_rate,
                 monthly_payment=payload.mortgage.monthly_payment,
-                months_remaining=payload.mortgage.months_remaining,
             )
         )
 
@@ -225,13 +224,11 @@ async def update_scenario(
                 balance=payload.mortgage.balance,
                 annual_interest_rate=payload.mortgage.annual_interest_rate,
                 monthly_payment=payload.mortgage.monthly_payment,
-                months_remaining=payload.mortgage.months_remaining,
             )
         else:
             scenario.mortgage.balance = payload.mortgage.balance
             scenario.mortgage.annual_interest_rate = payload.mortgage.annual_interest_rate
             scenario.mortgage.monthly_payment = payload.mortgage.monthly_payment
-            scenario.mortgage.months_remaining = payload.mortgage.months_remaining
 
     scenario.expenses.extend(
         [

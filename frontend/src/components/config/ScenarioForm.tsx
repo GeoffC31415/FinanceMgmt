@@ -183,7 +183,6 @@ const schema = z.object({
       balance: z.coerce.number().min(0),
       annual_interest_rate: z.coerce.number().min(0).max(1),
       monthly_payment: z.coerce.number().min(0),
-      months_remaining: z.coerce.number().int().min(0).max(2000)
     })
     .nullable()
     .optional(),
@@ -760,7 +759,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         {tab === "housing" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
             <div className="text-sm font-semibold">Mortgage</div>
-            <div className="mt-3 grid gap-3 md:grid-cols-4">
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
               <div>
                 <label className="block text-sm font-medium">Balance</label>
                 <NumberInput control={form.control} name="mortgage.balance" min={0} />
@@ -772,10 +771,6 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               <div>
                 <label className="block text-sm font-medium">Monthly payment</label>
                 <NumberInput control={form.control} name="mortgage.monthly_payment" min={0} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Months remaining</label>
-                <NumberInput control={form.control} name="mortgage.months_remaining" min={0} />
               </div>
             </div>
           </div>

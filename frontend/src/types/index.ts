@@ -33,7 +33,6 @@ export type MortgageCreate = {
   balance: number;
   annual_interest_rate: number;
   monthly_payment: number;
-  months_remaining: number;
 };
 
 export type ExpenseCreate = {
