@@ -82,7 +82,8 @@ export function Dashboard() {
     return show_real_values ? applyInflationAdjustment(result) : result;
   }, [result, show_real_values]);
 
-  // Initialize cached simulation session when scenario changes.
+  // Initialize cached simulation session when scenario or end_year changes.
+  // end_year changes require full re-init since the x-axis (timeline) changes.
   useEffect(() => {
     if (!selected) return;
     init({
@@ -94,15 +95,14 @@ export function Dashboard() {
     }).catch(() => {
       // error is handled in hook state
     });
-    // Intentionally not re-initializing on spend/end_year changes; use the button for that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id]);
+  }, [selected?.id, end_year]);
 
   // Debounced recalc for spend + retirement age offset + percentile.
   // Fast engine enables low debounce for near-instant feedback.
   useEffect(() => {
     if (!selected || !session_id) return;
-    const t = window.setTimeout(() => {
+    const t = window.setTimeout(() => { 
       recalc({
         annual_spend_target,
         retirement_age_offset,
