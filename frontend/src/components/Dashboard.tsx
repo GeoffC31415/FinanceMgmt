@@ -75,6 +75,20 @@ export function Dashboard() {
   const [percentile, setPercentile] = useState<number>(50);
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
+
+  // Sync end_year and annual_spend_target from scenario assumptions when scenario changes
+  useEffect(() => {
+    if (!selected) return;
+    const assumptions = selected.assumptions as Record<string, unknown> | undefined;
+    if (!assumptions) return;
+    
+    const scenario_end_year = assumptions.end_year as number | undefined;
+    const scenario_start_year = (assumptions.start_year ?? new Date().getFullYear()) as number;
+    setEndYear(scenario_end_year ?? scenario_start_year + 60);
+
+    const scenario_spend_target = assumptions.annual_spend_target as number | undefined;
+    setAnnualSpendTarget(scenario_spend_target ?? 0);
+  }, [selected?.id]);
   
   // Apply inflation adjustment when toggle is on
   const display_result = useMemo(() => {
