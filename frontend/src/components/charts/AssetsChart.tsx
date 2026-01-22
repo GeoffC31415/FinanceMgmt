@@ -30,17 +30,23 @@ export function AssetsChart({
   retirement_years,
   percentile = 50
 }: Props) {
-  const [useLogScale, setUseLogScale] = useState(false);
+  const [useLogScale, setUseLogScale] = useState(true);
 
   // Clamp values for log scale (must be > 0)
   const LOG_MIN = 10000;
   const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
+  
+  // Sanitize values: convert NaN/Infinity to 0
+  const sanitize = (v: number | undefined | null): number => {
+    const num = v ?? 0;
+    return isNaN(num) || !isFinite(num) ? 0 : num;
+  };
 
   const data = years.map((year, idx) => {
-    const isa = isa_balance_median[idx] ?? 0;
-    const pension = pension_balance_median[idx] ?? 0;
-    const cash = cash_balance_median[idx] ?? 0;
-    const totalAssets = total_assets_median[idx] ?? 0;
+    const isa = sanitize(isa_balance_median[idx]);
+    const pension = sanitize(pension_balance_median[idx]);
+    const cash = sanitize(cash_balance_median[idx]);
+    const totalAssets = sanitize(total_assets_median[idx]);
     // GIA = total assets - ISA - pension - cash
     const gia = totalAssets - isa - pension - cash;
     

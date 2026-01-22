@@ -26,6 +26,9 @@ class ArrayScenario:
     people_birth_years: np.ndarray
     people_retirement_ages: np.ndarray
     people_state_pension_ages: np.ndarray
+    people_is_child: np.ndarray
+    people_annual_cost: np.ndarray
+    people_leaves_household_age: np.ndarray
 
     salary_person_idx: np.ndarray
     salary_gross_annual: np.ndarray
@@ -74,8 +77,17 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
     years = np.asarray(returns.years, dtype=np.int32)
 
     people_birth_years = np.array([p.birth_date.year for p in scenario.people], dtype=np.int32)
-    people_retirement_ages = np.array([p.planned_retirement_age for p in scenario.people], dtype=np.int32)
-    people_state_pension_ages = np.array([p.state_pension_age for p in scenario.people], dtype=np.int32)
+    people_retirement_ages = np.array(
+        [p.planned_retirement_age if p.planned_retirement_age is not None else 999 for p in scenario.people],
+        dtype=np.int32,
+    )
+    people_state_pension_ages = np.array(
+        [p.state_pension_age if p.state_pension_age is not None else 999 for p in scenario.people],
+        dtype=np.int32,
+    )
+    people_is_child = np.array([1 if p.is_child else 0 for p in scenario.people], dtype=np.int8)
+    people_annual_cost = np.array([float(p.annual_cost) for p in scenario.people], dtype=np.float64)
+    people_leaves_household_age = np.array([int(p.leaves_household_age) for p in scenario.people], dtype=np.int32)
 
     salary_rows = []
     for person_idx, person in enumerate(scenario.people):
@@ -200,6 +212,9 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         people_birth_years=people_birth_years,
         people_retirement_ages=people_retirement_ages,
         people_state_pension_ages=people_state_pension_ages,
+        people_is_child=people_is_child,
+        people_annual_cost=people_annual_cost,
+        people_leaves_household_age=people_leaves_household_age,
         salary_person_idx=salary_person_idx,
         salary_gross_annual=salary_gross_annual,
         salary_growth_rate=salary_growth_rate,

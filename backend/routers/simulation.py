@@ -93,6 +93,9 @@ def _build_simulation_scenario(
             birth_date=person.birth_date,
             planned_retirement_age=person.planned_retirement_age,
             state_pension_age=person.state_pension_age,
+            is_child=getattr(person, "is_child", False),
+            annual_cost=getattr(person, "annual_cost", 0.0) or 0.0,
+            leaves_household_age=getattr(person, "leaves_household_age", 18) or 18,
         )
         for person in scenario.people
     ]
@@ -207,14 +210,23 @@ def _build_simulation_scenario(
         rental_incomes=rental_incomes,
         gift_incomes=gift_incomes,
         annual_spend_target=annual_spend_target,
-        planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
+        planned_retirement_age_by_person={
+            p.key: p.planned_retirement_age
+            for p in people
+            if not p.is_child and p.planned_retirement_age is not None
+        },
         pension_withdrawal_priority=pension_withdrawal_priority,
         assumptions=assumptions,
     )
 
 
 def _retirement_years_from_people(*, people: list[PersonEntity]) -> list[int]:
-    return sorted({p.birth_date.year + p.planned_retirement_age for p in people})
+    # Only include adults with retirement ages (exclude children)
+    return sorted({
+        p.birth_date.year + p.planned_retirement_age
+        for p in people
+        if not p.is_child and p.planned_retirement_age is not None
+    })
 
 
 def _response_from_matrices(
@@ -424,8 +436,14 @@ async def recalc_simulation(
         PersonEntity(
             key=p.key,
             birth_date=p.birth_date,
-            planned_retirement_age=max(0, int(p.planned_retirement_age) + retirement_age_offset),
+            planned_retirement_age=(
+                max(0, int(p.planned_retirement_age) + retirement_age_offset)
+                if p.planned_retirement_age is not None else None
+            ),
             state_pension_age=p.state_pension_age,
+            is_child=p.is_child,
+            annual_cost=p.annual_cost,
+            leaves_household_age=p.leaves_household_age,
         )
         for p in base.people
     ]
@@ -442,7 +460,11 @@ async def recalc_simulation(
         rental_incomes=base.rental_incomes,
         gift_incomes=base.gift_incomes,
         annual_spend_target=float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target,
-        planned_retirement_age_by_person={p.key: p.planned_retirement_age for p in people},
+        planned_retirement_age_by_person={
+            p.key: p.planned_retirement_age
+            for p in people
+            if not p.is_child and p.planned_retirement_age is not None
+        },
         pension_withdrawal_priority=base.pension_withdrawal_priority,
         assumptions=base.assumptions,
     )

@@ -153,6 +153,9 @@ async def update_scenario(
             existing.birth_date = person.birth_date
             existing.planned_retirement_age = person.planned_retirement_age
             existing.state_pension_age = person.state_pension_age
+            existing.is_child = person.is_child
+            existing.annual_cost = person.annual_cost
+            existing.leaves_household_age = person.leaves_household_age
             keep_ids.add(existing.id)
         else:
             created = Person(
@@ -161,6 +164,9 @@ async def update_scenario(
                 birth_date=person.birth_date,
                 planned_retirement_age=person.planned_retirement_age,
                 state_pension_age=person.state_pension_age,
+                is_child=person.is_child,
+                annual_cost=person.annual_cost,
+                leaves_household_age=person.leaves_household_age,
             )
             scenario.people.append(created)
             created_people.append(created)

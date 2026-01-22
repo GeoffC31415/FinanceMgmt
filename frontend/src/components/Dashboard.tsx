@@ -96,6 +96,37 @@ export function Dashboard() {
     return show_real_values ? applyInflationAdjustment(result) : result;
   }, [result, show_real_values]);
 
+  // Calculate when children leave home for the expense chart markers
+  const children_leaving = useMemo(() => {
+    if (!selected) return [];
+    return selected.people
+      .filter((p) => p.is_child === true)
+      .map((child) => {
+        const birth_year = parseInt(child.birth_date.split("-")[0], 10);
+        const leaves_age = child.leaves_household_age ?? 18;
+        return {
+          name: child.label,
+          year: birth_year + leaves_age
+        };
+      })
+      .filter((c) => !isNaN(c.year));
+  }, [selected]);
+
+  // Calculate when mortgage is paid off (first year where 50%+ of runs have it paid off)
+  const mortgage_payoff_year = useMemo(() => {
+    if (!display_result) return null;
+    const { years, mortgage_paid_off_median } = display_result;
+    if (!mortgage_paid_off_median || mortgage_paid_off_median.length === 0) return null;
+    
+    // Find first year where mortgage is paid off in 50%+ of runs
+    for (let i = 0; i < years.length; i++) {
+      if (mortgage_paid_off_median[i] >= 50) {
+        return years[i];
+      }
+    }
+    return null;
+  }, [display_result]);
+
   // Initialize cached simulation session when scenario or end_year changes.
   // end_year changes require full re-init since the x-axis (timeline) changes.
   useEffect(() => {
@@ -476,6 +507,8 @@ export function Dashboard() {
             total_tax_median={display_result.total_tax_median}
             fun_fund_median={display_result.fun_fund_median}
             retirement_years={display_result.retirement_years}
+            children_leaving={children_leaving}
+            mortgage_payoff_year={mortgage_payoff_year}
             percentile={percentile}
           />
           <IncomeChart

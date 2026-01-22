@@ -2,8 +2,15 @@ export type PersonCreate = {
   id?: string | null;
   label: string;
   birth_date: string; // YYYY-MM-DD
-  planned_retirement_age: number;
-  state_pension_age: number;
+  
+  // Adult-specific fields (required for adults, optional for children)
+  planned_retirement_age?: number | null;
+  state_pension_age?: number | null;
+  
+  // Child-specific fields
+  is_child?: boolean;
+  annual_cost?: number | null;  // Annual cost of raising the child
+  leaves_household_age?: number | null;  // Age when child leaves household (default: 18)
 };
 
 export type IncomeCreate = {
