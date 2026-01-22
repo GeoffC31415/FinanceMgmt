@@ -153,8 +153,6 @@ def _make_test_scenario(
         pension_withdrawal_priority=100,
         assumptions=SimulationAssumptions(
             inflation_rate=0.02,
-            equity_return_mean=0.05,
-            equity_return_std=0.10,
             isa_annual_limit=20_000.0,
             state_pension_annual=11_500.0,
             cgt_annual_allowance=3_000.0,

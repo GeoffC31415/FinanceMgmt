@@ -136,8 +136,6 @@ const schema = z.object({
   name: z.string().min(1).max(200),
   assumptions: z.object({
     inflation_rate: z.coerce.number().min(0).max(1),
-    equity_return_mean: z.coerce.number().min(-1).max(2),
-    equity_return_std: z.coerce.number().min(0).max(2),
     isa_annual_limit: z.coerce.number().min(0),
     state_pension_annual: z.coerce.number().min(0),
     pension_access_age: z.coerce.number().int().min(50).max(75),
@@ -202,8 +200,6 @@ function to_form_values(scenario: ScenarioRead): FormValues {
   const assumptions = scenario.assumptions as Record<string, unknown>;
 
   const inflation_rate = (assumptions.inflation_rate ?? 0.02) as number;
-  const equity_return_mean = (assumptions.equity_return_mean ?? 0.05) as number;
-  const equity_return_std = (assumptions.equity_return_std ?? 0.1) as number;
   const isa_annual_limit = (assumptions.isa_annual_limit ?? 20000) as number;
   const state_pension_annual = (assumptions.state_pension_annual ?? 11500) as number;
   const pension_access_age = (assumptions.pension_access_age ?? 55) as number;
@@ -215,8 +211,6 @@ function to_form_values(scenario: ScenarioRead): FormValues {
     name: scenario.name,
     assumptions: {
       inflation_rate,
-      equity_return_mean,
-      equity_return_std,
       isa_annual_limit,
       state_pension_annual,
       pension_access_age,
@@ -415,24 +409,6 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               </div>
               {form.formState.errors.assumptions?.inflation_rate && (
                 <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.inflation_rate.message || "Must be 0-100%"}</div>
-              )}
-            </div>
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <label className="block text-sm font-medium">Equity return mean</label>
-              <div className="mt-1">
-                <PercentInput control={form.control} name="assumptions.equity_return_mean" placeholder="e.g. 5" />
-              </div>
-              {form.formState.errors.assumptions?.equity_return_mean && (
-                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.equity_return_mean.message || "Invalid value"}</div>
-              )}
-            </div>
-            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-              <label className="block text-sm font-medium">Equity return std dev</label>
-              <div className="mt-1">
-                <PercentInput control={form.control} name="assumptions.equity_return_std" placeholder="e.g. 10" />
-              </div>
-              {form.formState.errors.assumptions?.equity_return_std && (
-                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.equity_return_std.message || "Must be 0 or higher"}</div>
               )}
             </div>
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
