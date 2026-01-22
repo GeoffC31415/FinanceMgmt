@@ -37,25 +37,31 @@ export function NetWorthChart({
   total_assets_median = [],
   percentile = 50
 }: Props) {
-  const [useLogScale, setUseLogScale] = useState(false);
+  const [useLogScale, setUseLogScale] = useState(true);
 
   // Clamp values for log scale (must be > 0)
   const LOG_MIN = 10000;
   const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
+  
+  // Sanitize values: convert NaN/Infinity to 0
+  const sanitize = (v: number | undefined | null): number => {
+    const num = v ?? 0;
+    return isNaN(num) || !isFinite(num) ? 0 : num;
+  };
 
   const data = years.map((year, idx) => {
-    const p10 = net_worth_p10[idx] ?? 0;
-    const p90 = net_worth_p90[idx] ?? 0;
-    const isa = isa_balance_median[idx] ?? 0;
-    const pension = pension_balance_median[idx] ?? 0;
-    const cash = cash_balance_median[idx] ?? 0;
-    const totalAssets = total_assets_median[idx] ?? 0;
+    const p10 = sanitize(net_worth_p10[idx]);
+    const p90 = sanitize(net_worth_p90[idx]);
+    const isa = sanitize(isa_balance_median[idx]);
+    const pension = sanitize(pension_balance_median[idx]);
+    const cash = sanitize(cash_balance_median[idx]);
+    const totalAssets = sanitize(total_assets_median[idx]);
     // GIA = total assets - ISA - pension - cash
     const gia = totalAssets - isa - pension - cash;
     
     return {
       year,
-      net_worth_median: clampForLog(net_worth_median[idx] ?? 0),
+      net_worth_median: clampForLog(sanitize(net_worth_median[idx])),
       net_worth_p10: clampForLog(p10),
       net_worth_p90: clampForLog(p90),
       net_worth_p10_p90_band: clampForLog(p90 - p10),

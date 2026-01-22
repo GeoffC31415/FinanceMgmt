@@ -11,6 +11,12 @@ import {
   YAxis
 } from "recharts";
 
+// Child leaving home marker info
+type ChildLeavingInfo = {
+  name: string;
+  year: number;
+};
+
 type Props = {
   years: number[];
   total_expenses_median: number[];
@@ -19,8 +25,44 @@ type Props = {
   total_tax_median: number[];
   fun_fund_median: number[];
   retirement_years: number[];
+  children_leaving?: ChildLeavingInfo[];
+  mortgage_payoff_year?: number | null;
   percentile?: number;
 };
+
+// Custom label component for child leaving markers
+function ChildLeavingLabel({ viewBox, name }: { viewBox?: { x?: number; y?: number }; name: string }) {
+  const x = viewBox?.x ?? 0;
+  const y = 25;
+  return (
+    <g>
+      {/* Graduation cap icon */}
+      <text x={x} y={y} textAnchor="middle" fontSize={16} fill="#38bdf8">
+        🎓
+      </text>
+      <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill="#38bdf8" fontWeight="500">
+        {name}
+      </text>
+    </g>
+  );
+}
+
+// Custom label component for mortgage payoff marker
+function MortgagePayoffLabel({ viewBox }: { viewBox?: { x?: number; y?: number } }) {
+  const x = viewBox?.x ?? 0;
+  const y = 25;
+  return (
+    <g>
+      {/* House icon */}
+      <text x={x} y={y} textAnchor="middle" fontSize={16} fill="#22c55e">
+        🏠
+      </text>
+      <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill="#22c55e" fontWeight="500">
+        Paid off
+      </text>
+    </g>
+  );
+}
 
 export function ExpensesChart({
   years,
@@ -30,6 +72,8 @@ export function ExpensesChart({
   total_tax_median,
   fun_fund_median,
   retirement_years,
+  children_leaving = [],
+  mortgage_payoff_year = null,
   percentile = 50
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
@@ -37,27 +81,32 @@ export function ExpensesChart({
   // Clamp values for log scale (must be > 0)
   const LOG_MIN = 10000;
   const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
+  
+  // Sanitize values: convert NaN/Infinity to 0
+  const sanitize = (v: number | undefined | null): number => {
+    const num = v ?? 0;
+    return isNaN(num) || !isFinite(num) ? 0 : num;
+  };
 
   const data = years.map((year, idx) => {
     // Backend total_expenses = expenses + mortgage + fun_fund
-    const total_expenses = total_expenses_median[idx] ?? 0;
-    const mortgage_payment = mortgage_payment_median[idx] ?? 0;
-    const pension_contributions = pension_contributions_median[idx] ?? 0;
-    const total_tax = total_tax_median[idx] ?? 0;
-    const fun_fund = fun_fund_median[idx] ?? 0;
+    const total_expenses = sanitize(total_expenses_median[idx]);
+    const mortgage_payment = sanitize(mortgage_payment_median[idx]);
+    const total_tax = sanitize(total_tax_median[idx]);
+    const fun_fund = sanitize(fun_fund_median[idx]);
     
     // Living expenses = total_expenses - mortgage - fun_fund (what's left after known components)
     const living_expenses = Math.max(0, total_expenses - mortgage_payment - fun_fund);
     
-    // Total outgoings includes everything: living expenses + mortgage + pension contributions + tax + fun fund
-    const total_outgoings = living_expenses + mortgage_payment + pension_contributions + total_tax + fun_fund;
+    // Total outgoings includes: living expenses + mortgage + tax + fun fund
+    // Note: Pension contributions are excluded as they are investments, not expenses
+    const total_outgoings = living_expenses + mortgage_payment + total_tax + fun_fund;
     
     return {
       year,
       total_outgoings: clampForLog(total_outgoings),
       living_expenses: clampForLog(living_expenses),
       mortgage_payment: clampForLog(mortgage_payment),
-      pension_contributions: clampForLog(pension_contributions),
       total_tax: clampForLog(total_tax),
       fun_fund: clampForLog(fun_fund)
     };
@@ -86,7 +135,7 @@ export function ExpensesChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart data={data} margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis
@@ -105,15 +154,13 @@ export function ExpensesChart({
                     ? "Total outgoings"
                     : name === "mortgage_payment"
                       ? "Mortgage"
-                      : name === "pension_contributions"
-                        ? "Pension contributions"
-                        : name === "total_tax"
-                          ? "Tax"
-                          : name === "living_expenses"
-                            ? "Living expenses"
-                            : name === "fun_fund"
-                              ? "Fun fund"
-                              : name;
+                      : name === "total_tax"
+                        ? "Tax"
+                        : name === "living_expenses"
+                          ? "Living expenses"
+                          : name === "fun_fund"
+                            ? "Fun fund"
+                            : name;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -125,7 +172,6 @@ export function ExpensesChart({
               formatter={(value) => {
                 if (value === "total_outgoings") return "Total outgoings";
                 if (value === "mortgage_payment") return "Mortgage";
-                if (value === "pension_contributions") return "Pension contributions";
                 if (value === "total_tax") return "Tax";
                 if (value === "living_expenses") return "Living expenses";
                 if (value === "fun_fund") return "Fun fund";
@@ -141,6 +187,26 @@ export function ExpensesChart({
                 yAxisId="left"
               />
             ))}
+            {children_leaving.map((child) => (
+              <ReferenceLine
+                key={`child-leave-${child.name}-${child.year}`}
+                x={child.year}
+                stroke="#38bdf8"
+                strokeDasharray="3 3"
+                yAxisId="left"
+                label={<ChildLeavingLabel name={child.name} />}
+              />
+            ))}
+            {mortgage_payoff_year && (
+              <ReferenceLine
+                key="mortgage-payoff"
+                x={mortgage_payoff_year}
+                stroke="#22c55e"
+                strokeDasharray="3 3"
+                yAxisId="left"
+                label={<MortgagePayoffLabel />}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="total_outgoings"
@@ -167,15 +233,6 @@ export function ExpensesChart({
               dot={false}
               yAxisId="left"
               name="mortgage_payment"
-            />
-            <Line
-              type="monotone"
-              dataKey="pension_contributions"
-              stroke="#fb923c"
-              strokeWidth={1.5}
-              dot={false}
-              yAxisId="left"
-              name="pension_contributions"
             />
             <Line
               type="monotone"

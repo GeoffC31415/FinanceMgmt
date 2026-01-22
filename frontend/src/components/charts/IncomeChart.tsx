@@ -43,17 +43,23 @@ export function IncomeChart({
   // Clamp values for log scale (must be > 0)
   const LOG_MIN = 10000;
   const clampForLog = (v: number) => (useLogScale ? Math.max(v, LOG_MIN) : v);
+  
+  // Sanitize values: convert NaN/Infinity to 0
+  const sanitize = (v: number | undefined | null): number => {
+    const num = v ?? 0;
+    return isNaN(num) || !isFinite(num) ? 0 : num;
+  };
 
   const data = years.map((year, idx) => ({
     year,
-    salary_gross: clampForLog(salary_gross_median[idx] ?? 0),
-    salary_net: clampForLog(salary_net_median[idx] ?? 0),
-    rental_income: clampForLog(rental_income_median[idx] ?? 0),
-    gift_income: clampForLog(gift_income_median[idx] ?? 0),
-    pension_income: clampForLog(pension_income_median[idx] ?? 0),
-    state_pension_income: clampForLog(state_pension_income_median[idx] ?? 0),
-    investment_returns: clampForLog(investment_returns_median[idx] ?? 0),
-    total_income: clampForLog(total_income_median[idx] ?? 0)
+    salary_gross: clampForLog(sanitize(salary_gross_median[idx])),
+    salary_net: clampForLog(sanitize(salary_net_median[idx])),
+    rental_income: clampForLog(sanitize(rental_income_median[idx])),
+    gift_income: clampForLog(sanitize(gift_income_median[idx])),
+    pension_income: clampForLog(sanitize(pension_income_median[idx])),
+    state_pension_income: clampForLog(sanitize(state_pension_income_median[idx])),
+    investment_returns: clampForLog(sanitize(investment_returns_median[idx])),
+    total_income: clampForLog(sanitize(total_income_median[idx]))
   }));
 
   return (

@@ -156,6 +156,9 @@ def _run_monte_carlo_fast(
         people_birth_years=sc.people_birth_years,
         people_retirement_ages=sc.people_retirement_ages,
         people_state_pension_ages=sc.people_state_pension_ages,
+        people_is_child=sc.people_is_child,
+        people_annual_cost=sc.people_annual_cost.copy(),
+        people_leaves_household_age=sc.people_leaves_household_age,
         # Salary
         salary_person_idx=sc.salary_person_idx,
         salary_gross_annual=sc.salary_gross_annual.copy(),
@@ -337,6 +340,9 @@ if _HAS_NUMBA:
         people_birth_years: np.ndarray,
         people_retirement_ages: np.ndarray,
         people_state_pension_ages: np.ndarray,
+        people_is_child: np.ndarray,
+        people_annual_cost: np.ndarray,
+        people_leaves_household_age: np.ndarray,
         # Salary
         salary_person_idx: np.ndarray,
         salary_gross_annual: np.ndarray,
@@ -412,17 +418,24 @@ if _HAS_NUMBA:
             it_gift_gross = gift_gross_annual.copy()
             it_expense_amounts = expense_annual_amount.copy()
             it_state_pension = state_pension_annual
+            it_child_costs = people_annual_cost.copy()
 
             for y_idx in range(n_years):
                 year = years[y_idx]
 
-                # Check retirement status for each person
+                # Check retirement status for each adult person (skip children)
                 is_all_retired = True
+                has_adults = False
                 for p in range(n_people):
+                    if people_is_child[p] == 1:
+                        continue
+                    has_adults = True
                     age = year - people_birth_years[p]
                     if age < people_retirement_ages[p]:
                         is_all_retired = False
                         break
+                if not has_adults:
+                    is_all_retired = False
 
                 # Process salaries
                 salary_gross_total = 0.0
@@ -507,6 +520,15 @@ if _HAS_NUMBA:
                     expense_total += it_expense_amounts[e]
                     if expense_is_inflation_linked[e]:
                         it_expense_amounts[e] *= (1.0 + inflation_rate)
+
+                # Child costs (only while child is a dependent)
+                for p in range(n_people):
+                    if people_is_child[p] == 1:
+                        age = year - people_birth_years[p]
+                        if age < people_leaves_household_age[p]:
+                            expense_total += it_child_costs[p]
+                        # Apply inflation to child costs
+                        it_child_costs[p] *= (1.0 + inflation_rate)
 
                 # State pension
                 state_pension_income = 0.0

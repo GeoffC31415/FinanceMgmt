@@ -257,6 +257,11 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
     # Track state pension amount (grows with inflation each year)
     current_state_pension_annual = scenario.assumptions.state_pension_annual
 
+    # Track child costs (grow with inflation each year)
+    current_child_costs: dict[str, float] = {
+        p.key: p.annual_cost for p in people if p.is_child
+    }
+
     for year in range(scenario.start_year, scenario.end_year + 1):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -267,7 +272,9 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         salary_gross_total = 0.0
         employee_pension_total = 0.0
         employer_pension_total = 0.0
-        is_all_retired = all(person.is_retired_in_year(year=year) for person in people) if people else False
+        # Check if all adults are retired (children are excluded from this check)
+        adults = [p for p in people if not p.is_child]
+        is_all_retired = all(person.is_retired_in_year(year=year) for person in adults) if adults else False
 
         for person in people:
             is_retired = person.is_retired_in_year(year=year)
@@ -335,11 +342,24 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             if person.is_state_pension_eligible_in_year(year=year):
                 state_pension_income += current_state_pension_annual
         
-        # Apply inflation for next year
+        # Apply inflation to state pension for next year
         current_state_pension_annual *= 1.0 + scenario.assumptions.inflation_rate
 
         # Calculate expenses before pension drawdown
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
+        
+        # Add child costs (only while child is a dependent)
+        child_costs = sum(
+            current_child_costs.get(p.key, 0.0)
+            for p in people
+            if p.is_child and p.is_dependent_in_year(year=year)
+        )
+        expense_total += child_costs
+        
+        # Apply inflation to child costs for next year (AFTER using them)
+        for key in current_child_costs:
+            current_child_costs[key] *= 1.0 + scenario.assumptions.inflation_rate
+        
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
 
         # Retirement spending target:
@@ -652,6 +672,11 @@ def _simulate_single_run_to_matrices(
     # Track state pension amount (grows with inflation each year)
     current_state_pension_annual = scenario.assumptions.state_pension_annual
 
+    # Track child costs (grow with inflation each year)
+    current_child_costs: dict[str, float] = {
+        p.key: p.annual_cost for p in people if p.is_child
+    }
+
     for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
@@ -663,7 +688,9 @@ def _simulate_single_run_to_matrices(
         salary_gross_total = 0.0
         employee_pension_total = 0.0
         employer_pension_total = 0.0
-        is_all_retired = all(person.is_retired_in_year(year=year) for person in people) if people else False
+        # Check if all adults are retired (children are excluded from this check)
+        adults = [p for p in people if not p.is_child]
+        is_all_retired = all(person.is_retired_in_year(year=year) for person in adults) if adults else False
 
         for person in people:
             if person.is_retired_in_year(year=year):
@@ -729,10 +756,23 @@ def _simulate_single_run_to_matrices(
             if person.is_state_pension_eligible_in_year(year=year):
                 state_pension_income += current_state_pension_annual
         
-        # Apply inflation for next year
+        # Apply inflation to state pension for next year
         current_state_pension_annual *= 1.0 + scenario.assumptions.inflation_rate
 
         expense_total = sum(e.get_cash_flows().get("expenses", 0.0) for e in expenses)
+        
+        # Add child costs (only while child is a dependent)
+        child_costs = sum(
+            current_child_costs.get(p.key, 0.0)
+            for p in people
+            if p.is_child and p.is_dependent_in_year(year=year)
+        )
+        expense_total += child_costs
+        
+        # Apply inflation to child costs for next year (AFTER using them)
+        for key in current_child_costs:
+            current_child_costs[key] *= 1.0 + scenario.assumptions.inflation_rate
+        
         mortgage_payment = mortgage.get_cash_flows().get("mortgage_payment", 0.0) if mortgage is not None else 0.0
 
         # Treat `annual_spend_target` as an EXTRA discretionary expense added when everyone is retired.
