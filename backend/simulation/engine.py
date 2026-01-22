@@ -26,8 +26,6 @@ from backend.simulation.tax.withdrawals import calculate_gia_withdrawal, calcula
 @dataclass(frozen=True)
 class SimulationAssumptions:
     inflation_rate: float = 0.02
-    equity_return_mean: float = 0.05
-    equity_return_std: float = 0.10
     isa_annual_limit: float = 20_000.0
     state_pension_annual: float = 11_500.0
     cgt_annual_allowance: float = 3_000.0

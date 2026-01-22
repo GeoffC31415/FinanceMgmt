@@ -126,8 +126,6 @@ const EMPTY_SCENARIO: ScenarioCreate = {
   name: "My Scenario",
   assumptions: {
     inflation_rate: 0.02,
-    equity_return_mean: 0.05,
-    equity_return_std: 0.1,
     isa_annual_limit: 20000,
     state_pension_annual: 11500,
     pension_access_age: 55,

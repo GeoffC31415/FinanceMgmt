@@ -72,8 +72,6 @@ def _build_simulation_scenario(
     assumptions_json = scenario.assumptions or {}
     assumptions = SimulationAssumptions(
         inflation_rate=_coerce_float(assumptions_json.get("inflation_rate"), 0.02),
-        equity_return_mean=_coerce_float(assumptions_json.get("equity_return_mean"), 0.05),
-        equity_return_std=_coerce_float(assumptions_json.get("equity_return_std"), 0.10),
         isa_annual_limit=_coerce_float(assumptions_json.get("isa_annual_limit"), 20_000.0),
         state_pension_annual=_coerce_float(assumptions_json.get("state_pension_annual"), 11_500.0),
         cgt_annual_allowance=_coerce_float(assumptions_json.get("cgt_annual_allowance"), 3_000.0),
