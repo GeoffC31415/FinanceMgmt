@@ -60,7 +60,27 @@ F_IS_DEPLETED = 23
 F_IS_BANKRUPT = 24
 F_DEBT_BALANCE = 25
 F_DEBT_INTEREST_PAID = 26
-N_FIELDS = 27
+
+# Per-type investment returns
+F_ISA_RETURNS = 27
+F_GIA_RETURNS = 28
+F_CASH_RETURNS = 29
+F_PENSION_RETURNS = 30
+
+# Per-type contributions (deposits into accounts)
+F_ISA_CONTRIBUTIONS = 31
+F_GIA_CONTRIBUTIONS = 32
+F_PENSION_CONTRIBUTIONS_TOTAL = 33  # duplicate of existing pension_contributions for clarity
+
+# Per-type withdrawals
+F_ISA_WITHDRAWALS = 34
+F_GIA_WITHDRAWALS = 35
+F_PENSION_WITHDRAWALS = 36
+
+# GIA balance (computed server-side)
+F_GIA_BALANCE = 37
+
+N_FIELDS = 38
 
 # Asset type codes
 ASSET_CASH = 0
@@ -226,6 +246,11 @@ def _run_monte_carlo_fast(
         "income_tax_paid", "ni_paid", "total_tax", "isa_balance", "pension_balance",
         "cash_balance", "total_assets", "mortgage_balance", "total_liabilities",
         "mortgage_paid_off", "is_depleted", "is_bankrupt", "debt_balance", "debt_interest_paid",
+        # Per-type details (asset class breakdown)
+        "isa_returns", "gia_returns", "cash_returns", "pension_returns",
+        "isa_contributions", "gia_contributions", "pension_contributions_total",
+        "isa_withdrawals", "gia_withdrawals", "pension_withdrawals",
+        "gia_balance",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -599,6 +624,13 @@ if _HAS_NUMBA:
                 cgt_paid = 0.0
                 cgt_allowance_remaining = cgt_annual_allowance
 
+                # Per-type flow tracking (annual, per iteration)
+                isa_withdrawals = 0.0
+                gia_withdrawals = 0.0
+                pension_withdrawals = 0.0
+                isa_contributions = 0.0
+                gia_contributions = 0.0
+
                 # Withdraw from assets if below emergency fund
                 if cash_idx >= 0 and it_asset_balances[cash_idx] < emergency_target:
                     shortfall = emergency_target - it_asset_balances[cash_idx]
@@ -626,6 +658,7 @@ if _HAS_NUMBA:
                                 pension_income_tax += tax
                                 it_asset_balances[cash_idx] += net
                                 shortfall -= net
+                                pension_withdrawals += gross
 
                                 # Proportionally withdraw from each eligible pension
                                 if gross > 0:
@@ -652,6 +685,7 @@ if _HAS_NUMBA:
                                 it_asset_balances[a_idx] -= gross
                                 it_asset_balances[cash_idx] += gross
                                 shortfall -= gross
+                                isa_withdrawals += gross
 
                             elif asset_type == ASSET_GIA:
                                 # GIA: CGT on gains
@@ -678,6 +712,7 @@ if _HAS_NUMBA:
                                 it_asset_balances[a_idx] -= gross
                                 it_asset_balances[cash_idx] += net
                                 shortfall -= net
+                                gia_withdrawals += gross
 
                             else:
                                 # Other: treat as tax-free
@@ -690,6 +725,94 @@ if _HAS_NUMBA:
                     if it_asset_balances[cash_idx] < 0:
                         it_debt_balance += abs(it_asset_balances[cash_idx])
                         it_asset_balances[cash_idx] = 0.0
+
+                # Pay down existing debt using accessible pension/assets before interest compounds
+                # This ensures assets are fully used before debt accumulates
+                if it_debt_balance > 0 and cash_idx >= 0:
+                    debt_to_repay = it_debt_balance
+                    
+                    # Try to pay down debt using withdrawal sources in priority order
+                    for w_idx in range(n_withdrawals):
+                        if debt_to_repay <= 0:
+                            break
+                        
+                        if withdrawal_is_pension[w_idx] == 1:
+                            # Pension withdrawal to repay debt
+                            eligible_pension_balance = 0.0
+                            for pen_idx in range(n_pensions):
+                                p_idx = pension_person_idx[pen_idx]
+                                if p_idx >= 0:
+                                    age = year - people_birth_years[p_idx]
+                                    if age >= pension_access_age:
+                                        eligible_pension_balance += it_pension_balances[pen_idx]
+                            
+                            if eligible_pension_balance > 0:
+                                # Calculate how much we need to withdraw (gross) to get enough net to repay debt
+                                gross, tax, net = _calculate_pension_drawdown(
+                                    debt_to_repay, state_pension_income + pension_income_net, eligible_pension_balance
+                                )
+                                if net > 0:
+                                    # Use the net to pay down debt
+                                    actual_repayment = min(net, it_debt_balance)
+                                    it_debt_balance -= actual_repayment
+                                    debt_to_repay -= actual_repayment
+                                    pension_income_net += net
+                                    pension_income_tax += tax
+                                    pension_withdrawals += gross
+                                    
+                                    # Proportionally withdraw from each eligible pension
+                                    for pen_idx in range(n_pensions):
+                                        p_idx = pension_person_idx[pen_idx]
+                                        if p_idx >= 0:
+                                            age = year - people_birth_years[p_idx]
+                                            if age >= pension_access_age and it_pension_balances[pen_idx] > 0:
+                                                proportion = it_pension_balances[pen_idx] / eligible_pension_balance
+                                                it_pension_balances[pen_idx] -= gross * proportion
+                        else:
+                            # Asset withdrawal to repay debt
+                            a_idx = withdrawal_asset_idx[w_idx]
+                            if a_idx < 0 or a_idx >= n_assets:
+                                continue
+                            if it_asset_balances[a_idx] <= 0:
+                                continue
+                            
+                            asset_type = asset_types[a_idx]
+                            
+                            if asset_type == ASSET_ISA:
+                                # ISA: tax-free
+                                gross = min(it_asset_balances[a_idx], debt_to_repay)
+                                it_asset_balances[a_idx] -= gross
+                                actual_repayment = min(gross, it_debt_balance)
+                                it_debt_balance -= actual_repayment
+                                debt_to_repay -= actual_repayment
+                                isa_withdrawals += gross
+                            
+                            elif asset_type == ASSET_GIA:
+                                # GIA: CGT on gains
+                                gross = min(it_asset_balances[a_idx], debt_to_repay)
+                                balance = it_asset_balances[a_idx]
+                                cost_basis = it_asset_cost_bases[a_idx]
+                                
+                                total_gains = max(0.0, balance - cost_basis)
+                                gains_ratio = total_gains / balance if balance > 0 else 0.0
+                                gains_realized = gross * gains_ratio
+                                
+                                allowance_used = min(cgt_allowance_remaining, gains_realized)
+                                taxable_gains = max(0.0, gains_realized - allowance_used)
+                                tax = taxable_gains * cgt_rate
+                                cgt_allowance_remaining -= allowance_used
+                                cgt_paid += tax
+                                
+                                net = gross - tax
+                                if balance > 0 and cost_basis > 0:
+                                    basis_reduction = cost_basis * (gross / balance)
+                                    it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
+                                
+                                it_asset_balances[a_idx] -= gross
+                                actual_repayment = min(net, it_debt_balance)
+                                it_debt_balance -= actual_repayment
+                                debt_to_repay -= actual_repayment
+                                gia_withdrawals += gross
 
                 # Invest excess cash
                 if cash_idx >= 0:
@@ -710,6 +833,7 @@ if _HAS_NUMBA:
                                 it_asset_balances[cash_idx] -= amount
                                 investable -= amount
                                 isa_remaining -= amount
+                                isa_contributions += amount
 
                         # Then GIA
                         for a_idx in range(n_assets):
@@ -724,14 +848,24 @@ if _HAS_NUMBA:
                                 it_asset_cost_bases[a_idx] += amount
                                 it_asset_balances[cash_idx] -= amount
                                 investable -= amount
+                                gia_contributions += amount
 
                 # Apply asset growth
                 investment_returns = 0.0
+                isa_returns = 0.0
+                gia_returns = 0.0
+                cash_returns = 0.0
                 for a_idx in range(n_assets):
                     ret = asset_returns[it, y_idx, a_idx]
                     inv_return = it_asset_balances[a_idx] * ret
                     it_asset_balances[a_idx] += inv_return
                     investment_returns += inv_return
+                    if asset_types[a_idx] == ASSET_ISA:
+                        isa_returns += inv_return
+                    elif asset_types[a_idx] == ASSET_GIA:
+                        gia_returns += inv_return
+                    elif asset_types[a_idx] == ASSET_CASH:
+                        cash_returns += inv_return
 
                 # Apply pension growth
                 pension_investment_return = 0.0
@@ -753,6 +887,7 @@ if _HAS_NUMBA:
 
                 isa_balance = 0.0
                 cash_balance = 0.0
+                gia_balance = 0.0
                 total_asset_balance = 0.0
                 for a_idx in range(n_assets):
                     total_asset_balance += it_asset_balances[a_idx]
@@ -760,6 +895,8 @@ if _HAS_NUMBA:
                         isa_balance += it_asset_balances[a_idx]
                     elif asset_types[a_idx] == ASSET_CASH:
                         cash_balance += it_asset_balances[a_idx]
+                    elif asset_types[a_idx] == ASSET_GIA:
+                        gia_balance += it_asset_balances[a_idx]
 
                 total_assets = total_asset_balance + pension_balance
                 total_liabilities = it_mortgage_balance + it_debt_balance
@@ -800,6 +937,22 @@ if _HAS_NUMBA:
                 out[it, y_idx, F_IS_BANKRUPT] = 1.0 if it_is_bankrupt else 0.0
                 out[it, y_idx, F_DEBT_BALANCE] = it_debt_balance
                 out[it, y_idx, F_DEBT_INTEREST_PAID] = debt_interest_paid
+
+                # Per-type details
+                out[it, y_idx, F_ISA_RETURNS] = isa_returns
+                out[it, y_idx, F_GIA_RETURNS] = gia_returns
+                out[it, y_idx, F_CASH_RETURNS] = cash_returns
+                out[it, y_idx, F_PENSION_RETURNS] = pension_investment_return
+
+                out[it, y_idx, F_ISA_CONTRIBUTIONS] = isa_contributions
+                out[it, y_idx, F_GIA_CONTRIBUTIONS] = gia_contributions
+                out[it, y_idx, F_PENSION_CONTRIBUTIONS_TOTAL] = employee_pension_total + employer_pension_total
+
+                out[it, y_idx, F_ISA_WITHDRAWALS] = isa_withdrawals
+                out[it, y_idx, F_GIA_WITHDRAWALS] = gia_withdrawals
+                out[it, y_idx, F_PENSION_WITHDRAWALS] = pension_withdrawals
+
+                out[it, y_idx, F_GIA_BALANCE] = gia_balance
 
         return out
 
