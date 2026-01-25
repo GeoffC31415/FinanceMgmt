@@ -240,56 +240,94 @@ def _response_from_matrices(
     start_year: int,
     pct: int = 50,
 ) -> SimulationResponse:
-    def at_percentile(field_name: str, p: int = pct) -> list[float]:
+    # Find the representative iteration for the target percentile
+    # We use the final year's net_worth to rank iterations, then pick the one closest to the target percentile
+    nw = mats.get("net_worth")
+    if nw is not None and nw.size:
+        # Sort iterations by final net worth to find the one at the target percentile
+        final_nw = nw[:, -1]
+        sorted_indices = np.argsort(final_nw)
+        # Calculate which index corresponds to the target percentile
+        target_idx = int(np.clip(len(sorted_indices) * pct / 100, 0, len(sorted_indices) - 1))
+        rep_iter = sorted_indices[target_idx]
+    else:
+        rep_iter = 0
+    
+    def from_iteration(field_name: str) -> list[float]:
+        """Get values from the representative iteration."""
         m = mats.get(field_name)
-        return np.percentile(m, p, axis=0).tolist() if m is not None and m.size else []
+        if m is None or not m.size:
+            return [0.0] * len(years)
+        return m[rep_iter, :].tolist()
+    
+    def at_percentile(field_name: str, p: int) -> list[float]:
+        """Get true percentile values (used for p10/p90 bands)."""
+        m = mats.get(field_name)
+        if m is None or not m.size:
+            return [0.0] * len(years)
+        return np.percentile(m, p, axis=0).tolist()
 
     def percentage(field_name: str) -> list[float]:
+        """Get percentage of iterations where field is true (for boolean fields)."""
         m = mats.get(field_name)
-        return (np.mean(m, axis=0) * 100).tolist() if m is not None and m.size else []
+        if m is None or not m.size:
+            return [0.0] * len(years)
+        return (np.mean(m, axis=0) * 100).tolist()
 
     return SimulationResponse(
         years=years,
+        # Net worth bands still use true percentiles for the uncertainty visualization
         net_worth_p10=at_percentile("net_worth", 10),
-        net_worth_median=at_percentile("net_worth"),
+        net_worth_median=from_iteration("net_worth"),  # Use representative iteration
         net_worth_p90=at_percentile("net_worth", 90),
-        income_median=at_percentile("total_income"),
-        spend_median=at_percentile("total_expenses"),
+        income_median=from_iteration("total_income"),
+        spend_median=from_iteration("total_expenses"),
         retirement_years=_retirement_years_from_people(people=people),
         inflation_rate=inflation_rate,
         start_year=start_year,
-        # Detailed incomes (use selected percentile)
-        salary_gross_median=at_percentile("salary_gross"),
-        salary_net_median=at_percentile("salary_net"),
-        rental_income_median=at_percentile("rental_income"),
-        gift_income_median=at_percentile("gift_income"),
-        pension_income_median=at_percentile("pension_income"),
-        state_pension_income_median=at_percentile("state_pension_income"),
-        investment_returns_median=at_percentile("investment_returns"),
-        total_income_median=at_percentile("total_income"),
-        # Detailed expenses (use selected percentile)
-        total_expenses_median=at_percentile("total_expenses"),
-        mortgage_payment_median=at_percentile("mortgage_payment"),
-        pension_contributions_median=at_percentile("pension_contributions"),
-        fun_fund_median=at_percentile("fun_fund"),
-        # Tax (use selected percentile)
-        income_tax_paid_median=at_percentile("income_tax_paid"),
-        ni_paid_median=at_percentile("ni_paid"),
-        total_tax_median=at_percentile("total_tax"),
-        # Assets (use selected percentile)
-        isa_balance_median=at_percentile("isa_balance"),
-        pension_balance_median=at_percentile("pension_balance"),
-        cash_balance_median=at_percentile("cash_balance"),
-        total_assets_median=at_percentile("total_assets"),
-        # Liabilities (use selected percentile)
-        mortgage_balance_median=at_percentile("mortgage_balance"),
-        total_liabilities_median=at_percentile("total_liabilities"),
-        # Other (these remain as percentages of runs, not percentiles)
+        # Detailed incomes (from representative iteration for consistency)
+        salary_gross_median=from_iteration("salary_gross"),
+        salary_net_median=from_iteration("salary_net"),
+        rental_income_median=from_iteration("rental_income"),
+        gift_income_median=from_iteration("gift_income"),
+        pension_income_median=from_iteration("pension_income"),
+        state_pension_income_median=from_iteration("state_pension_income"),
+        investment_returns_median=from_iteration("investment_returns"),
+        total_income_median=from_iteration("total_income"),
+        # Detailed expenses (from representative iteration)
+        total_expenses_median=from_iteration("total_expenses"),
+        mortgage_payment_median=from_iteration("mortgage_payment"),
+        pension_contributions_median=from_iteration("pension_contributions"),
+        fun_fund_median=from_iteration("fun_fund"),
+        # Tax (from representative iteration)
+        income_tax_paid_median=from_iteration("income_tax_paid"),
+        ni_paid_median=from_iteration("ni_paid"),
+        total_tax_median=from_iteration("total_tax"),
+        # Assets (from representative iteration)
+        isa_balance_median=from_iteration("isa_balance"),
+        pension_balance_median=from_iteration("pension_balance"),
+        cash_balance_median=from_iteration("cash_balance"),
+        gia_balance_median=from_iteration("gia_balance"),
+        total_assets_median=from_iteration("total_assets"),
+        # Asset-type performance and flows (from representative iteration)
+        isa_returns_median=from_iteration("isa_returns"),
+        gia_returns_median=from_iteration("gia_returns"),
+        cash_returns_median=from_iteration("cash_returns"),
+        pension_returns_median=from_iteration("pension_returns"),
+        isa_contributions_median=from_iteration("isa_contributions"),
+        gia_contributions_median=from_iteration("gia_contributions"),
+        isa_withdrawals_median=from_iteration("isa_withdrawals"),
+        gia_withdrawals_median=from_iteration("gia_withdrawals"),
+        pension_withdrawals_median=from_iteration("pension_withdrawals"),
+        # Liabilities (from representative iteration)
+        mortgage_balance_median=from_iteration("mortgage_balance"),
+        total_liabilities_median=from_iteration("total_liabilities"),
+        # Other (these remain as percentages of runs across all iterations)
         mortgage_paid_off_median=percentage("mortgage_paid_off"),
         is_depleted_median=percentage("is_depleted"),
         is_bankrupt_median=percentage("is_bankrupt"),
-        debt_balance_median=at_percentile("debt_balance"),
-        debt_interest_paid_median=at_percentile("debt_interest_paid"),
+        debt_balance_median=from_iteration("debt_balance"),
+        debt_interest_paid_median=from_iteration("debt_interest_paid"),
     )
 
 
@@ -339,6 +377,25 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         p90 = []
 
     retirement_years = _retirement_years_from_people(people=sim_scenario.people)
+    n_years = len(years)
+
+    # Slow /run endpoint doesn't currently track per-type flows; return 0s.
+    zeros = [0.0] * n_years
+    isa_balance_median = get_median("isa_balance")
+    pension_balance_median = get_median("pension_balance")
+    cash_balance_median = get_median("cash_balance")
+    total_assets_median = get_median("total_assets")
+
+    def _value_at(values: list[float], idx: int) -> float:
+        return float(values[idx]) if idx < len(values) else 0.0
+
+    gia_balance_median = [
+        _value_at(total_assets_median, i)
+        - _value_at(isa_balance_median, i)
+        - _value_at(pension_balance_median, i)
+        - _value_at(cash_balance_median, i)
+        for i in range(n_years)
+    ]
 
     return SimulationResponse(
         years=years,
@@ -369,10 +426,21 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         ni_paid_median=get_median("ni_paid"),
         total_tax_median=get_median("total_tax"),
         # Assets
-        isa_balance_median=get_median("isa_balance"),
-        pension_balance_median=get_median("pension_balance"),
-        cash_balance_median=get_median("cash_balance"),
-        total_assets_median=get_median("total_assets"),
+        isa_balance_median=isa_balance_median,
+        pension_balance_median=pension_balance_median,
+        cash_balance_median=cash_balance_median,
+        gia_balance_median=gia_balance_median,
+        total_assets_median=total_assets_median,
+        # Asset-type performance and flows (not available on slow engine)
+        isa_returns_median=zeros,
+        gia_returns_median=zeros,
+        cash_returns_median=zeros,
+        pension_returns_median=zeros,
+        isa_contributions_median=zeros,
+        gia_contributions_median=zeros,
+        isa_withdrawals_median=zeros,
+        gia_withdrawals_median=zeros,
+        pension_withdrawals_median=zeros,
         # Liabilities
         mortgage_balance_median=get_median("mortgage_balance"),
         total_liabilities_median=get_median("total_liabilities"),
