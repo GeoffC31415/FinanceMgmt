@@ -141,7 +141,9 @@ const schema = z.object({
     pension_access_age: z.coerce.number().int().min(50).max(75),
     start_year: z.coerce.number().int().min(1900).max(2200),
     end_year: z.coerce.number().int().min(1900).max(2200),
-    annual_spend_target: z.coerce.number().min(0)
+    annual_spend_target: z.coerce.number().min(0),
+    debt_interest_rate: z.coerce.number().min(0).max(1),
+    bankruptcy_threshold: z.coerce.number().max(0)
   }),
   people: z
     .array(
@@ -211,6 +213,8 @@ function to_form_values(scenario: ScenarioRead): FormValues {
   const start_year = (assumptions.start_year ?? new Date().getFullYear()) as number;
   const end_year = (assumptions.end_year ?? new Date().getFullYear() + 60) as number;
   const annual_spend_target = (assumptions.annual_spend_target ?? 30000) as number;
+  const debt_interest_rate = (assumptions.debt_interest_rate ?? 0.08) as number;
+  const bankruptcy_threshold = (assumptions.bankruptcy_threshold ?? -100000) as number;
 
   return {
     name: scenario.name,
@@ -221,7 +225,9 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       pension_access_age,
       start_year,
       end_year,
-      annual_spend_target
+      annual_spend_target,
+      debt_interest_rate,
+      bankruptcy_threshold
     },
     people: scenario.people.map((p) => ({
       id: p.id,
@@ -481,6 +487,26 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               </div>
               {form.formState.errors.assumptions?.annual_spend_target && (
                 <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.annual_spend_target.message || "Must be 0 or higher"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Debt interest rate</label>
+              <p className="text-xs text-slate-400 mt-1">Annual interest rate applied when borrowing (negative cash balance)</p>
+              <div className="mt-2">
+                <PercentInput control={form.control} name="assumptions.debt_interest_rate" placeholder="e.g. 8" />
+              </div>
+              {form.formState.errors.assumptions?.debt_interest_rate && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.debt_interest_rate.message || "Must be 0-100%"}</div>
+              )}
+            </div>
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <label className="block text-sm font-medium">Bankruptcy threshold</label>
+              <p className="text-xs text-slate-400 mt-1">Net worth below which simulation terminates (negative value, e.g. -100,000)</p>
+              <div className="mt-2">
+                <NumberInput control={form.control} name="assumptions.bankruptcy_threshold" placeholder="e.g. -100,000" />
+              </div>
+              {form.formState.errors.assumptions?.bankruptcy_threshold && (
+                <div className="mt-1 text-xs text-rose-400">{form.formState.errors.assumptions.bankruptcy_threshold.message || "Must be 0 or negative"}</div>
               )}
             </div>
           </div>

@@ -23,6 +23,8 @@ type Props = {
   cash_balance_median?: number[];
   total_assets_median?: number[];
   percentile?: number;
+  bankruptcy_year?: number | null;
+  debt_balance_median?: number[];
 };
 
 export function NetWorthChart({
@@ -35,7 +37,9 @@ export function NetWorthChart({
   pension_balance_median = [],
   cash_balance_median = [],
   total_assets_median = [],
-  percentile = 50
+  percentile = 50,
+  bankruptcy_year = null,
+  debt_balance_median = []
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(true);
 
@@ -56,6 +60,7 @@ export function NetWorthChart({
     const pension = sanitize(pension_balance_median[idx]);
     const cash = sanitize(cash_balance_median[idx]);
     const totalAssets = sanitize(total_assets_median[idx]);
+    const debt = sanitize(debt_balance_median[idx]);
     // GIA = total assets - ISA - pension - cash
     const gia = totalAssets - isa - pension - cash;
     
@@ -68,7 +73,8 @@ export function NetWorthChart({
       isa_balance: clampForLog(isa),
       pension_balance: clampForLog(pension),
       cash_balance: clampForLog(cash),
-      gia_balance: clampForLog(gia)
+      gia_balance: clampForLog(gia),
+      debt_balance: debt > 0 ? clampForLog(debt) : null
     };
   });
 
@@ -123,7 +129,9 @@ export function NetWorthChart({
                             ? "Pension"
                             : name === "gia_balance"
                               ? "GIA"
-                              : `${percentileLabel} net worth`;
+                              : name === "debt_balance"
+                                ? "Debt"
+                                : `${percentileLabel} net worth`;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
               labelFormatter={(label) => `Year ${label}`}
@@ -141,7 +149,9 @@ export function NetWorthChart({
                 if (value === "isa_balance") return "ISA";
                 if (value === "pension_balance") return "Pension";
                 if (value === "gia_balance") return "GIA";
+                if (value === "debt_balance") return "Debt";
                 if (value === "retirement") return "Retirement year";
+                if (value === "bankruptcy") return "First bankruptcy";
                 return value;
               }}
               contentStyle={{ color: "#e2e8f0" }}
@@ -156,6 +166,22 @@ export function NetWorthChart({
                 name="retirement"
               />
             ))}
+            {bankruptcy_year && (
+              <ReferenceLine
+                x={bankruptcy_year}
+                stroke="#ef4444"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+                yAxisId="left"
+                name="bankruptcy"
+                label={{
+                  value: "Bankruptcy",
+                  position: "top",
+                  fill: "#ef4444",
+                  fontSize: 11
+                }}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="net_worth_p10"
@@ -245,6 +271,17 @@ export function NetWorthChart({
               dot={false}
               yAxisId="left"
               name="gia_balance"
+            />
+            <Line
+              type="monotone"
+              dataKey="debt_balance"
+              stroke="#ef4444"
+              strokeWidth={2}
+              strokeDasharray="5 3"
+              dot={false}
+              yAxisId="left"
+              name="debt_balance"
+              connectNulls={false}
             />
           </ComposedChart>
         </ResponsiveContainer>

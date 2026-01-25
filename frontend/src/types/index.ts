@@ -119,7 +119,23 @@ export type SimulationResponse = {
   isa_balance_median: number[];
   pension_balance_median: number[];
   cash_balance_median: number[];
+  gia_balance_median: number[];
   total_assets_median: number[];
+
+  // Per-type investment returns
+  isa_returns_median: number[];
+  gia_returns_median: number[];
+  cash_returns_median: number[];
+  pension_returns_median: number[];
+
+  // Per-type contributions
+  isa_contributions_median: number[];
+  gia_contributions_median: number[];
+
+  // Per-type withdrawals
+  isa_withdrawals_median: number[];
+  gia_withdrawals_median: number[];
+  pension_withdrawals_median: number[];
   
   // Liabilities
   mortgage_balance_median: number[];
@@ -128,6 +144,9 @@ export type SimulationResponse = {
   // Other
   mortgage_paid_off_median: number[];  // percentage of runs where mortgage is paid off
   is_depleted_median: number[];  // percentage of runs where assets are depleted
+  is_bankrupt_median: number[];  // percentage of runs where net worth is below bankruptcy threshold
+  debt_balance_median: number[];  // median debt balance
+  debt_interest_paid_median: number[];  // median debt interest paid
 };
 
 export type SimulationInitResponse = SimulationResponse & {
