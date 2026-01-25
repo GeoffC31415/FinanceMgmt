@@ -78,6 +78,8 @@ def _build_simulation_scenario(
         cgt_rate=_coerce_float(assumptions_json.get("cgt_rate"), 0.10),
         emergency_fund_months=_coerce_float(assumptions_json.get("emergency_fund_months"), 6.0),
         pension_access_age=_coerce_int(assumptions_json.get("pension_access_age"), 55),
+        debt_interest_rate=_coerce_float(assumptions_json.get("debt_interest_rate"), 0.08),
+        bankruptcy_threshold=_coerce_float(assumptions_json.get("bankruptcy_threshold"), -100_000.0),
     )
 
     start_year = _coerce_int(assumptions_json.get("start_year"), date.today().year)
@@ -285,6 +287,9 @@ def _response_from_matrices(
         # Other (these remain as percentages of runs, not percentiles)
         mortgage_paid_off_median=percentage("mortgage_paid_off"),
         is_depleted_median=percentage("is_depleted"),
+        is_bankrupt_median=percentage("is_bankrupt"),
+        debt_balance_median=at_percentile("debt_balance"),
+        debt_interest_paid_median=at_percentile("debt_interest_paid"),
     )
 
 
@@ -374,6 +379,9 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         # Other
         mortgage_paid_off_median=get_percentage("mortgage_paid_off"),
         is_depleted_median=get_percentage("is_depleted"),
+        is_bankrupt_median=get_percentage("is_bankrupt"),
+        debt_balance_median=get_median("debt_balance"),
+        debt_interest_paid_median=get_median("debt_interest_paid"),
     )
 
 

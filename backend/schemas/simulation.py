@@ -66,6 +66,9 @@ class SimulationResponse(BaseModel):
     # Other
     mortgage_paid_off_median: list[float]  # percentage of runs where mortgage is paid off
     is_depleted_median: list[float]  # percentage of runs where assets are depleted
+    is_bankrupt_median: list[float]  # percentage of runs where net worth is below bankruptcy threshold
+    debt_balance_median: list[float]  # median debt balance
+    debt_interest_paid_median: list[float]  # median debt interest paid
 
 
 class SimulationInitRequest(BaseModel):

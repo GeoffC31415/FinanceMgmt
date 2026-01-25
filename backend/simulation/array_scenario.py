@@ -17,6 +17,8 @@ class ArrayAssumptions:
     cgt_rate: float
     emergency_fund_months: float
     pension_access_age: int
+    debt_interest_rate: float
+    bankruptcy_threshold: float
 
 
 @dataclass(frozen=True)
@@ -205,6 +207,8 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         cgt_rate=float(scenario.assumptions.cgt_rate),
         emergency_fund_months=float(scenario.assumptions.emergency_fund_months),
         pension_access_age=int(scenario.assumptions.pension_access_age),
+        debt_interest_rate=float(scenario.assumptions.debt_interest_rate),
+        bankruptcy_threshold=float(scenario.assumptions.bankruptcy_threshold),
     )
 
     return ArrayScenario(

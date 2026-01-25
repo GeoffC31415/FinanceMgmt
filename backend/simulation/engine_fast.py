@@ -57,7 +57,10 @@ F_MORTGAGE_BALANCE = 20
 F_TOTAL_LIABILITIES = 21
 F_MORTGAGE_PAID_OFF = 22
 F_IS_DEPLETED = 23
-N_FIELDS = 24
+F_IS_BANKRUPT = 24
+F_DEBT_BALANCE = 25
+F_DEBT_INTEREST_PAID = 26
+N_FIELDS = 27
 
 # Asset type codes
 ASSET_CASH = 0
@@ -211,6 +214,8 @@ def _run_monte_carlo_fast(
         cgt_rate=sc.assumptions.cgt_rate,
         emergency_fund_months=sc.assumptions.emergency_fund_months,
         pension_access_age=sc.assumptions.pension_access_age,
+        debt_interest_rate=sc.assumptions.debt_interest_rate,
+        bankruptcy_threshold=sc.assumptions.bankruptcy_threshold,
     )
 
     # Convert to dict format expected by SimulationRunMatrices
@@ -220,7 +225,7 @@ def _run_monte_carlo_fast(
         "total_expenses", "mortgage_payment", "pension_contributions", "fun_fund",
         "income_tax_paid", "ni_paid", "total_tax", "isa_balance", "pension_balance",
         "cash_balance", "total_assets", "mortgage_balance", "total_liabilities",
-        "mortgage_paid_off", "is_depleted",
+        "mortgage_paid_off", "is_depleted", "is_bankrupt", "debt_balance", "debt_interest_paid",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -395,6 +400,8 @@ if _HAS_NUMBA:
         cgt_rate: float,
         emergency_fund_months: float,
         pension_access_age: int,
+        debt_interest_rate: float,
+        bankruptcy_threshold: float,
     ) -> np.ndarray:
         """
         Main parallel simulation kernel. Each iteration runs independently.
@@ -420,8 +427,44 @@ if _HAS_NUMBA:
             it_state_pension = state_pension_annual
             it_child_costs = people_annual_cost.copy()
 
+            # Debt tracking for this iteration
+            it_debt_balance = 0.0
+            it_is_bankrupt = False
+
             for y_idx in range(n_years):
                 year = years[y_idx]
+
+                # If bankrupt, skip simulation but record frozen bankrupt state
+                if it_is_bankrupt:
+                    # Calculate totals for output (values frozen from bankruptcy year)
+                    pension_balance = 0.0
+                    for pen_idx in range(n_pensions):
+                        pension_balance += it_pension_balances[pen_idx]
+                    isa_balance = 0.0
+                    cash_balance = 0.0
+                    total_asset_balance = 0.0
+                    for a_idx in range(n_assets):
+                        total_asset_balance += it_asset_balances[a_idx]
+                        if asset_types[a_idx] == ASSET_ISA:
+                            isa_balance += it_asset_balances[a_idx]
+                        elif asset_types[a_idx] == ASSET_CASH:
+                            cash_balance += it_asset_balances[a_idx]
+                    total_assets = total_asset_balance + pension_balance
+                    total_liabilities = it_mortgage_balance + it_debt_balance
+                    net_worth = total_assets - total_liabilities
+
+                    out[it, y_idx, F_NET_WORTH] = net_worth
+                    out[it, y_idx, F_ISA_BALANCE] = isa_balance
+                    out[it, y_idx, F_PENSION_BALANCE] = pension_balance
+                    out[it, y_idx, F_CASH_BALANCE] = cash_balance
+                    out[it, y_idx, F_TOTAL_ASSETS] = total_assets
+                    out[it, y_idx, F_MORTGAGE_BALANCE] = it_mortgage_balance
+                    out[it, y_idx, F_TOTAL_LIABILITIES] = total_liabilities
+                    out[it, y_idx, F_IS_DEPLETED] = 1.0
+                    out[it, y_idx, F_IS_BANKRUPT] = 1.0
+                    out[it, y_idx, F_DEBT_BALANCE] = it_debt_balance
+                    out[it, y_idx, F_DEBT_INTEREST_PAID] = 0.0
+                    continue
 
                 # Check retirement status for each adult person (skip children)
                 is_all_retired = True
@@ -643,8 +686,9 @@ if _HAS_NUMBA:
                                 it_asset_balances[cash_idx] += gross
                                 shortfall -= gross
 
-                    # Clamp cash at 0
+                    # Track negative cash as debt (don't clamp to 0)
                     if it_asset_balances[cash_idx] < 0:
+                        it_debt_balance += abs(it_asset_balances[cash_idx])
                         it_asset_balances[cash_idx] = 0.0
 
                 # Invest excess cash
@@ -698,6 +742,10 @@ if _HAS_NUMBA:
                     pension_investment_return += inv_return
                 investment_returns += pension_investment_return
 
+                # Apply interest on debt at end of year
+                debt_interest_paid = it_debt_balance * debt_interest_rate
+                it_debt_balance += debt_interest_paid
+
                 # Calculate totals
                 pension_balance = 0.0
                 for pen_idx in range(n_pensions):
@@ -714,8 +762,12 @@ if _HAS_NUMBA:
                         cash_balance += it_asset_balances[a_idx]
 
                 total_assets = total_asset_balance + pension_balance
-                total_liabilities = it_mortgage_balance
+                total_liabilities = it_mortgage_balance + it_debt_balance
                 net_worth = total_assets - total_liabilities
+
+                # Check bankruptcy threshold
+                if net_worth < bankruptcy_threshold:
+                    it_is_bankrupt = True
 
                 total_income = salary_net + rental_income_net + gift_income_total + pension_income_net + state_pension_income
                 total_tax = income_tax + rental_income_tax + pension_income_tax + cgt_paid + ni_paid
@@ -745,6 +797,9 @@ if _HAS_NUMBA:
                 out[it, y_idx, F_TOTAL_LIABILITIES] = total_liabilities
                 out[it, y_idx, F_MORTGAGE_PAID_OFF] = 1.0 if it_mortgage_balance <= 0 else 0.0
                 out[it, y_idx, F_IS_DEPLETED] = 1.0 if total_assets <= 0 else 0.0
+                out[it, y_idx, F_IS_BANKRUPT] = 1.0 if it_is_bankrupt else 0.0
+                out[it, y_idx, F_DEBT_BALANCE] = it_debt_balance
+                out[it, y_idx, F_DEBT_INTEREST_PAID] = debt_interest_paid
 
         return out
 

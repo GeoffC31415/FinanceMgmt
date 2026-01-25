@@ -32,6 +32,8 @@ class SimulationAssumptions:
     cgt_rate: float = 0.10
     emergency_fund_months: float = 6.0
     pension_access_age: int = 55  # UK minimum private pension access age
+    debt_interest_rate: float = 0.08  # Annual interest rate on negative cash (debt)
+    bankruptcy_threshold: float = -100_000.0  # Net worth below which simulation terminates
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,9 @@ def _safe_yearly_snapshot(
     cash_flows: dict[str, float],
     tax_breakdown: dict[str, float],
     annual_spend: float,
+    is_bankrupt: bool = False,
+    debt_balance: float = 0.0,
+    debt_interest_paid: float = 0.0,
 ) -> YearlySnapshot:
     ages = {p.key: p.age_in_year(year=year) for p in people}
     is_retired = {p.key: p.is_retired_in_year(year=year) for p in people}
@@ -139,6 +144,10 @@ def _safe_yearly_snapshot(
     is_depleted = total_assets <= 0
     mortgage_paid_off = mortgage is None or mortgage.balance <= 0
 
+    # Include debt in liabilities and net worth
+    total_liabilities = mortgage_balance + debt_balance
+    net_worth = total_assets - total_liabilities
+
     return YearlySnapshot(
         year=year,
         ages=ages,
@@ -167,6 +176,9 @@ def _safe_yearly_snapshot(
         is_retired=is_retired,
         mortgage_paid_off=mortgage_paid_off,
         is_depleted=is_depleted,
+        is_bankrupt=is_bankrupt,
+        debt_balance=debt_balance,
+        debt_interest_paid=debt_interest_paid,
     )
 
 
@@ -262,7 +274,29 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         p.key: p.annual_cost for p in people if p.is_child
     }
 
+    # Debt tracking (negative cash balance represented as debt liability)
+    debt_balance = 0.0
+    is_bankrupt = False
+
     for year in range(scenario.start_year, scenario.end_year + 1):
+        # Skip simulation if already bankrupt
+        if is_bankrupt:
+            # Create a snapshot showing bankrupt state (values frozen from bankruptcy year)
+            snapshot = _safe_yearly_snapshot(
+                year=year,
+                people=people,
+                assets=assets,
+                pension_by_person=pension_by_person,
+                mortgage=mortgage,
+                cash_flows={},
+                tax_breakdown={"income_tax_paid": 0.0, "ni_paid": 0.0},
+                annual_spend=0.0,
+                is_bankrupt=True,
+                debt_balance=debt_balance,
+                debt_interest_paid=0.0,
+            )
+            snapshots.append(snapshot)
+            continue
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
         for asset in assets:
@@ -451,8 +485,9 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                                 proportion = pension.balance / current_pension_balance
                                 pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
-            # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
+            # Track negative cash as debt (don't clamp to 0)
             if primary_cash.balance < 0:
+                debt_balance += abs(primary_cash.balance)
                 primary_cash.balance = 0.0
 
         # If cash above emergency fund, save excess in tax-optimal order: ISA (to limit) then GIA
@@ -494,6 +529,21 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
         for pension in pension_by_person.values():
             pension.step(context=context)
 
+        # Apply interest on debt at end of year
+        debt_interest_paid = debt_balance * scenario.assumptions.debt_interest_rate
+        debt_balance += debt_interest_paid
+
+        # Calculate net worth to check bankruptcy
+        pension_balance = sum(p.balance for p in pension_by_person.values())
+        mortgage_balance = mortgage.balance if mortgage is not None else 0.0
+        total_assets = sum(a.balance for a in assets) + pension_balance
+        total_liabilities = mortgage_balance + debt_balance
+        net_worth = total_assets - total_liabilities
+
+        # Check bankruptcy threshold
+        if net_worth < scenario.assumptions.bankruptcy_threshold:
+            is_bankrupt = True
+
         # Collect cash flows from all assets
         asset_cash_flows = {}
         for asset in assets:
@@ -528,6 +578,9 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
             cash_flows=cash_flows,
             tax_breakdown=tax_out,
             annual_spend=extra_retirement_spend,
+            is_bankrupt=is_bankrupt,
+            debt_balance=debt_balance,
+            debt_interest_paid=debt_interest_paid,
         )
         snapshots.append(snapshot)
 
@@ -578,6 +631,9 @@ def run_with_cached_returns(
         "total_liabilities",
         "mortgage_paid_off",
         "is_depleted",
+        "is_bankrupt",
+        "debt_balance",
+        "debt_interest_paid",
     ]
 
     out: dict[str, np.ndarray] = {name: np.zeros((iterations, len(years)), dtype=np.float64) for name in field_names}
@@ -677,7 +733,35 @@ def _simulate_single_run_to_matrices(
         p.key: p.annual_cost for p in people if p.is_child
     }
 
+    # Debt tracking
+    debt_balance = 0.0
+    is_bankrupt = False
+
     for year_idx, year in enumerate(range(scenario.start_year, scenario.end_year + 1)):
+        # Skip simulation if already bankrupt
+        if is_bankrupt:
+            # Store bankrupt state for remaining years
+            pension_balance = sum(p.balance for p in pension_by_person.values())
+            mortgage_balance = mortgage.balance if mortgage is not None else 0.0
+            isa_balance = sum(a.balance for a in assets if a.asset_type == "ISA")
+            cash_balance = sum(a.balance for a in assets if a.asset_type == "CASH")
+            total_assets = sum(a.balance for a in assets) + pension_balance
+            total_liabilities = mortgage_balance + debt_balance
+            net_worth = total_assets - total_liabilities
+
+            out["net_worth"][iteration_idx, year_idx] = net_worth
+            out["isa_balance"][iteration_idx, year_idx] = isa_balance
+            out["pension_balance"][iteration_idx, year_idx] = pension_balance
+            out["cash_balance"][iteration_idx, year_idx] = cash_balance
+            out["total_assets"][iteration_idx, year_idx] = total_assets
+            out["mortgage_balance"][iteration_idx, year_idx] = mortgage_balance
+            out["total_liabilities"][iteration_idx, year_idx] = total_liabilities
+            out["is_depleted"][iteration_idx, year_idx] = 1.0
+            out["is_bankrupt"][iteration_idx, year_idx] = 1.0
+            out["debt_balance"][iteration_idx, year_idx] = debt_balance
+            out["debt_interest_paid"][iteration_idx, year_idx] = 0.0
+            continue
+
         context = SimContext(year=year, inflation_rate=scenario.assumptions.inflation_rate, rng=rng)
 
         for asset in assets:
@@ -858,8 +942,9 @@ def _simulate_single_run_to_matrices(
                                 proportion = pension.balance / current_pension_balance
                                 pension.withdraw(amount=drawdown_result.gross_withdrawal * proportion)
 
-            # Clamp cash at 0 if we couldn't cover everything (emergency fund depleted)
+            # Track negative cash as debt (don't clamp to 0)
             if primary_cash.balance < 0:
+                debt_balance += abs(primary_cash.balance)
                 primary_cash.balance = 0.0
 
         # If cash above emergency fund, save excess in tax-optimal order: ISA (to limit) then GIA
@@ -896,14 +981,22 @@ def _simulate_single_run_to_matrices(
         for pension in pension_by_person.values():
             pension.step(context=context)
 
+        # Apply interest on debt at end of year
+        debt_interest_paid = debt_balance * scenario.assumptions.debt_interest_rate
+        debt_balance += debt_interest_paid
+
         pension_balance = sum(p.balance for p in pension_by_person.values())
         mortgage_balance = mortgage.balance if mortgage is not None else 0.0
 
         isa_balance = sum(a.balance for a in assets if a.asset_type == "ISA")
         cash_balance = sum(a.balance for a in assets if a.asset_type == "CASH")
         total_assets = sum(a.balance for a in assets) + pension_balance
-        total_liabilities = mortgage_balance
+        total_liabilities = mortgage_balance + debt_balance
         net_worth = total_assets - total_liabilities
+
+        # Check bankruptcy threshold
+        if net_worth < scenario.assumptions.bankruptcy_threshold:
+            is_bankrupt = True
 
         pension_investment_return = sum(p.get_cash_flows().get("pension_investment_return", 0.0) for p in pension_by_person.values())
         investment_returns = sum(a.get_cash_flows().get(f"{a.name}_investment_return", 0.0) for a in assets) + pension_investment_return
@@ -944,5 +1037,8 @@ def _simulate_single_run_to_matrices(
         out["total_liabilities"][iteration_idx, year_idx] = total_liabilities
         out["mortgage_paid_off"][iteration_idx, year_idx] = 1.0 if mortgage_paid_off else 0.0
         out["is_depleted"][iteration_idx, year_idx] = 1.0 if is_depleted else 0.0
+        out["is_bankrupt"][iteration_idx, year_idx] = 1.0 if is_bankrupt else 0.0
+        out["debt_balance"][iteration_idx, year_idx] = debt_balance
+        out["debt_interest_paid"][iteration_idx, year_idx] = debt_interest_paid
 
 
