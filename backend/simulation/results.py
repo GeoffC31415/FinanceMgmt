@@ -39,6 +39,9 @@ class YearlySnapshot:
     is_retired: dict[str, bool]
     mortgage_paid_off: bool
     is_depleted: bool
+    is_bankrupt: bool
+    debt_balance: float
+    debt_interest_paid: float
 
 
 @dataclass(frozen=True)
