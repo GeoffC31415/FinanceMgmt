@@ -3,6 +3,7 @@ import { NetWorthChart } from "./charts/NetWorthChart";
 import { ExpensesChart } from "./charts/ExpensesChart";
 import { IncomeChart } from "./charts/IncomeChart";
 import { AssetsChart } from "./charts/AssetsChart";
+import { AssetDetailChart } from "./charts/AssetDetailChart";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 import type { SimulationResponse } from "../types";
@@ -57,9 +58,21 @@ function applyInflationAdjustment(result: SimulationResponse): SimulationRespons
     isa_balance_median: adjust(result.isa_balance_median),
     pension_balance_median: adjust(result.pension_balance_median),
     cash_balance_median: adjust(result.cash_balance_median),
+    gia_balance_median: adjust(result.gia_balance_median),
     total_assets_median: adjust(result.total_assets_median),
+    isa_returns_median: adjust(result.isa_returns_median),
+    gia_returns_median: adjust(result.gia_returns_median),
+    cash_returns_median: adjust(result.cash_returns_median),
+    pension_returns_median: adjust(result.pension_returns_median),
+    isa_contributions_median: adjust(result.isa_contributions_median),
+    gia_contributions_median: adjust(result.gia_contributions_median),
+    isa_withdrawals_median: adjust(result.isa_withdrawals_median),
+    gia_withdrawals_median: adjust(result.gia_withdrawals_median),
+    pension_withdrawals_median: adjust(result.pension_withdrawals_median),
     mortgage_balance_median: adjust(result.mortgage_balance_median),
     total_liabilities_median: adjust(result.total_liabilities_median),
+    debt_balance_median: adjust(result.debt_balance_median),
+    debt_interest_paid_median: adjust(result.debt_interest_paid_median),
     // Percentage fields don't get adjusted
   };
 }
@@ -126,6 +139,47 @@ export function Dashboard() {
     }
     return null;
   }, [display_result]);
+
+  // Calculate bankruptcy info
+  // - first_year_any: first year where any runs go bankrupt (for header warning)
+  // - first_year_at_percentile: first year where bankruptcy occurs at the selected percentile (for chart marker)
+  // - final_pct: final bankruptcy percentage (for header indicator)
+  const bankruptcy_info = useMemo(() => {
+    if (!display_result) return null;
+    const { years, is_bankrupt_median } = display_result;
+    if (!is_bankrupt_median || is_bankrupt_median.length === 0) return null;
+    
+    // Find first year where any runs go bankrupt (>0%) - for header warning
+    let first_year_any: number | null = null;
+    for (let i = 0; i < years.length; i++) {
+      if (is_bankrupt_median[i] > 0) {
+        first_year_any = years[i];
+        break;
+      }
+    }
+    
+    // Find first year where bankruptcy rate >= selected percentile (for chart marker)
+    // At P10 (pessimistic), show when 10%+ are bankrupt
+    // At P50 (median), show when 50%+ are bankrupt
+    // At P90 (optimistic), show when 90%+ are bankrupt
+    let first_year_at_percentile: number | null = null;
+    for (let i = 0; i < years.length; i++) {
+      if (is_bankrupt_median[i] >= percentile) {
+        first_year_at_percentile = years[i];
+        break;
+      }
+    }
+    
+    // Get final bankruptcy percentage
+    const lastIdx = years.length - 1;
+    const final_pct = lastIdx >= 0 ? is_bankrupt_median[lastIdx] : 0;
+    
+    return {
+      first_year_any,
+      first_year_at_percentile,
+      final_pct
+    };
+  }, [display_result, percentile]);
 
   // Initialize cached simulation session when scenario or end_year changes.
   // end_year changes require full re-init since the x-axis (timeline) changes.
@@ -206,6 +260,9 @@ export function Dashboard() {
       // Other
       "mortgage_paid_off_median_pct",
       "is_depleted_median_pct",
+      "is_bankrupt_median_pct",
+      "debt_balance_median",
+      "debt_interest_paid_median",
     ];
     
     const rows = result.years.map((year, idx) => [
@@ -247,6 +304,9 @@ export function Dashboard() {
       // Other
       getValue(result.mortgage_paid_off_median, idx),
       getValue(result.is_depleted_median, idx),
+      getValue(result.is_bankrupt_median, idx),
+      getValue(result.debt_balance_median, idx),
+      getValue(result.debt_interest_paid_median, idx),
     ]);
     
     const lines = [headers.join(","), ...rows.map((row) => row.join(","))];
@@ -399,6 +459,7 @@ export function Dashboard() {
             const lastIdx = result.years.length - 1;
             const depletionPct = lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
             const finalP10 = lastIdx >= 0 ? result.net_worth_p10[lastIdx] : 0;
+            const bankruptcyPct = bankruptcy_info?.final_pct ?? 0;
             const depletionColor = depletionPct === 0 
               ? "text-emerald-400" 
               : depletionPct < 10 
@@ -407,6 +468,11 @@ export function Dashboard() {
             const p10Color = finalP10 > 0 
               ? "text-emerald-400" 
               : "text-rose-400";
+            const bankruptcyColor = bankruptcyPct === 0
+              ? "text-emerald-400"
+              : bankruptcyPct < 5
+                ? "text-amber-400"
+                : "text-rose-400";
             return (
               <div className="flex items-center gap-4 text-xs">
                 <div 
@@ -425,6 +491,20 @@ export function Dashboard() {
                   <span className="text-slate-400">P10 final:</span>
                   <span className="font-semibold">
                     £{Math.round(finalP10).toLocaleString()}
+                  </span>
+                </div>
+                <div 
+                  className={`flex items-center gap-2 ${bankruptcyColor}`}
+                  title={`${bankruptcyPct.toFixed(1)}% of simulations hit the bankruptcy threshold (net worth below -£100k). ${bankruptcy_info?.first_year_any ? `First bankruptcy in ${bankruptcy_info.first_year_any}.` : ''}`}
+                >
+                  <span className="text-slate-400">Bankruptcy risk:</span>
+                  <span className="font-semibold">
+                    {bankruptcyPct === 0 ? "0%" : `${bankruptcyPct.toFixed(1)}%`}
+                    {bankruptcy_info?.first_year_any && (
+                      <span className="ml-1 text-slate-500">
+                        (from {bankruptcy_info.first_year_any})
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -473,6 +553,23 @@ export function Dashboard() {
 
       {display_result && (
         <div className="space-y-6">
+          {bankruptcy_info && bankruptcy_info.final_pct > 0 && (
+            <div className="rounded border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-rose-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+                <span>
+                  <strong>Bankruptcy Warning:</strong>{" "}
+                  {bankruptcy_info.final_pct.toFixed(1)}% of simulations hit the bankruptcy threshold
+                  {bankruptcy_info.first_year_any && (
+                    <span> (first occurrence in {bankruptcy_info.first_year_any})</span>
+                  )}
+                  . Consider reducing retirement spending, delaying retirement, or increasing savings.
+                </span>
+              </div>
+            </div>
+          )}
           {percentile !== 50 && (
             <div className="rounded border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
               <strong>Viewing {percentile}th percentile:</strong>{" "}
@@ -498,6 +595,8 @@ export function Dashboard() {
             cash_balance_median={display_result.cash_balance_median}
             total_assets_median={display_result.total_assets_median}
             percentile={percentile}
+            bankruptcy_year={bankruptcy_info?.first_year_at_percentile}
+            debt_balance_median={display_result.debt_balance_median}
           />
           <ExpensesChart
             years={display_result.years}
@@ -532,6 +631,27 @@ export function Dashboard() {
             total_assets_median={display_result.total_assets_median}
             retirement_years={display_result.retirement_years}
             percentile={percentile}
+          />
+          <AssetDetailChart
+            years={display_result.years}
+            retirement_years={display_result.retirement_years}
+            percentile={percentile}
+            isa_balance_median={display_result.isa_balance_median}
+            gia_balance_median={display_result.gia_balance_median}
+            cash_balance_median={display_result.cash_balance_median}
+            pension_balance_median={display_result.pension_balance_median}
+            debt_balance_median={display_result.debt_balance_median}
+            pension_contributions_median={display_result.pension_contributions_median}
+            debt_interest_paid_median={display_result.debt_interest_paid_median}
+            isa_returns_median={display_result.isa_returns_median}
+            gia_returns_median={display_result.gia_returns_median}
+            cash_returns_median={display_result.cash_returns_median}
+            pension_returns_median={display_result.pension_returns_median}
+            isa_contributions_median={display_result.isa_contributions_median}
+            gia_contributions_median={display_result.gia_contributions_median}
+            isa_withdrawals_median={display_result.isa_withdrawals_median}
+            gia_withdrawals_median={display_result.gia_withdrawals_median}
+            pension_withdrawals_median={display_result.pension_withdrawals_median}
           />
         </div>
       )}

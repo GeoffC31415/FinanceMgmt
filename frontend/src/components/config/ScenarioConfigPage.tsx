@@ -131,7 +131,9 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     pension_access_age: 55,
     start_year: new Date().getFullYear(),
     end_year: new Date().getFullYear() + 60,
-    annual_spend_target: 30000
+    annual_spend_target: 30000,
+    debt_interest_rate: 0.08,
+    bankruptcy_threshold: -100000
   },
   people: [
     {
