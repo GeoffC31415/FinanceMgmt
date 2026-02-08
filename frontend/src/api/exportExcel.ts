@@ -4,7 +4,7 @@ import type { SimulationResponse } from "../types";
 /** Column definition with group membership for coloring */
 type ColDef = {
   header: string;
-  key: keyof SimulationResponse;
+  key: keyof SimulationResponse | string;
   format: "currency" | "percent" | "year";
 };
 
@@ -53,6 +53,17 @@ const COLUMN_GROUPS: ColGroup[] = [
       { header: "Mortgage Payment", key: "mortgage_payment_median", format: "currency" },
       { header: "Pension Contributions", key: "pension_contributions_median", format: "currency" },
       { header: "Fun Fund", key: "fun_fund_median", format: "currency" },
+    ],
+  },
+  {
+    label: "Funding Sources",
+    fill: "FF7c3aed",      // violet-600
+    fill_light: "FF2e1065", // violet-950
+    columns: [
+      { header: "Income %", key: "_funding_income_pct", format: "percent" },
+      { header: "ISA %", key: "_funding_isa_pct", format: "percent" },
+      { header: "GIA %", key: "_funding_gia_pct", format: "percent" },
+      { header: "Pension %", key: "_funding_pension_pct", format: "percent" },
     ],
   },
   {
@@ -169,6 +180,37 @@ export async function exportExcel(
   const all_cols = COLUMN_GROUPS.flatMap((g) => g.columns);
   const n_years = result.years.length;
 
+  // Compute funding source percentages (where did each year's money come from?)
+  const computed: Record<string, number[]> = {
+    _funding_income_pct: [],
+    _funding_isa_pct: [],
+    _funding_gia_pct: [],
+    _funding_pension_pct: [],
+  };
+  for (let i = 0; i < n_years; i++) {
+    const income =
+      (result.salary_net_median[i] ?? 0) +
+      (result.rental_income_median[i] ?? 0) +
+      (result.gift_income_median[i] ?? 0) +
+      (result.state_pension_income_median[i] ?? 0);
+    const isa = result.isa_withdrawals_median[i] ?? 0;
+    const gia = result.gia_withdrawals_median[i] ?? 0;
+    const pension = result.pension_income_median[i] ?? 0;
+    const total = income + isa + gia + pension;
+
+    if (total > 0) {
+      computed._funding_income_pct.push((income / total) * 100);
+      computed._funding_isa_pct.push((isa / total) * 100);
+      computed._funding_gia_pct.push((gia / total) * 100);
+      computed._funding_pension_pct.push((pension / total) * 100);
+    } else {
+      computed._funding_income_pct.push(0);
+      computed._funding_isa_pct.push(0);
+      computed._funding_gia_pct.push(0);
+      computed._funding_pension_pct.push(0);
+    }
+  }
+
   // ── Row 1: Group headers (merged) ──
   const group_row = ws.getRow(1);
   group_row.height = 24;
@@ -235,7 +277,8 @@ export async function exportExcel(
     let group_idx = 0;
     for (const group of COLUMN_GROUPS) {
       for (const col of group.columns) {
-        const arr = result[col.key] as number[] | undefined;
+        const arr = (computed[col.key] ??
+          result[col.key as keyof SimulationResponse]) as number[] | undefined;
         const value = arr?.[row_idx] ?? 0;
         const cell = ws.getCell(excel_row, col_offset);
 
