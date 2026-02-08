@@ -112,3 +112,24 @@ class SimulationRecalcRequest(BaseModel):
 
     # Engine selection (True = Numba fast engine, False = Python reference engine)
     use_fast_engine: bool = Field(default=True)
+
+
+class SafeWithdrawalRequest(BaseModel):
+    session_id: str
+    retirement_age_offset: int = Field(default=0, ge=-30, le=30)
+    risk_threshold: float = Field(default=5.0, ge=0.0, le=100.0)  # max acceptable bankruptcy %
+    max_spend: float = Field(default=200_000.0, ge=0.0)
+    steps: int = Field(default=25, ge=5, le=50)
+
+
+class SensitivityPoint(BaseModel):
+    fun_fund: float
+    bankruptcy_pct: float
+    depletion_pct: float
+    p10_final_net_worth: float
+
+
+class SafeWithdrawalResponse(BaseModel):
+    max_safe_fun_fund: float
+    risk_threshold: float
+    sensitivity_curve: list[SensitivityPoint]

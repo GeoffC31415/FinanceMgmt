@@ -171,6 +171,7 @@ def _run_monte_carlo_fast(
             break
 
     # Call the Numba kernel
+    a = sc.assumptions
     out = _simulate_all_iterations(
         iterations=iterations,
         n_years=n_years,
@@ -227,15 +228,26 @@ def _run_monte_carlo_fast(
         withdrawal_is_pension=withdrawal_is_pension,
         withdrawal_asset_idx=withdrawal_asset_idx,
         # Assumptions
-        inflation_rate=sc.assumptions.inflation_rate,
-        isa_annual_limit=sc.assumptions.isa_annual_limit,
-        state_pension_annual=sc.assumptions.state_pension_annual,
-        cgt_annual_allowance=sc.assumptions.cgt_annual_allowance,
-        cgt_rate=sc.assumptions.cgt_rate,
-        emergency_fund_months=sc.assumptions.emergency_fund_months,
-        pension_access_age=sc.assumptions.pension_access_age,
-        debt_interest_rate=sc.assumptions.debt_interest_rate,
-        bankruptcy_threshold=sc.assumptions.bankruptcy_threshold,
+        inflation_rate=a.inflation_rate,
+        isa_annual_limit=a.isa_annual_limit,
+        state_pension_annual=a.state_pension_annual,
+        cgt_annual_allowance=a.cgt_annual_allowance,
+        cgt_rate=a.cgt_rate,
+        emergency_fund_months=a.emergency_fund_months,
+        pension_access_age=a.pension_access_age,
+        debt_interest_rate=a.debt_interest_rate,
+        bankruptcy_threshold=a.bankruptcy_threshold,
+        # Tax bands (configurable per scenario)
+        personal_allowance=a.personal_allowance,
+        basic_rate_limit=a.basic_rate_limit,
+        higher_rate_limit=a.higher_rate_limit,
+        basic_rate=a.basic_rate,
+        higher_rate=a.higher_rate,
+        additional_rate=a.additional_rate,
+        ni_primary_threshold=a.ni_primary_threshold,
+        ni_upper_earnings_limit=a.ni_upper_earnings_limit,
+        ni_main_rate=a.ni_main_rate,
+        ni_upper_rate=a.ni_upper_rate,
     )
 
     # Convert to dict format expected by SimulationRunMatrices
@@ -257,66 +269,70 @@ def _run_monte_carlo_fast(
 
 if _HAS_NUMBA:
     @njit(cache=True)
-    def _calculate_income_tax(taxable_income: float) -> float:
+    def _calculate_income_tax(
+        taxable_income: float,
+        pa: float, brl: float, hrl: float,
+        br: float, hr: float, ar: float,
+    ) -> float:
         if taxable_income <= 0:
             return 0.0
 
         remaining = taxable_income
         tax = 0.0
 
-        allowance = min(remaining, PERSONAL_ALLOWANCE)
+        allowance = min(remaining, pa)
         remaining -= allowance
         if remaining <= 0:
             return 0.0
 
-        basic_band = max(0.0, BASIC_RATE_LIMIT - PERSONAL_ALLOWANCE)
+        basic_band = max(0.0, brl - pa)
         basic_amount = min(remaining, basic_band)
-        tax += basic_amount * BASIC_RATE
+        tax += basic_amount * br
         remaining -= basic_amount
         if remaining <= 0:
             return tax
 
-        higher_band = max(0.0, HIGHER_RATE_LIMIT - BASIC_RATE_LIMIT)
+        higher_band = max(0.0, hrl - brl)
         higher_amount = min(remaining, higher_band)
-        tax += higher_amount * HIGHER_RATE
+        tax += higher_amount * hr
         remaining -= higher_amount
         if remaining <= 0:
             return tax
 
-        tax += remaining * ADDITIONAL_RATE
+        tax += remaining * ar
         return tax
 
     @njit(cache=True)
-    def _calculate_ni(gross_annual: float) -> float:
-        if gross_annual <= NI_PRIMARY_THRESHOLD:
+    def _calculate_ni(
+        gross_annual: float,
+        ni_pt: float, ni_uel: float, ni_mr: float, ni_ur: float,
+    ) -> float:
+        if gross_annual <= ni_pt:
             return 0.0
-        main_amount = min(gross_annual, NI_UPPER_LIMIT) - NI_PRIMARY_THRESHOLD
-        upper_amount = max(0.0, gross_annual - NI_UPPER_LIMIT)
-        return main_amount * NI_MAIN_RATE + upper_amount * NI_UPPER_RATE
+        main_amount = min(gross_annual, ni_uel) - ni_pt
+        upper_amount = max(0.0, gross_annual - ni_uel)
+        return main_amount * ni_mr + upper_amount * ni_ur
 
     @njit(cache=True)
     def _calculate_pension_drawdown(
         target_net: float,
         other_taxable: float,
         pension_balance: float,
+        pa: float, brl: float, hrl: float,
+        br: float, hr: float, ar: float,
     ) -> tuple:
         """Returns (gross_withdrawal, tax_paid, net_income)"""
         if target_net <= 0 or pension_balance <= 0:
             return 0.0, 0.0, 0.0
 
-        # Closed-form solve for gross withdrawal needed
-        # 25% is tax-free, 75% is taxable
-        # net = gross - tax_on_75%
-        
-        # Binary search fallback for accuracy (but only ~10 iterations needed)
         low = 0.0
         high = min(pension_balance, target_net * 2.0)
         
         for _ in range(20):
             gross = (low + high) / 2.0
             taxable = gross * 0.75
-            total_tax = _calculate_income_tax(other_taxable + taxable)
-            base_tax = _calculate_income_tax(other_taxable)
+            total_tax = _calculate_income_tax(other_taxable + taxable, pa, brl, hrl, br, hr, ar)
+            base_tax = _calculate_income_tax(other_taxable, pa, brl, hrl, br, hr, ar)
             pension_tax = total_tax - base_tax
             net = gross - pension_tax
             
@@ -330,8 +346,8 @@ if _HAS_NUMBA:
         if gross > pension_balance:
             gross = pension_balance
             taxable = gross * 0.75
-            total_tax = _calculate_income_tax(other_taxable + taxable)
-            base_tax = _calculate_income_tax(other_taxable)
+            total_tax = _calculate_income_tax(other_taxable + taxable, pa, brl, hrl, br, hr, ar)
+            base_tax = _calculate_income_tax(other_taxable, pa, brl, hrl, br, hr, ar)
             pension_tax = total_tax - base_tax
             net = gross - pension_tax
 
@@ -427,6 +443,17 @@ if _HAS_NUMBA:
         pension_access_age: int,
         debt_interest_rate: float,
         bankruptcy_threshold: float,
+        # Tax bands (configurable)
+        personal_allowance: float,
+        basic_rate_limit: float,
+        higher_rate_limit: float,
+        basic_rate: float,
+        higher_rate: float,
+        additional_rate: float,
+        ni_primary_threshold: float,
+        ni_upper_earnings_limit: float,
+        ni_main_rate: float,
+        ni_upper_rate: float,
     ) -> np.ndarray:
         """
         Main parallel simulation kernel. Each iteration runs independently.
@@ -565,12 +592,12 @@ if _HAS_NUMBA:
 
                 # Calculate tax on salary
                 taxable_salary = max(0.0, salary_gross_total - employee_pension_total)
-                income_tax = _calculate_income_tax(taxable_salary)
-                ni_paid = _calculate_ni(salary_gross_total)
+                income_tax = _calculate_income_tax(taxable_salary, personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate)
+                ni_paid = _calculate_ni(salary_gross_total, ni_primary_threshold, ni_upper_earnings_limit, ni_main_rate, ni_upper_rate)
                 salary_net = salary_gross_total - income_tax - ni_paid - employee_pension_total
 
                 # Calculate tax on rental income (marginal, no NI)
-                rental_income_tax = _calculate_income_tax(taxable_salary + rental_income_gross) - _calculate_income_tax(taxable_salary)
+                rental_income_tax = _calculate_income_tax(taxable_salary + rental_income_gross, personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate) - _calculate_income_tax(taxable_salary, personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate)
                 rental_income_net = rental_income_gross - rental_income_tax
 
                 # Mortgage payment
@@ -652,7 +679,8 @@ if _HAS_NUMBA:
 
                             if eligible_pension_balance > 0:
                                 gross, tax, net = _calculate_pension_drawdown(
-                                    shortfall, state_pension_income, eligible_pension_balance
+                                    shortfall, state_pension_income, eligible_pension_balance,
+                                    personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate,
                                 )
                                 pension_income_net += net
                                 pension_income_tax += tax
@@ -749,7 +777,8 @@ if _HAS_NUMBA:
                             if eligible_pension_balance > 0:
                                 # Calculate how much we need to withdraw (gross) to get enough net to repay debt
                                 gross, tax, net = _calculate_pension_drawdown(
-                                    debt_to_repay, state_pension_income + pension_income_net, eligible_pension_balance
+                                    debt_to_repay, state_pension_income + pension_income_net, eligible_pension_balance,
+                                    personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate,
                                 )
                                 if net > 0:
                                     # Use the net to pay down debt

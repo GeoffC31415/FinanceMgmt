@@ -1,4 +1,6 @@
 import type {
+  SafeWithdrawalRequest,
+  SafeWithdrawalResponse,
   ScenarioCreate,
   ScenarioRead,
   SimulationInitRequest,
@@ -51,6 +53,24 @@ export async function list_scenarios(): Promise<ScenarioRead[]> {
   return await http<ScenarioRead[]>("/config/scenarios");
 }
 
+export type TaxYearPreset = {
+  tax_year: string;
+  personal_allowance: number;
+  basic_rate_limit: number;
+  higher_rate_limit: number;
+  basic_rate: number;
+  higher_rate: number;
+  additional_rate: number;
+  ni_primary_threshold: number;
+  ni_upper_earnings_limit: number;
+  ni_main_rate: number;
+  ni_upper_rate: number;
+};
+
+export async function list_tax_years(): Promise<TaxYearPreset[]> {
+  return await http<TaxYearPreset[]>("/config/tax-years");
+}
+
 export async function get_scenario(scenario_id: string): Promise<ScenarioRead> {
   return await http<ScenarioRead>(`/config/scenarios/${scenario_id}`);
 }
@@ -89,6 +109,13 @@ export async function init_simulation(payload: SimulationInitRequest): Promise<S
 
 export async function recalc_simulation(payload: SimulationRecalcRequest): Promise<SimulationResponse> {
   return await http<SimulationResponse>("/simulation/recalc", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function safe_withdrawal(payload: SafeWithdrawalRequest): Promise<SafeWithdrawalResponse> {
+  return await http<SafeWithdrawalResponse>("/simulation/safe-withdrawal", {
     method: "POST",
     body: JSON.stringify(payload)
   });

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { ScenarioCreate, ScenarioRead } from "../../types";
+import { list_tax_years, type TaxYearPreset } from "../../api/client";
 
 function parse_number_input(raw: string): number {
   const cleaned = raw.replace(/,/g, "").trim();
@@ -132,6 +133,48 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
+function TaxYearSelector({ value, onChange }: { value?: string; onChange: (year: string) => void }) {
+  const [presets, setPresets] = useState<TaxYearPreset[]>([]);
+  const [is_loading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    list_tax_years()
+      .then(setPresets)
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const selected = presets.find((p) => p.tax_year === value);
+
+  return (
+    <div className="space-y-2">
+      <select
+        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={is_loading}
+      >
+        {!value && <option value="">Select tax year...</option>}
+        {presets.map((p) => (
+          <option key={p.tax_year} value={p.tax_year}>
+            {p.tax_year}
+          </option>
+        ))}
+      </select>
+      {selected && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 rounded border border-slate-800 bg-slate-950/50 p-3">
+          <div>Personal allowance: <span className="text-slate-200">£{selected.personal_allowance.toLocaleString()}</span></div>
+          <div>Basic rate ({(selected.basic_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.basic_rate_limit.toLocaleString()}</span></div>
+          <div>Higher rate ({(selected.higher_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.higher_rate_limit.toLocaleString()}</span></div>
+          <div>Additional rate: <span className="text-slate-200">{(selected.additional_rate * 100).toFixed(0)}%</span></div>
+          <div>NI main rate: <span className="text-slate-200">{(selected.ni_main_rate * 100).toFixed(1)}%</span></div>
+          <div>NI upper rate: <span className="text-slate-200">{(selected.ni_upper_rate * 100).toFixed(1)}%</span></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const schema = z.object({
   name: z.string().min(1).max(200),
   assumptions: z.object({
@@ -143,7 +186,8 @@ const schema = z.object({
     end_year: z.coerce.number().int().min(1900).max(2200),
     annual_spend_target: z.coerce.number().min(0),
     debt_interest_rate: z.coerce.number().min(0).max(1),
-    bankruptcy_threshold: z.coerce.number().max(0)
+    bankruptcy_threshold: z.coerce.number().max(0),
+    tax_year: z.string().optional(),
   }),
   people: z
     .array(
@@ -424,6 +468,18 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "assumptions" && (
           <div className="grid gap-4 md:grid-cols-2">
+            {/* Tax Year Selector */}
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4 md:col-span-2">
+              <label className="block text-sm font-medium">Tax Year</label>
+              <p className="text-xs text-slate-400 mt-1">Select a UK tax year to use for income tax and NI calculations. Bands are applied throughout the simulation.</p>
+              <div className="mt-2">
+                <TaxYearSelector
+                  value={form.getValues("assumptions.tax_year") as string | undefined}
+                  onChange={(year) => form.setValue("assumptions.tax_year", year, { shouldDirty: true })}
+                />
+              </div>
+            </div>
+
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
               <label className="block text-sm font-medium">Inflation rate</label>
               <div className="mt-1">

@@ -35,6 +35,18 @@ class SimulationAssumptions:
     debt_interest_rate: float = 0.08  # Annual interest rate on negative cash (debt)
     bankruptcy_threshold: float = -100_000.0  # Net worth below which simulation terminates
 
+    # Configurable tax bands (default: UK 2024/25)
+    personal_allowance: float = 12_570.0
+    basic_rate_limit: float = 50_270.0
+    higher_rate_limit: float = 125_140.0
+    basic_rate: float = 0.20
+    higher_rate: float = 0.40
+    additional_rate: float = 0.45
+    ni_primary_threshold: float = 12_570.0
+    ni_upper_earnings_limit: float = 50_270.0
+    ni_main_rate: float = 0.08
+    ni_upper_rate: float = 0.02
+
 
 @dataclass(frozen=True)
 class SimulationScenario:
@@ -201,7 +213,25 @@ def run_monte_carlo(
 
 def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResult:
     rng = np.random.default_rng(seed)
-    tax = TaxCalculator()
+    from backend.simulation.tax.income_tax import IncomeTaxBands
+    from backend.simulation.tax.national_insurance import NationalInsuranceBands
+    a = scenario.assumptions
+    tax = TaxCalculator(
+        income_tax_bands=IncomeTaxBands(
+            personal_allowance=a.personal_allowance,
+            basic_rate_limit=a.basic_rate_limit,
+            higher_rate_limit=a.higher_rate_limit,
+            basic_rate=a.basic_rate,
+            higher_rate=a.higher_rate,
+            additional_rate=a.additional_rate,
+        ),
+        ni_bands=NationalInsuranceBands(
+            primary_threshold=a.ni_primary_threshold,
+            upper_earnings_limit=a.ni_upper_earnings_limit,
+            main_rate=a.ni_main_rate,
+            upper_rate=a.ni_upper_rate,
+        ),
+    )
 
     # Clone entity state per run (keep it simple: copy scalars)
     people = [PersonEntity(**p.__dict__) for p in scenario.people]
@@ -474,6 +504,7 @@ def _simulate_single_run(*, scenario: SimulationScenario, seed: int) -> RunResul
                             target_net_income=remaining_shortfall,
                             other_taxable_income=state_pension_income,
                             pension_balance=current_pension_balance,
+                            bands=tax.income_tax_bands,
                         )
                         pension_income_net += drawdown_result.net_income
                         pension_income_tax += drawdown_result.tax_paid
@@ -659,7 +690,25 @@ def _simulate_single_run_to_matrices(
 ) -> None:
     # Deterministic context; all stochasticity comes from `returns`.
     rng = np.random.default_rng(0)
-    tax = TaxCalculator()
+    from backend.simulation.tax.income_tax import IncomeTaxBands
+    from backend.simulation.tax.national_insurance import NationalInsuranceBands
+    a = scenario.assumptions
+    tax = TaxCalculator(
+        income_tax_bands=IncomeTaxBands(
+            personal_allowance=a.personal_allowance,
+            basic_rate_limit=a.basic_rate_limit,
+            higher_rate_limit=a.higher_rate_limit,
+            basic_rate=a.basic_rate,
+            higher_rate=a.higher_rate,
+            additional_rate=a.additional_rate,
+        ),
+        ni_bands=NationalInsuranceBands(
+            primary_threshold=a.ni_primary_threshold,
+            upper_earnings_limit=a.ni_upper_earnings_limit,
+            main_rate=a.ni_main_rate,
+            upper_rate=a.ni_upper_rate,
+        ),
+    )
 
     people = [PersonEntity(**p.__dict__) for p in scenario.people]
     salary_by_person = {k: [SalaryIncome(**s.__dict__) for s in v] for k, v in scenario.salary_by_person.items()}
@@ -931,6 +980,7 @@ def _simulate_single_run_to_matrices(
                             target_net_income=remaining_shortfall,
                             other_taxable_income=state_pension_income,
                             pension_balance=current_pension_balance,
+                            bands=tax.income_tax_bands,
                         )
                         pension_income_net += drawdown_result.net_income
                         pension_income_tax += drawdown_result.tax_paid

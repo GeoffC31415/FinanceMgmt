@@ -10,6 +10,9 @@ from sqlalchemy.orm import selectinload
 from backend.dependencies import get_db_session
 from backend.models import Asset, Expense, Income, Mortgage, Person, Scenario
 from backend.schemas.simulation import (
+    SafeWithdrawalRequest,
+    SafeWithdrawalResponse,
+    SensitivityPoint,
     SimulationInitRequest,
     SimulationInitResponse,
     SimulationRecalcRequest,
@@ -70,6 +73,11 @@ def _build_simulation_scenario(
 ) -> SimulationScenario:
     # Assumptions (basic UK defaults, plus user overrides from JSON)
     assumptions_json = scenario.assumptions or {}
+
+    # Resolve tax bands from tax year preset or individual overrides
+    from backend.simulation.tax.tax_config import tax_config_from_assumptions
+    tax_cfg = tax_config_from_assumptions(assumptions_json)
+
     assumptions = SimulationAssumptions(
         inflation_rate=_coerce_float(assumptions_json.get("inflation_rate"), 0.02),
         isa_annual_limit=_coerce_float(assumptions_json.get("isa_annual_limit"), 20_000.0),
@@ -80,6 +88,17 @@ def _build_simulation_scenario(
         pension_access_age=_coerce_int(assumptions_json.get("pension_access_age"), 55),
         debt_interest_rate=_coerce_float(assumptions_json.get("debt_interest_rate"), 0.08),
         bankruptcy_threshold=_coerce_float(assumptions_json.get("bankruptcy_threshold"), -100_000.0),
+        # Configurable tax bands
+        personal_allowance=tax_cfg.personal_allowance,
+        basic_rate_limit=tax_cfg.basic_rate_limit,
+        higher_rate_limit=tax_cfg.higher_rate_limit,
+        basic_rate=tax_cfg.basic_rate,
+        higher_rate=tax_cfg.higher_rate,
+        additional_rate=tax_cfg.additional_rate,
+        ni_primary_threshold=tax_cfg.ni_primary_threshold,
+        ni_upper_earnings_limit=tax_cfg.ni_upper_earnings_limit,
+        ni_main_rate=tax_cfg.ni_main_rate,
+        ni_upper_rate=tax_cfg.ni_upper_rate,
     )
 
     start_year = _coerce_int(assumptions_json.get("start_year"), date.today().year)
@@ -497,17 +516,13 @@ async def init_simulation(
     return SimulationInitResponse(session_id=session_id, **response.model_dump())
 
 
-@router.post("/recalc", response_model=SimulationResponse)
-async def recalc_simulation(
-    payload: SimulationRecalcRequest,
-) -> SimulationResponse:
-    cached = get_session(session_id=payload.session_id)
-    if cached is None:
-        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
-
-    base = cached.base_scenario
-    retirement_age_offset = int(payload.retirement_age_offset or 0)
-
+def _build_scenario_from_cached(
+    *,
+    base: SimulationScenario,
+    annual_spend_target: float,
+    retirement_age_offset: int = 0,
+) -> SimulationScenario:
+    """Build a scenario variant from a cached base with spend/retirement overrides."""
     people = [
         PersonEntity(
             key=p.key,
@@ -524,7 +539,7 @@ async def recalc_simulation(
         for p in base.people
     ]
 
-    sim_scenario = SimulationScenario(
+    return SimulationScenario(
         start_year=base.start_year,
         end_year=base.end_year,
         people=people,
@@ -535,7 +550,7 @@ async def recalc_simulation(
         expenses=base.expenses,
         rental_incomes=base.rental_incomes,
         gift_incomes=base.gift_incomes,
-        annual_spend_target=float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target,
+        annual_spend_target=annual_spend_target,
         planned_retirement_age_by_person={
             p.key: p.planned_retirement_age
             for p in people
@@ -543,6 +558,25 @@ async def recalc_simulation(
         },
         pension_withdrawal_priority=base.pension_withdrawal_priority,
         assumptions=base.assumptions,
+    )
+
+
+@router.post("/recalc", response_model=SimulationResponse)
+async def recalc_simulation(
+    payload: SimulationRecalcRequest,
+) -> SimulationResponse:
+    cached = get_session(session_id=payload.session_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
+
+    base = cached.base_scenario
+    retirement_age_offset = int(payload.retirement_age_offset or 0)
+    spend = float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target
+
+    sim_scenario = _build_scenario_from_cached(
+        base=base,
+        annual_spend_target=spend,
+        retirement_age_offset=retirement_age_offset,
     )
 
     use_fast = getattr(payload, "use_fast_engine", True)
@@ -559,5 +593,110 @@ async def recalc_simulation(
         inflation_rate=sim_scenario.assumptions.inflation_rate,
         start_year=sim_scenario.start_year,
         pct=pct,
+    )
+
+
+@router.post("/safe-withdrawal", response_model=SafeWithdrawalResponse)
+async def safe_withdrawal(
+    payload: SafeWithdrawalRequest,
+) -> SafeWithdrawalResponse:
+    """Compute the maximum safe fun fund and a risk sensitivity curve.
+
+    Sweeps fun_fund values from 0 to max_spend in `steps` increments,
+    running the fast engine for each. Returns the sensitivity curve and
+    the highest fun_fund where final-year bankruptcy risk <= threshold.
+    """
+    cached = get_session(session_id=payload.session_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
+
+    base = cached.base_scenario
+    retirement_age_offset = int(payload.retirement_age_offset)
+    risk_threshold = float(payload.risk_threshold)
+    max_spend = float(payload.max_spend)
+    steps = int(payload.steps)
+
+    step_size = max_spend / steps
+    spend_values = [round(i * step_size) for i in range(steps + 1)]
+
+    sensitivity_curve: list[SensitivityPoint] = []
+    max_safe_fun_fund = 0.0
+
+    for spend in spend_values:
+        sim_scenario = _build_scenario_from_cached(
+            base=base,
+            annual_spend_target=float(spend),
+            retirement_age_offset=retirement_age_offset,
+        )
+
+        mats = run_with_cached_returns_fast(
+            scenario=sim_scenario,
+            returns=cached.returns,
+            config=FastEngineConfig(enable_numba=True),
+        )
+
+        # Extract final-year risk metrics across all iterations
+        nw = mats.fields.get("net_worth")
+        is_bankrupt = mats.fields.get("is_bankrupt")
+        is_depleted = mats.fields.get("is_depleted")
+
+        if nw is not None and nw.size:
+            p10_final = float(np.percentile(nw[:, -1], 10))
+        else:
+            p10_final = 0.0
+
+        if is_bankrupt is not None and is_bankrupt.size:
+            bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100)
+        else:
+            bankruptcy_pct = 0.0
+
+        if is_depleted is not None and is_depleted.size:
+            depletion_pct = float(np.mean(is_depleted[:, -1]) * 100)
+        else:
+            depletion_pct = 0.0
+
+        sensitivity_curve.append(SensitivityPoint(
+            fun_fund=float(spend),
+            bankruptcy_pct=round(bankruptcy_pct, 2),
+            depletion_pct=round(depletion_pct, 2),
+            p10_final_net_worth=round(p10_final, 2),
+        ))
+
+        if bankruptcy_pct <= risk_threshold:
+            max_safe_fun_fund = float(spend)
+
+    # Binary search refinement between max_safe_fun_fund and the next step up
+    if max_safe_fun_fund < max_spend:
+        lo = max_safe_fun_fund
+        hi = min(max_safe_fun_fund + step_size, max_spend)
+        for _ in range(10):  # ~£1 precision at 200k range
+            mid = round((lo + hi) / 2)
+            sim_scenario = _build_scenario_from_cached(
+                base=base,
+                annual_spend_target=float(mid),
+                retirement_age_offset=retirement_age_offset,
+            )
+            mats = run_with_cached_returns_fast(
+                scenario=sim_scenario,
+                returns=cached.returns,
+                config=FastEngineConfig(enable_numba=True),
+            )
+            is_bankrupt = mats.fields.get("is_bankrupt")
+            if is_bankrupt is not None and is_bankrupt.size:
+                bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100)
+            else:
+                bankruptcy_pct = 0.0
+
+            if bankruptcy_pct <= risk_threshold:
+                lo = mid
+            else:
+                hi = mid
+
+        max_safe_fun_fund = lo
+
+    return SafeWithdrawalResponse(
+        max_safe_fun_fund=round(max_safe_fun_fund, 2),
+        risk_threshold=risk_threshold,
+        sensitivity_curve=sensitivity_curve,
     )
 

@@ -17,6 +17,29 @@ async def config_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/tax-years")
+async def list_tax_years() -> list[dict]:
+    """Return available tax year presets with their band values."""
+    from backend.simulation.tax.tax_config import TAX_YEAR_PRESETS, get_available_tax_years
+    result = []
+    for year in get_available_tax_years():
+        cfg = TAX_YEAR_PRESETS[year]
+        result.append({
+            "tax_year": year,
+            "personal_allowance": cfg.personal_allowance,
+            "basic_rate_limit": cfg.basic_rate_limit,
+            "higher_rate_limit": cfg.higher_rate_limit,
+            "basic_rate": cfg.basic_rate,
+            "higher_rate": cfg.higher_rate,
+            "additional_rate": cfg.additional_rate,
+            "ni_primary_threshold": cfg.ni_primary_threshold,
+            "ni_upper_earnings_limit": cfg.ni_upper_earnings_limit,
+            "ni_main_rate": cfg.ni_main_rate,
+            "ni_upper_rate": cfg.ni_upper_rate,
+        })
+    return result
+
+
 def _scenario_query():
     return (
         select(Scenario)

@@ -494,7 +494,15 @@ class TestTaxCalculations:
 
         for income in test_incomes:
             python_tax = calculate_income_tax(taxable_income=float(income), bands=bands)
-            numba_tax = fast_income_tax(float(income))
+            numba_tax = fast_income_tax(
+                float(income),
+                bands.personal_allowance,
+                bands.basic_rate_limit,
+                bands.higher_rate_limit,
+                bands.basic_rate,
+                bands.higher_rate,
+                bands.additional_rate,
+            )
             
             np.testing.assert_allclose(
                 python_tax,

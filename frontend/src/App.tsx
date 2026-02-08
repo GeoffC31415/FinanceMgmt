@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { Dashboard } from "./components/Dashboard";
+import { ComparisonDashboard } from "./components/ComparisonDashboard";
 import { ScenarioConfigPage } from "./components/config/ScenarioConfigPage";
 import { ConfigWizard } from "./components/config/ConfigWizard";
 import { HelpPage } from "./components/HelpPage";
@@ -19,6 +20,14 @@ export function App() {
               end
             >
               Simulation
+            </NavLink>
+            <NavLink
+              to="/compare"
+              className={({ isActive }) =>
+                `rounded px-3 py-2 ${isActive ? "bg-slate-800" : "hover:bg-slate-900"}`
+              }
+            >
+              Compare
             </NavLink>
             <NavLink
               to="/config"
@@ -43,6 +52,7 @@ export function App() {
       <main className="mx-auto w-[70%] min-w-[800px] py-8">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/compare" element={<ComparisonDashboard />} />
           <Route path="/config" element={<ScenarioConfigPage />} />
           <Route path="/config/wizard" element={<ConfigWizard />} />
           <Route path="/help" element={<HelpPage />} />

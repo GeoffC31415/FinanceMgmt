@@ -19,6 +19,17 @@ class ArrayAssumptions:
     pension_access_age: int
     debt_interest_rate: float
     bankruptcy_threshold: float
+    # Configurable tax bands
+    personal_allowance: float = 12_570.0
+    basic_rate_limit: float = 50_270.0
+    higher_rate_limit: float = 125_140.0
+    basic_rate: float = 0.20
+    higher_rate: float = 0.40
+    additional_rate: float = 0.45
+    ni_primary_threshold: float = 12_570.0
+    ni_upper_earnings_limit: float = 50_270.0
+    ni_main_rate: float = 0.08
+    ni_upper_rate: float = 0.02
 
 
 @dataclass(frozen=True)
@@ -199,16 +210,27 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         [1 if e.is_inflation_linked else 0 for e in scenario.expenses], dtype=np.int8
     )
 
+    a = scenario.assumptions
     assumptions = ArrayAssumptions(
-        inflation_rate=float(scenario.assumptions.inflation_rate),
-        isa_annual_limit=float(scenario.assumptions.isa_annual_limit),
-        state_pension_annual=float(scenario.assumptions.state_pension_annual),
-        cgt_annual_allowance=float(scenario.assumptions.cgt_annual_allowance),
-        cgt_rate=float(scenario.assumptions.cgt_rate),
-        emergency_fund_months=float(scenario.assumptions.emergency_fund_months),
-        pension_access_age=int(scenario.assumptions.pension_access_age),
-        debt_interest_rate=float(scenario.assumptions.debt_interest_rate),
-        bankruptcy_threshold=float(scenario.assumptions.bankruptcy_threshold),
+        inflation_rate=float(a.inflation_rate),
+        isa_annual_limit=float(a.isa_annual_limit),
+        state_pension_annual=float(a.state_pension_annual),
+        cgt_annual_allowance=float(a.cgt_annual_allowance),
+        cgt_rate=float(a.cgt_rate),
+        emergency_fund_months=float(a.emergency_fund_months),
+        pension_access_age=int(a.pension_access_age),
+        debt_interest_rate=float(a.debt_interest_rate),
+        bankruptcy_threshold=float(a.bankruptcy_threshold),
+        personal_allowance=float(a.personal_allowance),
+        basic_rate_limit=float(a.basic_rate_limit),
+        higher_rate_limit=float(a.higher_rate_limit),
+        basic_rate=float(a.basic_rate),
+        higher_rate=float(a.higher_rate),
+        additional_rate=float(a.additional_rate),
+        ni_primary_threshold=float(a.ni_primary_threshold),
+        ni_upper_earnings_limit=float(a.ni_upper_earnings_limit),
+        ni_main_rate=float(a.ni_main_rate),
+        ni_upper_rate=float(a.ni_upper_rate),
     )
 
     return ArrayScenario(
