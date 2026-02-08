@@ -8,6 +8,8 @@ import { SensitivityChart } from "./charts/SensitivityChart";
 import { RiskTimelineChart } from "./charts/RiskTimelineChart";
 import { RiskSummaryPanel } from "./RiskSummaryPanel";
 import { OverviewInsights } from "./OverviewInsights";
+// Lazy-load exceljs only when the user clicks Export
+const lazyExportExcel = () => import("../api/exportExcel").then((m) => m.exportExcel);
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 import type { SimulationResponse } from "../types";
@@ -325,84 +327,11 @@ export function Dashboard() {
     return () => window.clearTimeout(t);
   }, [session_id, retirement_age_offset, risk_threshold, fetch_safe_withdrawal]);
 
-  function export_csv() {
-    if (!result) return;
-    
-    const getValue = (arr: number[] | undefined, idx: number): number => arr?.[idx] ?? 0;
-    
-    const headers = [
-      "year",
-      "net_worth_p10",
-      "net_worth_median",
-      "net_worth_p90",
-      "salary_gross_median",
-      "salary_net_median",
-      "rental_income_median",
-      "gift_income_median",
-      "pension_income_median",
-      "state_pension_income_median",
-      "investment_returns_median",
-      "total_income_median",
-      "total_expenses_median",
-      "mortgage_payment_median",
-      "pension_contributions_median",
-      "income_tax_paid_median",
-      "ni_paid_median",
-      "total_tax_median",
-      "isa_balance_median",
-      "pension_balance_median",
-      "cash_balance_median",
-      "total_assets_median",
-      "mortgage_balance_median",
-      "total_liabilities_median",
-      "mortgage_paid_off_median_pct",
-      "is_depleted_median_pct",
-      "is_bankrupt_median_pct",
-      "debt_balance_median",
-      "debt_interest_paid_median",
-    ];
-    
-    const rows = result.years.map((year, idx) => [
-      year,
-      getValue(result.net_worth_p10, idx),
-      getValue(result.net_worth_median, idx),
-      getValue(result.net_worth_p90, idx),
-      getValue(result.salary_gross_median, idx),
-      getValue(result.salary_net_median, idx),
-      getValue(result.rental_income_median, idx),
-      getValue(result.gift_income_median, idx),
-      getValue(result.pension_income_median, idx),
-      getValue(result.state_pension_income_median, idx),
-      getValue(result.investment_returns_median, idx),
-      getValue(result.total_income_median, idx),
-      getValue(result.total_expenses_median, idx),
-      getValue(result.mortgage_payment_median, idx),
-      getValue(result.pension_contributions_median, idx),
-      getValue(result.income_tax_paid_median, idx),
-      getValue(result.ni_paid_median, idx),
-      getValue(result.total_tax_median, idx),
-      getValue(result.isa_balance_median, idx),
-      getValue(result.pension_balance_median, idx),
-      getValue(result.cash_balance_median, idx),
-      getValue(result.total_assets_median, idx),
-      getValue(result.mortgage_balance_median, idx),
-      getValue(result.total_liabilities_median, idx),
-      getValue(result.mortgage_paid_off_median, idx),
-      getValue(result.is_depleted_median, idx),
-      getValue(result.is_bankrupt_median, idx),
-      getValue(result.debt_balance_median, idx),
-      getValue(result.debt_interest_paid_median, idx),
-    ]);
-    
-    const lines = [headers.join(","), ...rows.map((row) => row.join(","))];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    const scenario_name = selected?.name?.replace(/[^\w-]+/g, "_") ?? "scenario";
-    anchor.href = url;
-    anchor.download = `simulation_${scenario_name}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  async function handle_export() {
+    if (!display_result) return;
+    const scenario_name = selected?.name ?? "scenario";
+    const doExport = await lazyExportExcel();
+    await doExport(display_result, scenario_name, percentile, show_real_values);
   }
 
   // Color helper for success rate
@@ -583,13 +512,13 @@ export function Dashboard() {
 
           <div className="h-4 w-px bg-slate-700" />
 
-          {/* Export CSV */}
+          {/* Export Excel */}
           <button
             className="rounded bg-slate-800 px-3 py-1 text-xs font-semibold hover:bg-slate-700 disabled:opacity-50"
-            disabled={!result}
-            onClick={export_csv}
+            disabled={!display_result}
+            onClick={handle_export}
           >
-            Export CSV
+            Export Excel
           </button>
 
           {/* Recalculating indicator */}

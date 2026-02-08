@@ -61,9 +61,9 @@ describe("Dashboard", () => {
     expect(netWorthElements).toHaveLength(0);
   });
 
-  it("renders export CSV button (disabled when no result)", () => {
+  it("renders export Excel button (disabled when no result)", () => {
     renderDashboard();
-    const button = screen.getByText("Export CSV");
+    const button = screen.getByText("Export Excel");
     expect(button).toBeInTheDocument();
     expect(button).toBeDisabled();
   });
