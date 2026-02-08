@@ -4,6 +4,9 @@ import { ExpensesChart } from "./charts/ExpensesChart";
 import { IncomeChart } from "./charts/IncomeChart";
 import { AssetsChart } from "./charts/AssetsChart";
 import { AssetDetailChart } from "./charts/AssetDetailChart";
+import { SensitivityChart } from "./charts/SensitivityChart";
+import { RiskTimelineChart } from "./charts/RiskTimelineChart";
+import { RiskSummaryPanel } from "./RiskSummaryPanel";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 import type { SimulationResponse } from "../types";
@@ -77,17 +80,60 @@ function applyInflationAdjustment(result: SimulationResponse): SimulationRespons
   };
 }
 
+const PERCENTILE_PRESETS = [
+  { label: "P10", value: 10, desc: "pessimistic" },
+  { label: "P25", value: 25, desc: "cautious" },
+  { label: "P50", value: 50, desc: "median" },
+  { label: "P75", value: 75, desc: "optimistic" },
+  { label: "P90", value: 90, desc: "very optimistic" },
+];
+
 export function Dashboard() {
   const { scenarios, is_loading, error } = useScenarioList();
-  const { result, session_id, is_loading: is_running, error: run_error, init, recalc } = useSimulation();
+  const {
+    result,
+    session_id,
+    is_loading: is_running,
+    error: run_error,
+    init,
+    recalc,
+    safe_withdrawal_result,
+    is_loading_safe_withdrawal,
+    fetch_safe_withdrawal,
+  } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
   const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
   const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
   const [show_real_values, setShowRealValues] = useState<boolean>(false);
   const [percentile, setPercentile] = useState<number>(50);
+  const [risk_threshold, setRiskThreshold] = useState<number>(5);
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
+
+  // Compute actual retirement ages for display
+  const retirement_ages = useMemo(() => {
+    if (!selected) return [];
+    return selected.people
+      .filter((p) => !p.is_child && p.planned_retirement_age != null)
+      .map((p) => ({
+        name: p.label,
+        base_age: p.planned_retirement_age!,
+        effective_age: p.planned_retirement_age! + retirement_age_offset,
+      }));
+  }, [selected, retirement_age_offset]);
+
+  // Fun fund slider color based on safe withdrawal
+  const max_safe = safe_withdrawal_result?.max_safe_fun_fund ?? 0;
+  const fund_ratio = max_safe > 0 ? annual_spend_target / max_safe : 0;
+  const slider_accent =
+    !safe_withdrawal_result
+      ? ""
+      : fund_ratio <= 0.8
+        ? "accent-emerald-500"
+        : fund_ratio <= 1.0
+          ? "accent-amber-500"
+          : "accent-rose-500";
 
   // Sync end_year and annual_spend_target from scenario assumptions when scenario changes
   useEffect(() => {
@@ -131,7 +177,6 @@ export function Dashboard() {
     const { years, mortgage_paid_off_median } = display_result;
     if (!mortgage_paid_off_median || mortgage_paid_off_median.length === 0) return null;
     
-    // Find first year where mortgage is paid off in 50%+ of runs
     for (let i = 0; i < years.length; i++) {
       if (mortgage_paid_off_median[i] >= 50) {
         return years[i];
@@ -141,15 +186,11 @@ export function Dashboard() {
   }, [display_result]);
 
   // Calculate bankruptcy info
-  // - first_year_any: first year where any runs go bankrupt (for header warning)
-  // - first_year_at_percentile: first year where bankruptcy occurs at the selected percentile (for chart marker)
-  // - final_pct: final bankruptcy percentage (for header indicator)
   const bankruptcy_info = useMemo(() => {
     if (!display_result) return null;
     const { years, is_bankrupt_median } = display_result;
     if (!is_bankrupt_median || is_bankrupt_median.length === 0) return null;
     
-    // Find first year where any runs go bankrupt (>0%) - for header warning
     let first_year_any: number | null = null;
     for (let i = 0; i < years.length; i++) {
       if (is_bankrupt_median[i] > 0) {
@@ -158,10 +199,6 @@ export function Dashboard() {
       }
     }
     
-    // Find first year where bankruptcy rate >= selected percentile (for chart marker)
-    // At P10 (pessimistic), show when 10%+ are bankrupt
-    // At P50 (median), show when 50%+ are bankrupt
-    // At P90 (optimistic), show when 90%+ are bankrupt
     let first_year_at_percentile: number | null = null;
     for (let i = 0; i < years.length; i++) {
       if (is_bankrupt_median[i] >= percentile) {
@@ -170,7 +207,6 @@ export function Dashboard() {
       }
     }
     
-    // Get final bankruptcy percentage
     const lastIdx = years.length - 1;
     const final_pct = lastIdx >= 0 ? is_bankrupt_median[lastIdx] : 0;
     
@@ -181,8 +217,15 @@ export function Dashboard() {
     };
   }, [display_result, percentile]);
 
+  // Final-year risk metrics for the summary panel
+  const final_bankruptcy_pct = bankruptcy_info?.final_pct ?? 0;
+  const final_depletion_pct = useMemo(() => {
+    if (!result) return 0;
+    const lastIdx = result.years.length - 1;
+    return lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
+  }, [result]);
+
   // Initialize cached simulation session when scenario or end_year changes.
-  // end_year changes require full re-init since the x-axis (timeline) changes.
   useEffect(() => {
     if (!selected) return;
     init({
@@ -198,7 +241,6 @@ export function Dashboard() {
   }, [selected?.id, end_year]);
 
   // Debounced recalc for spend + retirement age offset + percentile.
-  // Fast engine enables low debounce for near-instant feedback.
   useEffect(() => {
     if (!selected || !session_id) return;
     const t = window.setTimeout(() => { 
@@ -213,21 +255,33 @@ export function Dashboard() {
     return () => window.clearTimeout(t);
   }, [selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
 
+  // Fetch safe withdrawal data when session or retirement offset or risk threshold changes.
+  // Debounced with longer delay since this is a heavier computation.
+  useEffect(() => {
+    if (!session_id) return;
+    const t = window.setTimeout(() => {
+      fetch_safe_withdrawal({
+        retirement_age_offset,
+        risk_threshold,
+        max_spend: 200_000,
+        steps: 25,
+      }).catch(() => {
+        // non-critical, logged in hook
+      });
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [session_id, retirement_age_offset, risk_threshold, fetch_safe_withdrawal]);
+
   function export_csv() {
     if (!result) return;
     
-    // Helper to safely get value or 0
     const getValue = (arr: number[] | undefined, idx: number): number => arr?.[idx] ?? 0;
     
-    // Grouped headers for better organization
     const headers = [
-      // Basic info
       "year",
       "net_worth_p10",
       "net_worth_median",
       "net_worth_p90",
-      
-      // Incomes
       "salary_gross_median",
       "salary_net_median",
       "rental_income_median",
@@ -236,28 +290,18 @@ export function Dashboard() {
       "state_pension_income_median",
       "investment_returns_median",
       "total_income_median",
-      
-      // Expenses
       "total_expenses_median",
       "mortgage_payment_median",
       "pension_contributions_median",
-      
-      // Tax
       "income_tax_paid_median",
       "ni_paid_median",
       "total_tax_median",
-      
-      // Assets
       "isa_balance_median",
       "pension_balance_median",
       "cash_balance_median",
       "total_assets_median",
-      
-      // Liabilities
       "mortgage_balance_median",
       "total_liabilities_median",
-      
-      // Other
       "mortgage_paid_off_median_pct",
       "is_depleted_median_pct",
       "is_bankrupt_median_pct",
@@ -270,8 +314,6 @@ export function Dashboard() {
       getValue(result.net_worth_p10, idx),
       getValue(result.net_worth_median, idx),
       getValue(result.net_worth_p90, idx),
-      
-      // Incomes
       getValue(result.salary_gross_median, idx),
       getValue(result.salary_net_median, idx),
       getValue(result.rental_income_median, idx),
@@ -280,28 +322,18 @@ export function Dashboard() {
       getValue(result.state_pension_income_median, idx),
       getValue(result.investment_returns_median, idx),
       getValue(result.total_income_median, idx),
-      
-      // Expenses
       getValue(result.total_expenses_median, idx),
       getValue(result.mortgage_payment_median, idx),
       getValue(result.pension_contributions_median, idx),
-      
-      // Tax
       getValue(result.income_tax_paid_median, idx),
       getValue(result.ni_paid_median, idx),
       getValue(result.total_tax_median, idx),
-      
-      // Assets
       getValue(result.isa_balance_median, idx),
       getValue(result.pension_balance_median, idx),
       getValue(result.cash_balance_median, idx),
       getValue(result.total_assets_median, idx),
-      
-      // Liabilities
       getValue(result.mortgage_balance_median, idx),
       getValue(result.total_liabilities_median, idx),
-      
-      // Other
       getValue(result.mortgage_paid_off_median, idx),
       getValue(result.is_depleted_median, idx),
       getValue(result.is_bankrupt_median, idx),
@@ -333,9 +365,12 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="sticky top-0 z-10 rounded border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-[240px]">
+      {/* ===== STICKY CONTROLS ===== */}
+      <div className="sticky top-0 z-10 rounded-lg border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg space-y-3">
+        {/* Row 1: Scenario + Core Simulation Knobs */}
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_1fr_160px] gap-4 items-end">
+          {/* Scenario selector */}
+          <div>
             <label className="block text-sm font-medium">Scenario</label>
             <select
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -352,32 +387,53 @@ export function Dashboard() {
             </select>
           </div>
 
-          <div className="min-w-[240px]">
-            <label className="block text-sm font-medium">Extra spend (retired)</label>
-            <div className="mt-2 flex items-center gap-3">
+          {/* Fun fund slider with safe-zone coloring */}
+          <div>
+            <label className="block text-sm font-medium">
+              Extra spend (retired)
+              {safe_withdrawal_result && (
+                <span className={`ml-2 text-xs font-normal ${
+                  fund_ratio <= 1.0 ? "text-emerald-400/70" : "text-rose-400/70"
+                }`}>
+                  safe max: £{Math.round(max_safe).toLocaleString()}/yr
+                </span>
+              )}
+            </label>
+            <div className="mt-1.5 flex items-center gap-3">
               <input
-                className="w-full"
+                className={`w-full ${slider_accent}`}
                 value={annual_spend_target}
                 onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
                 type="range"
                 min={0}
-                max={100000}
+                max={200000}
                 step={1000}
               />
-              <input
-                className="w-[120px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={annual_spend_target}
-                onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
-                type="number"
-                min={0}
-                step={500}
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">£</span>
+                <input
+                  className="w-[110px] rounded border border-slate-700 bg-slate-950 pl-7 pr-2 py-2 text-sm"
+                  value={annual_spend_target}
+                  onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
+                  type="number"
+                  min={0}
+                  step={500}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="min-w-[240px]">
-            <label className="block text-sm font-medium">Retirement age offset</label>
-            <div className="mt-2 flex items-center gap-3">
+          {/* Retirement age offset with actual ages */}
+          <div>
+            <label className="block text-sm font-medium">
+              Retirement age offset
+              {retirement_ages.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  {retirement_ages.map((r) => `${r.name}: ${r.effective_age}`).join(", ")}
+                </span>
+              )}
+            </label>
+            <div className="mt-1.5 flex items-center gap-3">
               <input
                 className="w-full"
                 value={retirement_age_offset}
@@ -387,13 +443,14 @@ export function Dashboard() {
                 max={10}
                 step={1}
               />
-              <div className="w-[120px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-center">
+              <div className="w-[60px] rounded border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-center">
                 {retirement_age_offset >= 0 ? `+${retirement_age_offset}` : retirement_age_offset}
               </div>
             </div>
           </div>
 
-          <div className="min-w-[200px]">
+          {/* End year */}
+          <div>
             <label className="block text-sm font-medium">End year</label>
             <input
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -405,158 +462,107 @@ export function Dashboard() {
               step={1}
             />
           </div>
+        </div>
 
-          <div className="min-w-[240px]">
-            <label className="block text-sm font-medium">
-              Percentile
-              <span className="ml-2 text-xs text-slate-400">
-                {percentile === 50 ? "(median)" : percentile < 50 ? "(pessimistic)" : "(optimistic)"}
-              </span>
-            </label>
-            <div className="mt-2 flex items-center gap-3">
-              <input
-                className="w-full accent-amber-500"
-                value={percentile}
-                onChange={(e) => setPercentile(Number(e.target.value))}
-                type="range"
-                min={1}
-                max={99}
-                step={1}
-              />
-              <input
-                className="w-[80px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-center"
-                value={percentile}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  if (val >= 1 && val <= 99) setPercentile(val);
-                }}
-                type="number"
-                min={1}
-                max={99}
-              />
+        {/* Row 2: Display options */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-800 pt-3">
+          {/* Percentile preset buttons */}
+          <div className="flex items-center gap-1">
+            <span className="mr-1 text-xs text-slate-500">Percentile:</span>
+            {PERCENTILE_PRESETS.map((p) => (
               <button
-                className={`rounded px-3 py-2 text-xs font-medium transition-colors ${
-                  percentile === 50
+                key={p.value}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  percentile === p.value
                     ? "bg-amber-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
                 }`}
-                onClick={() => setPercentile(50)}
-                title="Set to median (50th percentile)"
+                onClick={() => setPercentile(p.value)}
+                title={p.desc}
               >
-                Median
+                {p.label}
               </button>
-            </div>
+            ))}
+            <input
+              className="ml-1 w-[52px] rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-center"
+              value={percentile}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (val >= 1 && val <= 99) setPercentile(val);
+              }}
+              type="number"
+              min={1}
+              max={99}
+            />
           </div>
 
+          <div className="h-4 w-px bg-slate-700" />
+
+          {/* Real/nominal toggle */}
           <button
-            className="rounded bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700 disabled:opacity-50"
+            className={`flex items-center gap-2 text-xs transition-colors ${
+              show_real_values ? "text-cyan-400" : "text-slate-500"
+            } hover:text-slate-300`}
+            onClick={() => setShowRealValues((prev) => !prev)}
+            title={show_real_values 
+              ? "Showing values in today's purchasing power. Click to show nominal values." 
+              : "Showing nominal (future) values. Click to adjust for inflation."}
+          >
+            <span
+              className={`flex items-center h-4 w-7 rounded-full transition-colors ${
+                show_real_values ? "bg-cyan-600" : "bg-slate-700"
+              } px-0.5`}
+            >
+              <span
+                className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                  show_real_values ? "translate-x-3" : "translate-x-0"
+                }`}
+              />
+            </span>
+            <span className="font-medium">
+              {show_real_values ? "Today's value" : "Nominal"}
+            </span>
+          </button>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          {/* Export CSV */}
+          <button
+            className="rounded bg-slate-800 px-3 py-1 text-xs font-semibold hover:bg-slate-700 disabled:opacity-50"
             disabled={!result}
             onClick={export_csv}
           >
             Export CSV
           </button>
-          {result && (() => {
-            const lastIdx = result.years.length - 1;
-            const depletionPct = lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
-            const finalP10 = lastIdx >= 0 ? result.net_worth_p10[lastIdx] : 0;
-            const bankruptcyPct = bankruptcy_info?.final_pct ?? 0;
-            const depletionColor = depletionPct === 0 
-              ? "text-emerald-400" 
-              : depletionPct < 10 
-                ? "text-amber-400" 
-                : "text-rose-400";
-            const p10Color = finalP10 > 0 
-              ? "text-emerald-400" 
-              : "text-rose-400";
-            const bankruptcyColor = bankruptcyPct === 0
-              ? "text-emerald-400"
-              : bankruptcyPct < 5
-                ? "text-amber-400"
-                : "text-rose-400";
-            return (
-              <div className="flex items-center gap-4 text-xs">
-                <div 
-                  className={`flex items-center gap-2 ${depletionColor}`}
-                  title={`${depletionPct.toFixed(1)}% of simulations run out of investable assets (ISA, pension, cash, GIA all depleted). This is different from net worth which also includes liabilities like mortgages.`}
-                >
-                  <span className="text-slate-400">Asset depletion:</span>
-                  <span className="font-semibold">
-                    {depletionPct === 0 ? "0%" : `${depletionPct.toFixed(1)}%`}
-                  </span>
-                </div>
-                <div 
-                  className={`flex items-center gap-2 ${p10Color}`}
-                  title="Net worth at the 10th percentile in the final year. If this is positive, 90% of simulations end with positive net worth."
-                >
-                  <span className="text-slate-400">P10 final:</span>
-                  <span className="font-semibold">
-                    £{Math.round(finalP10).toLocaleString()}
-                  </span>
-                </div>
-                <div 
-                  className={`flex items-center gap-2 ${bankruptcyColor}`}
-                  title={`${bankruptcyPct.toFixed(1)}% of simulations hit the bankruptcy threshold (net worth below -£100k). ${bankruptcy_info?.first_year_any ? `First bankruptcy in ${bankruptcy_info.first_year_any}.` : ''}`}
-                >
-                  <span className="text-slate-400">Bankruptcy risk:</span>
-                  <span className="font-semibold">
-                    {bankruptcyPct === 0 ? "0%" : `${bankruptcyPct.toFixed(1)}%`}
-                    {bankruptcy_info?.first_year_any && (
-                      <span className="ml-1 text-slate-500">
-                        (from {bankruptcy_info.first_year_any})
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
 
-        {/* Secondary row: display options */}
-        {result && (
-          <div className="flex items-center gap-4 border-t border-slate-800 pt-3">
-            <button
-              className={`flex items-center gap-2 text-xs transition-colors ${
-                show_real_values ? "text-cyan-400" : "text-slate-500"
-              } hover:text-slate-300`}
-              onClick={() => setShowRealValues((prev) => !prev)}
-              title={show_real_values 
-                ? "Showing values in today's purchasing power. Click to show nominal values." 
-                : "Showing nominal (future) values. Click to adjust for inflation."}
-            >
-              <span
-                className={`flex items-center h-4 w-7 rounded-full transition-colors ${
-                  show_real_values ? "bg-cyan-600" : "bg-slate-700"
-                } px-0.5`}
-              >
-                <span
-                  className={`h-3 w-3 rounded-full bg-white transition-transform ${
-                    show_real_values ? "translate-x-3" : "translate-x-0"
-                  }`}
-                />
-              </span>
-              <span className="font-medium">
-                {show_real_values ? "Today's value" : "Nominal values"}
-              </span>
-            </button>
-            <span className={`text-xs ${show_real_values ? "text-cyan-300/70" : "text-slate-500"}`}>
-              {show_real_values 
-                ? `All amounts adjusted for ${((result.inflation_rate ?? 0.02) * 100).toFixed(1)}% annual inflation to show today's purchasing power`
-                : "Showing future nominal values without inflation adjustment"}
-            </span>
-            {is_running && (
-              <span className="ml-auto text-xs text-slate-500">Recalculating…</span>
-            )}
-          </div>
-        )}
+          {/* Recalculating indicator */}
+          {is_running && (
+            <span className="ml-auto text-xs text-slate-500 animate-pulse">Recalculating...</span>
+          )}
+        </div>
       </div>
+
+      {/* ===== RISK SUMMARY PANEL ===== */}
+      {result && (
+        <RiskSummaryPanel
+          safe_withdrawal={safe_withdrawal_result}
+          is_loading={is_loading_safe_withdrawal}
+          current_fun_fund={annual_spend_target}
+          bankruptcy_pct={final_bankruptcy_pct}
+          depletion_pct={final_depletion_pct}
+          risk_threshold={risk_threshold}
+          on_risk_threshold_change={setRiskThreshold}
+          on_set_fun_fund={setAnnualSpendTarget}
+        />
+      )}
 
       {display_result && (
         <div className="space-y-6">
+          {/* Warnings */}
           {bankruptcy_info && bankruptcy_info.final_pct > 0 && (
             <div className="rounded border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
               <div className="flex items-center gap-2">
-                <svg className="h-5 w-5 text-rose-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="h-5 w-5 flex-shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
                 <span>
@@ -584,6 +590,35 @@ export function Dashboard() {
               </button>
             </div>
           )}
+
+          {/* Sensitivity + Risk Timeline side by side */}
+          {safe_withdrawal_result && safe_withdrawal_result.sensitivity_curve.length > 0 && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <SensitivityChart
+                sensitivity_curve={safe_withdrawal_result.sensitivity_curve}
+                current_fun_fund={annual_spend_target}
+                max_safe_fun_fund={safe_withdrawal_result.max_safe_fun_fund}
+                risk_threshold={risk_threshold}
+              />
+              <RiskTimelineChart
+                years={display_result.years}
+                is_depleted_median={display_result.is_depleted_median}
+                is_bankrupt_median={display_result.is_bankrupt_median}
+                retirement_years={display_result.retirement_years}
+              />
+            </div>
+          )}
+
+          {/* If no sensitivity data yet but we have risk timeline data, show it standalone */}
+          {!safe_withdrawal_result && (
+            <RiskTimelineChart
+              years={display_result.years}
+              is_depleted_median={display_result.is_depleted_median}
+              is_bankrupt_median={display_result.is_bankrupt_median}
+              retirement_years={display_result.retirement_years}
+            />
+          )}
+
           <NetWorthChart
             years={display_result.years}
             net_worth_p10={display_result.net_worth_p10}
@@ -658,4 +693,3 @@ export function Dashboard() {
     </div>
   );
 }
-

@@ -277,7 +277,10 @@ export function ScenarioConfigPage() {
                           label: p.label,
                           birth_date: p.birth_date,
                           planned_retirement_age: p.planned_retirement_age,
-                          state_pension_age: p.state_pension_age
+                          state_pension_age: p.state_pension_age,
+                          is_child: p.is_child ?? false,
+                          annual_cost: p.annual_cost ?? null,
+                          leaves_household_age: p.leaves_household_age ?? null,
                         })),
                         incomes: scenario.incomes.map((i) => ({
                           person_label: scenario.people.find((p) => p.id === i.person_id)?.label,

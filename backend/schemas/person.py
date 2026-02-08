@@ -39,3 +39,15 @@ class PersonRead(PersonCreate):
     id: str
     scenario_id: str
 
+    @model_validator(mode="after")
+    def validate_person_type(self) -> "PersonRead":
+        """Lenient validation for reads -- tolerate missing fields in existing data."""
+        if self.is_child:
+            if self.annual_cost is None:
+                self.annual_cost = 0.0
+        else:
+            # Don't raise for existing data; default retirement age if missing
+            if self.planned_retirement_age is None:
+                self.planned_retirement_age = 65
+        return self
+

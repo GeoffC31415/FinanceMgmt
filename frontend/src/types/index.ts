@@ -159,3 +159,24 @@ export type SimulationRecalcRequest = {
   retirement_age_offset?: number | null;
   percentile?: number | null;
 };
+
+export type SafeWithdrawalRequest = {
+  session_id: string;
+  retirement_age_offset?: number;
+  risk_threshold?: number;
+  max_spend?: number;
+  steps?: number;
+};
+
+export type SensitivityPoint = {
+  fun_fund: number;
+  bankruptcy_pct: number;
+  depletion_pct: number;
+  p10_final_net_worth: number;
+};
+
+export type SafeWithdrawalResponse = {
+  max_safe_fun_fund: number;
+  risk_threshold: number;
+  sensitivity_curve: SensitivityPoint[];
+};
