@@ -7,9 +7,26 @@ import { AssetDetailChart } from "./charts/AssetDetailChart";
 import { SensitivityChart } from "./charts/SensitivityChart";
 import { RiskTimelineChart } from "./charts/RiskTimelineChart";
 import { RiskSummaryPanel } from "./RiskSummaryPanel";
+import { OverviewInsights } from "./OverviewInsights";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 import type { SimulationResponse } from "../types";
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "income-spending", label: "Income & Spending" },
+  { id: "assets", label: "Assets" },
+  { id: "risk", label: "Risk Analysis" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+function format_currency_compact(value: number): string {
+  if (Math.abs(value) >= 1_000_000) {
+    return `£${(value / 1_000_000).toFixed(1)}m`;
+  }
+  return `£${Math.round(value).toLocaleString()}`;
+}
 
 /**
  * Adjust an array of nominal values to real (today's purchasing power) values.
@@ -108,6 +125,7 @@ export function Dashboard() {
   const [show_real_values, setShowRealValues] = useState<boolean>(false);
   const [percentile, setPercentile] = useState<number>(50);
   const [risk_threshold, setRiskThreshold] = useState<number>(5);
+  const [active_tab, setActiveTab] = useState<TabId>("overview");
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
 
@@ -223,6 +241,41 @@ export function Dashboard() {
     if (!result) return 0;
     const lastIdx = result.years.length - 1;
     return lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
+  }, [result]);
+
+  // Computed overview metrics for the metric cards
+  const overview_metrics = useMemo(() => {
+    if (!result) return null;
+    const last_idx = result.years.length - 1;
+    if (last_idx < 0) return null;
+
+    const final_bankruptcy = result.is_bankrupt_median[last_idx] ?? 0;
+    const success_rate = 100 - final_bankruptcy;
+
+    // Peak net worth (median)
+    let peak_value = -Infinity;
+    let peak_year = result.years[0];
+    for (let i = 0; i <= last_idx; i++) {
+      if (result.net_worth_median[i] > peak_value) {
+        peak_value = result.net_worth_median[i];
+        peak_year = result.years[i];
+      }
+    }
+
+    const final_net_worth_median = result.net_worth_median[last_idx];
+    const final_net_worth_p10 = result.net_worth_p10[last_idx];
+    const final_net_worth_p90 = result.net_worth_p90[last_idx];
+    const final_year = result.years[last_idx];
+
+    return {
+      success_rate,
+      peak_value,
+      peak_year,
+      final_net_worth_median,
+      final_net_worth_p10,
+      final_net_worth_p90,
+      final_year,
+    };
   }, [result]);
 
   // Initialize cached simulation session when scenario or end_year changes.
@@ -351,6 +404,10 @@ export function Dashboard() {
     anchor.click();
     URL.revokeObjectURL(url);
   }
+
+  // Color helper for success rate
+  const success_color = (rate: number) =>
+    rate >= 95 ? "text-emerald-400" : rate >= 90 ? "text-amber-400" : "text-rose-400";
 
   return (
     <div className="space-y-6">
@@ -542,153 +599,272 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* ===== RISK SUMMARY PANEL ===== */}
-      {result && (
-        <RiskSummaryPanel
-          safe_withdrawal={safe_withdrawal_result}
-          is_loading={is_loading_safe_withdrawal}
-          current_fun_fund={annual_spend_target}
-          bankruptcy_pct={final_bankruptcy_pct}
-          depletion_pct={final_depletion_pct}
-          risk_threshold={risk_threshold}
-          on_risk_threshold_change={setRiskThreshold}
-          on_set_fun_fund={setAnnualSpendTarget}
-        />
+      {/* ===== WARNINGS (visible on all tabs) ===== */}
+      {display_result && bankruptcy_info && bankruptcy_info.final_pct > 0 && (
+        <div className="rounded border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 flex-shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <span>
+              <strong>Bankruptcy Warning:</strong>{" "}
+              {bankruptcy_info.final_pct.toFixed(1)}% of simulations hit the bankruptcy threshold
+              {bankruptcy_info.first_year_any && (
+                <span> (first occurrence in {bankruptcy_info.first_year_any})</span>
+              )}
+              . Consider reducing retirement spending, delaying retirement, or increasing savings.
+            </span>
+          </div>
+        </div>
+      )}
+      {display_result && percentile !== 50 && (
+        <div className="rounded border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+          <strong>Viewing {percentile}th percentile:</strong>{" "}
+          {percentile < 50 
+            ? `This shows a more pessimistic scenario where ${percentile}% of simulations perform worse.`
+            : `This shows a more optimistic scenario where ${100 - percentile}% of simulations perform better.`}
+          <button
+            className="ml-3 rounded bg-amber-700/50 px-2 py-0.5 text-xs hover:bg-amber-700"
+            onClick={() => setPercentile(50)}
+          >
+            Reset to median
+          </button>
+        </div>
       )}
 
+      {/* ===== TAB BAR ===== */}
       {display_result && (
-        <div className="space-y-6">
-          {/* Warnings */}
-          {bankruptcy_info && bankruptcy_info.final_pct > 0 && (
-            <div className="rounded border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
-              <div className="flex items-center gap-2">
-                <svg className="h-5 w-5 flex-shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <span>
-                  <strong>Bankruptcy Warning:</strong>{" "}
-                  {bankruptcy_info.final_pct.toFixed(1)}% of simulations hit the bankruptcy threshold
-                  {bankruptcy_info.first_year_any && (
-                    <span> (first occurrence in {bankruptcy_info.first_year_any})</span>
-                  )}
-                  . Consider reducing retirement spending, delaying retirement, or increasing savings.
-                </span>
-              </div>
-            </div>
-          )}
-          {percentile !== 50 && (
-            <div className="rounded border border-amber-800/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
-              <strong>Viewing {percentile}th percentile:</strong>{" "}
-              {percentile < 50 
-                ? `This shows a more pessimistic scenario where ${percentile}% of simulations perform worse.`
-                : `This shows a more optimistic scenario where ${100 - percentile}% of simulations perform better.`}
+        <>
+          <div className="flex border-b border-slate-700">
+            {TABS.map((tab) => (
               <button
-                className="ml-3 rounded bg-amber-700/50 px-2 py-0.5 text-xs hover:bg-amber-700"
-                onClick={() => setPercentile(50)}
+                key={tab.id}
+                className={`relative px-5 py-2.5 text-sm font-medium transition-colors ${
+                  active_tab === tab.id
+                    ? "text-indigo-400"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                onClick={() => setActiveTab(tab.id)}
               >
-                Reset to median
+                {tab.label}
+                {active_tab === tab.id && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-t" />
+                )}
               </button>
-            </div>
-          )}
+            ))}
+          </div>
 
-          {/* Sensitivity + Risk Timeline side by side */}
-          {safe_withdrawal_result && safe_withdrawal_result.sensitivity_curve.length > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <SensitivityChart
-                sensitivity_curve={safe_withdrawal_result.sensitivity_curve}
-                current_fun_fund={annual_spend_target}
-                max_safe_fun_fund={safe_withdrawal_result.max_safe_fun_fund}
-                risk_threshold={risk_threshold}
-              />
-              <RiskTimelineChart
-                years={display_result.years}
-                is_depleted_median={display_result.is_depleted_median}
-                is_bankrupt_median={display_result.is_bankrupt_median}
-                retirement_years={display_result.retirement_years}
-              />
-            </div>
-          )}
+          {/* ===== TAB CONTENT ===== */}
+          <div className="space-y-6">
+            {/* ===== OVERVIEW TAB ===== */}
+            {active_tab === "overview" && (
+              <>
+                {/* Key Metric Cards */}
+                {overview_metrics && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {/* Success Rate */}
+                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
+                      <div className="text-xs font-medium text-slate-400 mb-1">Success Rate</div>
+                      <div className={`text-3xl font-bold ${success_color(overview_metrics.success_rate)}`}>
+                        {overview_metrics.success_rate.toFixed(1)}%
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        of simulations avoid bankruptcy
+                      </div>
+                    </div>
 
-          {/* If no sensitivity data yet but we have risk timeline data, show it standalone */}
-          {!safe_withdrawal_result && (
-            <RiskTimelineChart
-              years={display_result.years}
-              is_depleted_median={display_result.is_depleted_median}
-              is_bankrupt_median={display_result.is_bankrupt_median}
-              retirement_years={display_result.retirement_years}
-            />
-          )}
+                    {/* Max Safe Fun Fund */}
+                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
+                      <div className="text-xs font-medium text-slate-400 mb-1">
+                        Max Safe Fun Fund
+                        <span className="ml-1 text-slate-500">({risk_threshold}% risk)</span>
+                      </div>
+                      <div className={`text-3xl font-bold ${
+                        safe_withdrawal_result
+                          ? annual_spend_target <= max_safe ? "text-emerald-400" : "text-rose-400"
+                          : "text-slate-500"
+                      }`}>
+                        {safe_withdrawal_result
+                          ? `${format_currency_compact(max_safe)}`
+                          : "---"}
+                        <span className="text-sm font-normal text-slate-500">/yr</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        retirement spending limit
+                      </div>
+                    </div>
 
-          <NetWorthChart
-            years={display_result.years}
-            net_worth_p10={display_result.net_worth_p10}
-            net_worth_median={display_result.net_worth_median}
-            net_worth_p90={display_result.net_worth_p90}
-            retirement_years={display_result.retirement_years}
-            isa_balance_median={display_result.isa_balance_median}
-            pension_balance_median={display_result.pension_balance_median}
-            cash_balance_median={display_result.cash_balance_median}
-            total_assets_median={display_result.total_assets_median}
-            percentile={percentile}
-            bankruptcy_year={bankruptcy_info?.first_year_at_percentile}
-            debt_balance_median={display_result.debt_balance_median}
-          />
-          <ExpensesChart
-            years={display_result.years}
-            total_expenses_median={display_result.total_expenses_median}
-            mortgage_payment_median={display_result.mortgage_payment_median}
-            pension_contributions_median={display_result.pension_contributions_median}
-            total_tax_median={display_result.total_tax_median}
-            fun_fund_median={display_result.fun_fund_median}
-            retirement_years={display_result.retirement_years}
-            children_leaving={children_leaving}
-            mortgage_payoff_year={mortgage_payoff_year}
-            percentile={percentile}
-          />
-          <IncomeChart
-            years={display_result.years}
-            salary_gross_median={display_result.salary_gross_median}
-            salary_net_median={display_result.salary_net_median}
-            rental_income_median={display_result.rental_income_median}
-            gift_income_median={display_result.gift_income_median}
-            pension_income_median={display_result.pension_income_median}
-            state_pension_income_median={display_result.state_pension_income_median}
-            investment_returns_median={display_result.investment_returns_median}
-            total_income_median={display_result.total_income_median}
-            retirement_years={display_result.retirement_years}
-            percentile={percentile}
-          />
-          <AssetsChart
-            years={display_result.years}
-            isa_balance_median={display_result.isa_balance_median}
-            pension_balance_median={display_result.pension_balance_median}
-            cash_balance_median={display_result.cash_balance_median}
-            total_assets_median={display_result.total_assets_median}
-            retirement_years={display_result.retirement_years}
-            percentile={percentile}
-          />
-          <AssetDetailChart
-            years={display_result.years}
-            retirement_years={display_result.retirement_years}
-            percentile={percentile}
-            isa_balance_median={display_result.isa_balance_median}
-            gia_balance_median={display_result.gia_balance_median}
-            cash_balance_median={display_result.cash_balance_median}
-            pension_balance_median={display_result.pension_balance_median}
-            debt_balance_median={display_result.debt_balance_median}
-            pension_contributions_median={display_result.pension_contributions_median}
-            debt_interest_paid_median={display_result.debt_interest_paid_median}
-            isa_returns_median={display_result.isa_returns_median}
-            gia_returns_median={display_result.gia_returns_median}
-            cash_returns_median={display_result.cash_returns_median}
-            pension_returns_median={display_result.pension_returns_median}
-            isa_contributions_median={display_result.isa_contributions_median}
-            gia_contributions_median={display_result.gia_contributions_median}
-            isa_withdrawals_median={display_result.isa_withdrawals_median}
-            gia_withdrawals_median={display_result.gia_withdrawals_median}
-            pension_withdrawals_median={display_result.pension_withdrawals_median}
-          />
-        </div>
+                    {/* Peak Net Worth */}
+                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
+                      <div className="text-xs font-medium text-slate-400 mb-1">Peak Net Worth</div>
+                      <div className="text-3xl font-bold text-cyan-400">
+                        {format_currency_compact(overview_metrics.peak_value)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        in {overview_metrics.peak_year} (median)
+                      </div>
+                    </div>
+
+                    {/* Final Net Worth */}
+                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
+                      <div className="text-xs font-medium text-slate-400 mb-1">
+                        Final Net Worth ({overview_metrics.final_year})
+                      </div>
+                      <div className={`text-3xl font-bold ${
+                        overview_metrics.final_net_worth_median >= 0 ? "text-slate-100" : "text-rose-400"
+                      }`}>
+                        {format_currency_compact(overview_metrics.final_net_worth_median)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        P10: {format_currency_compact(overview_metrics.final_net_worth_p10)}
+                        {" / "}
+                        P90: {format_currency_compact(overview_metrics.final_net_worth_p90)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-Generated Insights */}
+                {result && selected && (
+                  <OverviewInsights
+                    result={result}
+                    safe_withdrawal={safe_withdrawal_result}
+                    risk_threshold={risk_threshold}
+                    current_fun_fund={annual_spend_target}
+                    scenario={selected}
+                    mortgage_payoff_year={mortgage_payoff_year}
+                    children_leaving={children_leaving}
+                  />
+                )}
+
+                {/* Net Worth Chart -- the single overview chart */}
+                <NetWorthChart
+                  years={display_result.years}
+                  net_worth_p10={display_result.net_worth_p10}
+                  net_worth_median={display_result.net_worth_median}
+                  net_worth_p90={display_result.net_worth_p90}
+                  retirement_years={display_result.retirement_years}
+                  isa_balance_median={display_result.isa_balance_median}
+                  pension_balance_median={display_result.pension_balance_median}
+                  cash_balance_median={display_result.cash_balance_median}
+                  total_assets_median={display_result.total_assets_median}
+                  percentile={percentile}
+                  bankruptcy_year={bankruptcy_info?.first_year_at_percentile}
+                  debt_balance_median={display_result.debt_balance_median}
+                />
+              </>
+            )}
+
+            {/* ===== INCOME & SPENDING TAB ===== */}
+            {active_tab === "income-spending" && (
+              <>
+                <IncomeChart
+                  years={display_result.years}
+                  salary_gross_median={display_result.salary_gross_median}
+                  salary_net_median={display_result.salary_net_median}
+                  rental_income_median={display_result.rental_income_median}
+                  gift_income_median={display_result.gift_income_median}
+                  pension_income_median={display_result.pension_income_median}
+                  state_pension_income_median={display_result.state_pension_income_median}
+                  investment_returns_median={display_result.investment_returns_median}
+                  total_income_median={display_result.total_income_median}
+                  retirement_years={display_result.retirement_years}
+                  percentile={percentile}
+                />
+                <ExpensesChart
+                  years={display_result.years}
+                  total_expenses_median={display_result.total_expenses_median}
+                  mortgage_payment_median={display_result.mortgage_payment_median}
+                  pension_contributions_median={display_result.pension_contributions_median}
+                  total_tax_median={display_result.total_tax_median}
+                  fun_fund_median={display_result.fun_fund_median}
+                  retirement_years={display_result.retirement_years}
+                  children_leaving={children_leaving}
+                  mortgage_payoff_year={mortgage_payoff_year}
+                  percentile={percentile}
+                />
+              </>
+            )}
+
+            {/* ===== ASSETS TAB ===== */}
+            {active_tab === "assets" && (
+              <>
+                <AssetsChart
+                  years={display_result.years}
+                  isa_balance_median={display_result.isa_balance_median}
+                  pension_balance_median={display_result.pension_balance_median}
+                  cash_balance_median={display_result.cash_balance_median}
+                  total_assets_median={display_result.total_assets_median}
+                  retirement_years={display_result.retirement_years}
+                  percentile={percentile}
+                />
+                <AssetDetailChart
+                  years={display_result.years}
+                  retirement_years={display_result.retirement_years}
+                  percentile={percentile}
+                  isa_balance_median={display_result.isa_balance_median}
+                  gia_balance_median={display_result.gia_balance_median}
+                  cash_balance_median={display_result.cash_balance_median}
+                  pension_balance_median={display_result.pension_balance_median}
+                  debt_balance_median={display_result.debt_balance_median}
+                  pension_contributions_median={display_result.pension_contributions_median}
+                  debt_interest_paid_median={display_result.debt_interest_paid_median}
+                  isa_returns_median={display_result.isa_returns_median}
+                  gia_returns_median={display_result.gia_returns_median}
+                  cash_returns_median={display_result.cash_returns_median}
+                  pension_returns_median={display_result.pension_returns_median}
+                  isa_contributions_median={display_result.isa_contributions_median}
+                  gia_contributions_median={display_result.gia_contributions_median}
+                  isa_withdrawals_median={display_result.isa_withdrawals_median}
+                  gia_withdrawals_median={display_result.gia_withdrawals_median}
+                  pension_withdrawals_median={display_result.pension_withdrawals_median}
+                />
+              </>
+            )}
+
+            {/* ===== RISK ANALYSIS TAB ===== */}
+            {active_tab === "risk" && (
+              <>
+                <RiskSummaryPanel
+                  safe_withdrawal={safe_withdrawal_result}
+                  is_loading={is_loading_safe_withdrawal}
+                  current_fun_fund={annual_spend_target}
+                  bankruptcy_pct={final_bankruptcy_pct}
+                  depletion_pct={final_depletion_pct}
+                  risk_threshold={risk_threshold}
+                  on_risk_threshold_change={setRiskThreshold}
+                  on_set_fun_fund={setAnnualSpendTarget}
+                />
+
+                {safe_withdrawal_result && safe_withdrawal_result.sensitivity_curve.length > 0 && (
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <SensitivityChart
+                      sensitivity_curve={safe_withdrawal_result.sensitivity_curve}
+                      current_fun_fund={annual_spend_target}
+                      max_safe_fun_fund={safe_withdrawal_result.max_safe_fun_fund}
+                      risk_threshold={risk_threshold}
+                    />
+                    <RiskTimelineChart
+                      years={display_result.years}
+                      is_depleted_median={display_result.is_depleted_median}
+                      is_bankrupt_median={display_result.is_bankrupt_median}
+                      retirement_years={display_result.retirement_years}
+                    />
+                  </div>
+                )}
+
+                {!safe_withdrawal_result && (
+                  <RiskTimelineChart
+                    years={display_result.years}
+                    is_depleted_median={display_result.is_depleted_median}
+                    is_bankrupt_median={display_result.is_bankrupt_median}
+                    retirement_years={display_result.retirement_years}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
