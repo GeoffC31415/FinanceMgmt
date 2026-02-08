@@ -24,11 +24,9 @@ import numpy as np
 from backend.simulation.engine import (
     SimulationAssumptions,
     SimulationScenario,
-    run_monte_carlo,
 )
-from backend.simulation.engine import run_with_cached_returns
-from backend.simulation.engine_fast import FastEngineConfig, run_with_cached_returns_fast
-from backend.simulation.returns_cache import create_session, get_session
+from backend.simulation.engine_fast import run_simulation
+from backend.simulation.returns_cache import create_session, get_session, generate_returns_matrix
 from backend.simulation.entities import ExpenseItem, GiftIncome, MortgageAccount, PensionPot, PersonEntity, RentalIncome, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
 
@@ -141,22 +139,26 @@ def _build_simulation_scenario(
             )
         elif income.kind == "rental":
             # Rental income: taxable as personal income, no NI, no pension contributions
+            person_key = next((p.label for p in scenario.people if p.id == income.person_id), scenario.people[0].label)
             rental_incomes.append(
                 RentalIncome(
                     gross_annual=income.gross_annual,
                     annual_growth_rate=income.annual_growth_rate,
                     start_year=income.start_year,
                     end_year=income.end_year,
+                    person_key=person_key,
                 )
             )
         elif income.kind == "gift":
             # Gift income: completely tax-free
+            person_key = next((p.label for p in scenario.people if p.id == income.person_id), scenario.people[0].label)
             gift_incomes.append(
                 GiftIncome(
                     gross_annual=income.gross_annual,
                     annual_growth_rate=income.annual_growth_rate,
                     start_year=income.start_year,
                     end_year=income.end_year,
+                    person_key=person_key,
                 )
             )
 
@@ -351,7 +353,7 @@ def _response_from_matrices(
 
 
 @router.post("/run", response_model=SimulationResponse)
-async def run_simulation(payload: SimulationRequest, session: AsyncSession = Depends(get_db_session)) -> SimulationResponse:
+async def run_simulation_endpoint(payload: SimulationRequest, session: AsyncSession = Depends(get_db_session)) -> SimulationResponse:
     result = await session.execute(_scenario_query().where(Scenario.id == payload.scenario_id))
     scenario = result.scalars().unique().first()
     if scenario is None:
@@ -366,109 +368,15 @@ async def run_simulation(payload: SimulationRequest, session: AsyncSession = Dep
         end_year_override=payload.end_year,
     )
 
-    results = run_monte_carlo(scenario=sim_scenario, iterations=payload.iterations, seed=payload.seed)
+    returns = generate_returns_matrix(scenario=sim_scenario, iterations=payload.iterations, seed=payload.seed)
+    mats = run_simulation(scenario=sim_scenario, returns=returns)
 
-    years = [s.year for s in results.runs[0].snapshots] if results.runs else []
-    
-    # Helper function to extract matrix for a field
-    def get_matrix(field_name: str) -> np.ndarray:
-        return np.array([[getattr(s, field_name) for s in run.snapshots] for run in results.runs], dtype=float)
-    
-    # Helper function to get median
-    def get_median(field_name: str) -> list[float]:
-        matrix = get_matrix(field_name)
-        return np.median(matrix, axis=0).tolist() if matrix.size else []
-    
-    # Helper function to get percentage (for boolean fields)
-    def get_percentage(field_name: str) -> list[float]:
-        matrix = np.array([[float(getattr(s, field_name)) for s in run.snapshots] for run in results.runs], dtype=float)
-        return (np.mean(matrix, axis=0) * 100).tolist() if matrix.size else []
-
-    net_worth_matrix = get_matrix("net_worth")
-    
-    if net_worth_matrix.size:
-        p10 = np.percentile(net_worth_matrix, 10, axis=0).tolist()
-        median = np.median(net_worth_matrix, axis=0).tolist()
-        p90 = np.percentile(net_worth_matrix, 90, axis=0).tolist()
-    else:
-        p10 = []
-        median = []
-        p90 = []
-
-    retirement_years = _retirement_years_from_people(people=sim_scenario.people)
-    n_years = len(years)
-
-    # Slow /run endpoint doesn't currently track per-type flows; return 0s.
-    zeros = [0.0] * n_years
-    isa_balance_median = get_median("isa_balance")
-    pension_balance_median = get_median("pension_balance")
-    cash_balance_median = get_median("cash_balance")
-    total_assets_median = get_median("total_assets")
-
-    def _value_at(values: list[float], idx: int) -> float:
-        return float(values[idx]) if idx < len(values) else 0.0
-
-    gia_balance_median = [
-        _value_at(total_assets_median, i)
-        - _value_at(isa_balance_median, i)
-        - _value_at(pension_balance_median, i)
-        - _value_at(cash_balance_median, i)
-        for i in range(n_years)
-    ]
-
-    return SimulationResponse(
-        years=years,
-        net_worth_p10=p10,
-        net_worth_median=median,
-        net_worth_p90=p90,
-        income_median=get_median("total_income"),
-        spend_median=get_median("total_expenses"),
-        retirement_years=retirement_years,
+    return _response_from_matrices(
+        years=mats.years,
+        mats=mats.fields,
+        people=sim_scenario.people,
         inflation_rate=sim_scenario.assumptions.inflation_rate,
         start_year=sim_scenario.start_year,
-        # Detailed incomes
-        salary_gross_median=get_median("salary_gross"),
-        salary_net_median=get_median("salary_net"),
-        rental_income_median=get_median("rental_income"),
-        gift_income_median=get_median("gift_income"),
-        pension_income_median=get_median("pension_income"),
-        state_pension_income_median=get_median("state_pension_income"),
-        investment_returns_median=get_median("investment_returns"),
-        total_income_median=get_median("total_income"),
-        # Detailed expenses
-        total_expenses_median=get_median("total_expenses"),
-        mortgage_payment_median=get_median("mortgage_payment"),
-        pension_contributions_median=get_median("pension_contributions"),
-        fun_fund_median=get_median("fun_fund"),
-        # Tax
-        income_tax_paid_median=get_median("income_tax_paid"),
-        ni_paid_median=get_median("ni_paid"),
-        total_tax_median=get_median("total_tax"),
-        # Assets
-        isa_balance_median=isa_balance_median,
-        pension_balance_median=pension_balance_median,
-        cash_balance_median=cash_balance_median,
-        gia_balance_median=gia_balance_median,
-        total_assets_median=total_assets_median,
-        # Asset-type performance and flows (not available on slow engine)
-        isa_returns_median=zeros,
-        gia_returns_median=zeros,
-        cash_returns_median=zeros,
-        pension_returns_median=zeros,
-        isa_contributions_median=zeros,
-        gia_contributions_median=zeros,
-        isa_withdrawals_median=zeros,
-        gia_withdrawals_median=zeros,
-        pension_withdrawals_median=zeros,
-        # Liabilities
-        mortgage_balance_median=get_median("mortgage_balance"),
-        total_liabilities_median=get_median("total_liabilities"),
-        # Other
-        mortgage_paid_off_median=get_percentage("mortgage_paid_off"),
-        is_depleted_median=get_percentage("is_depleted"),
-        is_bankrupt_median=get_percentage("is_bankrupt"),
-        debt_balance_median=get_median("debt_balance"),
-        debt_interest_paid_median=get_median("debt_interest_paid"),
     )
 
 
@@ -500,12 +408,7 @@ async def init_simulation(
     if cached is None:
         raise HTTPException(status_code=500, detail="Failed to initialize simulation session")
 
-    use_fast = getattr(payload, "use_fast_engine", True)
-    mats = run_with_cached_returns_fast(
-        scenario=sim_scenario,
-        returns=cached.returns,
-        config=FastEngineConfig(enable_numba=use_fast),
-    )
+    mats = run_simulation(scenario=sim_scenario, returns=cached.returns)
     response = _response_from_matrices(
         years=mats.years,
         mats=mats.fields,
@@ -579,12 +482,7 @@ async def recalc_simulation(
         retirement_age_offset=retirement_age_offset,
     )
 
-    use_fast = getattr(payload, "use_fast_engine", True)
-    mats = run_with_cached_returns_fast(
-        scenario=sim_scenario,
-        returns=cached.returns,
-        config=FastEngineConfig(enable_numba=use_fast),
-    )
+    mats = run_simulation(scenario=sim_scenario, returns=cached.returns)
     pct = payload.percentile if payload.percentile is not None else 50
     return _response_from_matrices(
         years=mats.years,
@@ -629,11 +527,7 @@ async def safe_withdrawal(
             retirement_age_offset=retirement_age_offset,
         )
 
-        mats = run_with_cached_returns_fast(
-            scenario=sim_scenario,
-            returns=cached.returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
+        mats = run_simulation(scenario=sim_scenario, returns=cached.returns)
 
         # Extract final-year risk metrics across all iterations
         nw = mats.fields.get("net_worth")
@@ -676,11 +570,7 @@ async def safe_withdrawal(
                 annual_spend_target=float(mid),
                 retirement_age_offset=retirement_age_offset,
             )
-            mats = run_with_cached_returns_fast(
-                scenario=sim_scenario,
-                returns=cached.returns,
-                config=FastEngineConfig(enable_numba=True),
-            )
+            mats = run_simulation(scenario=sim_scenario, returns=cached.returns)
             is_bankrupt = mats.fields.get("is_bankrupt")
             if is_bankrupt is not None and is_bankrupt.size:
                 bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100)

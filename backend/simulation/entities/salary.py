@@ -27,8 +27,8 @@ class SalaryIncome:
             self._pension_contributions = 0.0
             return
 
-        self.gross_annual *= 1.0 + self.annual_growth_rate
         self._salary_gross = self.gross_annual
+        self.gross_annual *= 1.0 + self.annual_growth_rate
         self._pension_contributions = self.gross_annual * (self.employee_pension_pct + self.employer_pension_pct)
 
     def get_balance_sheet(self) -> dict[str, float]:

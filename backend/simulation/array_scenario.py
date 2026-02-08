@@ -51,11 +51,13 @@ class ArrayScenario:
     salary_start_year: np.ndarray
     salary_end_year: np.ndarray
 
+    rental_person_idx: np.ndarray
     rental_gross_annual: np.ndarray
     rental_growth_rate: np.ndarray
     rental_start_year: np.ndarray
     rental_end_year: np.ndarray
 
+    gift_person_idx: np.ndarray
     gift_gross_annual: np.ndarray
     gift_growth_rate: np.ndarray
     gift_start_year: np.ndarray
@@ -134,6 +136,9 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         salary_start_year = np.zeros(0, dtype=np.int32)
         salary_end_year = np.zeros(0, dtype=np.int32)
 
+    # Build person key -> index mapping for rental/gift attribution
+    person_key_to_idx = {p.key: i for i, p in enumerate(scenario.people)}
+
     rental_rows = [
         (
             float(r.gross_annual),
@@ -143,6 +148,10 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         )
         for r in scenario.rental_incomes
     ]
+    rental_person_idx = np.array(
+        [person_key_to_idx.get(r.person_key, 0) if r.person_key else 0 for r in scenario.rental_incomes],
+        dtype=np.int32,
+    ) if scenario.rental_incomes else np.zeros(0, dtype=np.int32)
     if rental_rows:
         rental_arr = np.array(rental_rows, dtype=np.float64)
         rental_gross_annual = rental_arr[:, 0]
@@ -164,6 +173,10 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         )
         for g in scenario.gift_incomes
     ]
+    gift_person_idx = np.array(
+        [person_key_to_idx.get(g.person_key, 0) if g.person_key else 0 for g in scenario.gift_incomes],
+        dtype=np.int32,
+    ) if scenario.gift_incomes else np.zeros(0, dtype=np.int32)
     if gift_rows:
         gift_arr = np.array(gift_rows, dtype=np.float64)
         gift_gross_annual = gift_arr[:, 0]
@@ -248,10 +261,12 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         salary_employer_pct=salary_employer_pct,
         salary_start_year=salary_start_year,
         salary_end_year=salary_end_year,
+        rental_person_idx=rental_person_idx,
         rental_gross_annual=rental_gross_annual,
         rental_growth_rate=rental_growth_rate,
         rental_start_year=rental_start_year,
         rental_end_year=rental_end_year,
+        gift_person_idx=gift_person_idx,
         gift_gross_annual=gift_gross_annual,
         gift_growth_rate=gift_growth_rate,
         gift_start_year=gift_start_year,

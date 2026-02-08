@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Benchmark script comparing Python vs Numba simulation engine performance.
+Benchmark script for the Numba simulation engine.
 
 Usage:
     python -m backend.tests.benchmark_engine
@@ -9,7 +9,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from datetime import date
 from typing import Callable
@@ -20,13 +19,8 @@ from backend.simulation.engine import (
     SimulationAssumptions,
     SimulationRunMatrices,
     SimulationScenario,
-    run_with_cached_returns,
 )
-from backend.simulation.engine_fast import (
-    FastEngineConfig,
-    _HAS_NUMBA,
-    run_with_cached_returns_fast,
-)
+from backend.simulation.engine_fast import run_simulation
 from backend.simulation.entities import (
     ExpenseItem,
     GiftIncome,
@@ -37,7 +31,7 @@ from backend.simulation.entities import (
     SalaryIncome,
 )
 from backend.simulation.entities.asset import AssetAccount
-from backend.simulation.returns_cache import ReturnsMatrix, generate_returns_matrix
+from backend.simulation.returns_cache import generate_returns_matrix
 
 
 def create_benchmark_scenario(
@@ -51,7 +45,6 @@ def create_benchmark_scenario(
     start_year = 2024
     end_year = start_year + n_years - 1
 
-    # Create people
     people = []
     salary_by_person: dict[str, list[SalaryIncome]] = {}
     pension_by_person: dict[str, PensionPot] = {}
@@ -81,7 +74,6 @@ def create_benchmark_scenario(
             growth_rate_std=0.10,
         )
 
-    # Create assets
     assets = []
     asset_types = ["CASH", "ISA", "GIA"]
     for i in range(n_assets):
@@ -100,7 +92,6 @@ def create_benchmark_scenario(
             )
         )
 
-    # Create expenses
     expenses = [
         ExpenseItem(
             name=f"Expense{i+1}",
@@ -110,28 +101,18 @@ def create_benchmark_scenario(
         for i in range(n_expenses)
     ]
 
-    # Create mortgage
     mortgage = MortgageAccount(
         balance=250_000.0,
         annual_interest_rate=0.04,
         monthly_payment=1_400.0,
     )
 
-    # Create rental and gift income
     rental_incomes = [
-        RentalIncome(
-            gross_annual=12_000.0,
-            annual_growth_rate=0.02,
-        )
+        RentalIncome(gross_annual=12_000.0, annual_growth_rate=0.02)
     ]
 
     gift_incomes = [
-        GiftIncome(
-            gross_annual=5_000.0,
-            annual_growth_rate=0.0,
-            start_year=2025,
-            end_year=2030,
-        )
+        GiftIncome(gross_annual=5_000.0, annual_growth_rate=0.0, start_year=2025, end_year=2030)
     ]
 
     return SimulationScenario(
@@ -167,7 +148,6 @@ def time_function(
 
 
 def format_time(seconds: float) -> str:
-    """Format time in appropriate units."""
     if seconds < 0.001:
         return f"{seconds * 1_000_000:.1f}µs"
     if seconds < 1:
@@ -182,174 +162,54 @@ def run_benchmark(
     warmup_runs: int = 1,
     timing_runs: int = 3,
 ) -> None:
-    """Run benchmarks comparing Python and Numba engines."""
-    print("=" * 70)
+    """Run benchmarks for the Numba engine."""
+    print("=" * 50)
     print("SIMULATION ENGINE BENCHMARK")
-    print("=" * 70)
-    print(f"Numba available: {_HAS_NUMBA}")
+    print("=" * 50)
     print(f"Scenario: {n_years} years, 2 people, 5 assets, 4 expenses")
     print(f"Warmup runs: {warmup_runs}, Timing runs: {timing_runs}")
-    print("=" * 70)
+    print("=" * 50)
     print()
 
     scenario = create_benchmark_scenario(n_years=n_years)
 
-    # Table header
-    print(f"{'Iterations':>12} │ {'Python':>12} │ {'Numba':>12} │ {'Speedup':>10}")
-    print("─" * 12 + "─┼─" + "─" * 12 + "─┼─" + "─" * 12 + "─┼─" + "─" * 10)
+    print(f"{'Iterations':>12} │ {'Time':>12}")
+    print("─" * 12 + "─┼─" + "─" * 12)
 
     for iterations in iterations_list:
-        # Generate returns once (shared between both engines)
         returns = generate_returns_matrix(
             scenario=scenario,
             iterations=iterations,
             seed=42,
         )
 
-        # Warmup Python
-        for _ in range(warmup_runs):
-            run_with_cached_returns(scenario=scenario, returns=returns)
+        # Warmup (includes JIT compilation on first run)
+        for _ in range(warmup_runs + 1):
+            run_simulation(scenario=scenario, returns=returns)
 
-        # Time Python
-        python_min, python_mean, python_max = time_function(
-            lambda: run_with_cached_returns(scenario=scenario, returns=returns),
+        # Time
+        _, mean_time, _ = time_function(
+            lambda: run_simulation(scenario=scenario, returns=returns),
             n_runs=timing_runs,
         )
 
-        if _HAS_NUMBA:
-            # Warmup Numba (includes JIT compilation on first run)
-            for _ in range(warmup_runs + 1):  # Extra run for JIT
-                run_with_cached_returns_fast(
-                    scenario=scenario,
-                    returns=returns,
-                    config=FastEngineConfig(enable_numba=True),
-                )
-
-            # Time Numba
-            numba_min, numba_mean, numba_max = time_function(
-                lambda: run_with_cached_returns_fast(
-                    scenario=scenario,
-                    returns=returns,
-                    config=FastEngineConfig(enable_numba=True),
-                ),
-                n_runs=timing_runs,
-            )
-
-            speedup = python_mean / numba_mean if numba_mean > 0 else float("inf")
-            numba_str = format_time(numba_mean)
-            speedup_str = f"{speedup:.1f}x"
-        else:
-            numba_str = "N/A"
-            speedup_str = "N/A"
-
-        print(
-            f"{iterations:>12,} │ {format_time(python_mean):>12} │ {numba_str:>12} │ {speedup_str:>10}"
-        )
+        print(f"{iterations:>12,} │ {format_time(mean_time):>12}")
 
     print()
-    print("=" * 70)
-
-
-def run_scaling_benchmark(
-    *,
-    iterations: int = 500,
-    year_counts: list[int] | None = None,
-) -> None:
-    """Benchmark how performance scales with simulation length."""
-    if year_counts is None:
-        year_counts = [10, 20, 40, 60, 80]
-
-    print()
-    print("=" * 70)
-    print("SCALING BENCHMARK (by simulation years)")
-    print("=" * 70)
-    print(f"Fixed iterations: {iterations}")
-    print()
-
-    print(f"{'Years':>8} │ {'Python':>12} │ {'Numba':>12} │ {'Speedup':>10}")
-    print("─" * 8 + "─┼─" + "─" * 12 + "─┼─" + "─" * 12 + "─┼─" + "─" * 10)
-
-    for n_years in year_counts:
-        scenario = create_benchmark_scenario(n_years=n_years)
-        returns = generate_returns_matrix(
-            scenario=scenario,
-            iterations=iterations,
-            seed=42,
-        )
-
-        # Warmup and time Python
-        run_with_cached_returns(scenario=scenario, returns=returns)
-        python_min, python_mean, python_max = time_function(
-            lambda: run_with_cached_returns(scenario=scenario, returns=returns),
-            n_runs=3,
-        )
-
-        if _HAS_NUMBA:
-            # Warmup and time Numba
-            for _ in range(2):
-                run_with_cached_returns_fast(
-                    scenario=scenario,
-                    returns=returns,
-                    config=FastEngineConfig(enable_numba=True),
-                )
-
-            numba_min, numba_mean, numba_max = time_function(
-                lambda: run_with_cached_returns_fast(
-                    scenario=scenario,
-                    returns=returns,
-                    config=FastEngineConfig(enable_numba=True),
-                ),
-                n_runs=3,
-            )
-
-            speedup = python_mean / numba_mean if numba_mean > 0 else float("inf")
-            numba_str = format_time(numba_mean)
-            speedup_str = f"{speedup:.1f}x"
-        else:
-            numba_str = "N/A"
-            speedup_str = "N/A"
-
-        print(
-            f"{n_years:>8} │ {format_time(python_mean):>12} │ {numba_str:>12} │ {speedup_str:>10}"
-        )
-
-    print()
+    print("=" * 50)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark simulation engines")
+    parser = argparse.ArgumentParser(description="Benchmark simulation engine")
     parser.add_argument(
-        "--iterations",
-        type=str,
-        default="50,100,200,500,1000",
+        "--iterations", type=str, default="50,100,200,500,1000",
         help="Comma-separated list of iteration counts to benchmark",
     )
-    parser.add_argument(
-        "--years",
-        type=int,
-        default=40,
-        help="Number of simulation years",
-    )
-    parser.add_argument(
-        "--warmup",
-        type=int,
-        default=1,
-        help="Number of warmup runs",
-    )
-    parser.add_argument(
-        "--timing-runs",
-        type=int,
-        default=3,
-        help="Number of timing runs",
-    )
-    parser.add_argument(
-        "--scaling",
-        action="store_true",
-        help="Also run scaling benchmark",
-    )
+    parser.add_argument("--years", type=int, default=40, help="Number of simulation years")
+    parser.add_argument("--warmup", type=int, default=1, help="Number of warmup runs")
+    parser.add_argument("--timing-runs", type=int, default=3, help="Number of timing runs")
 
     args = parser.parse_args()
-
     iterations_list = [int(x.strip()) for x in args.iterations.split(",")]
 
     run_benchmark(
@@ -358,20 +218,6 @@ def main() -> None:
         warmup_runs=args.warmup,
         timing_runs=args.timing_runs,
     )
-
-    if args.scaling:
-        run_scaling_benchmark(iterations=500)
-
-    if _HAS_NUMBA:
-        # Final summary
-        print("CONCLUSION:")
-        print("The Numba-accelerated engine provides significant speedups,")
-        print("especially for large iteration counts where parallel execution shines.")
-        print()
-    else:
-        print("NOTE: Install numba for accelerated simulation:")
-        print("  pip install numba")
-        print()
 
 
 if __name__ == "__main__":

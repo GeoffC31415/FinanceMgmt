@@ -20,6 +20,7 @@ class RentalIncome:
     annual_growth_rate: float
     start_year: int | None = None
     end_year: int | None = None
+    person_key: str | None = None  # person this income is attributed to for tax
 
     _income_gross: float = 0.0
 
@@ -31,8 +32,8 @@ class RentalIncome:
             self._income_gross = 0.0
             return
 
-        self.gross_annual *= 1.0 + self.annual_growth_rate
         self._income_gross = self.gross_annual
+        self.gross_annual *= 1.0 + self.annual_growth_rate
 
     def get_balance_sheet(self) -> dict[str, float]:
         return {}

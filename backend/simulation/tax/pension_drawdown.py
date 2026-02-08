@@ -122,48 +122,39 @@ def _solve_taxable_amount(
     other_taxable_income: float,
     bands: IncomeTaxBands,
 ) -> float:
+    """
+    Solve for the pension taxable amount needed to achieve target_net_income.
+
+    Uses binary search to correctly handle personal allowance tapering
+    in the 100k-125,140 region (effective 60% marginal rate).
+    """
     if target_net_income <= 0:
         return 0.0
 
-    base_income = max(0.0, other_taxable_income)
-    remaining_net = target_net_income
-    taxable_needed = 0.0
+    # Binary search for the taxable amount that produces target_net_income
+    low = 0.0
+    high = target_net_income * 3.0  # Upper bound (generous for high tax rates)
 
-    band_limits = (
-        (bands.personal_allowance, 0.0),
-        (bands.basic_rate_limit, bands.basic_rate),
-        (bands.higher_rate_limit, bands.higher_rate),
-    )
+    for _ in range(40):  # ~penny precision
+        mid = (low + high) / 2.0
+        gross = mid / 0.75 if mid > 0 else 0.0
 
-    previous_limit = 0.0
-    current_income = base_income
+        total_tax = calculate_income_tax(
+            taxable_income=other_taxable_income + mid,
+            bands=bands,
+        )
+        base_tax = calculate_income_tax(
+            taxable_income=other_taxable_income,
+            bands=bands,
+        )
+        pension_tax = total_tax - base_tax
+        net = gross - pension_tax
 
-    for limit, rate in band_limits:
-        band_start = previous_limit
-        band_end = limit
-        previous_limit = limit
+        if abs(net - target_net_income) < 0.01:
+            return mid
+        if net < target_net_income:
+            low = mid
+        else:
+            high = mid
 
-        if current_income >= band_end:
-            continue
-
-        available = band_end - max(current_income, band_start)
-        if available <= 0:
-            continue
-
-        net_per_taxable = (4.0 / 3.0) - rate
-        net_available = available * net_per_taxable
-        if remaining_net <= net_available:
-            taxable_needed += remaining_net / net_per_taxable
-            return taxable_needed
-
-        taxable_needed += available
-        remaining_net -= net_available
-        current_income = band_end
-
-    # Additional rate band (no upper limit)
-    additional_rate = bands.additional_rate
-    net_per_taxable = (4.0 / 3.0) - additional_rate
-    if net_per_taxable <= 0:
-        return taxable_needed
-    taxable_needed += remaining_net / net_per_taxable
-    return taxable_needed
+    return (low + high) / 2.0

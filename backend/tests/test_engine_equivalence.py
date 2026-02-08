@@ -1,6 +1,5 @@
 """
-Test that the Numba-accelerated simulation engine produces equivalent results
-to the pure Python implementation.
+Tests for the Numba-accelerated simulation engine.
 """
 from datetime import date
 
@@ -10,12 +9,9 @@ import pytest
 from backend.simulation.engine import (
     SimulationAssumptions,
     SimulationScenario,
-    run_with_cached_returns,
 )
 from backend.simulation.engine_fast import (
-    FastEngineConfig,
-    _HAS_NUMBA,
-    run_with_cached_returns_fast,
+    run_simulation,
 )
 from backend.simulation.entities import (
     ExpenseItem,
@@ -98,7 +94,7 @@ def _make_test_scenario(
         growth_rate_mean=0.05,
         growth_rate_std=0.10,
         contributions_end_at_retirement=False,
-        cost_basis=20_000.0,  # Has unrealized gains
+        cost_basis=20_000.0,
     )
     cash = AssetAccount(
         name="Cash",
@@ -233,12 +229,11 @@ def _make_simple_scenario() -> SimulationScenario:
     )
 
 
-@pytest.mark.skipif(not _HAS_NUMBA, reason="Numba not installed")
-class TestEngineEquivalence:
-    """Test that Python and Numba engines produce equivalent results."""
+class TestEngine:
+    """Test the Numba simulation engine."""
 
-    def test_simple_scenario_equivalence(self):
-        """Test equivalence on a simple scenario."""
+    def test_simple_scenario(self):
+        """Test that a simple scenario runs and produces valid output."""
         scenario = _make_simple_scenario()
         iterations = 50
         seed = 42
@@ -249,37 +244,14 @@ class TestEngineEquivalence:
             seed=seed,
         )
 
-        # Run Python engine
-        python_result = run_with_cached_returns(scenario=scenario, returns=returns)
+        result = run_simulation(scenario=scenario, returns=returns)
 
-        # Run Numba engine (force enable)
-        numba_result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
+        assert len(result.years) == 6  # 2024-2029 inclusive
+        assert "net_worth" in result.fields
+        assert result.fields["net_worth"].shape == (iterations, 6)
 
-        # Compare years
-        assert python_result.years == numba_result.years
-
-        # Compare all fields
-        for field_name in python_result.fields.keys():
-            python_vals = python_result.fields[field_name]
-            numba_vals = numba_result.fields.get(field_name)
-            
-            assert numba_vals is not None, f"Missing field: {field_name}"
-            
-            # Allow small numerical tolerance
-            np.testing.assert_allclose(
-                python_vals,
-                numba_vals,
-                rtol=1e-4,
-                atol=1.0,  # Allow £1 absolute difference
-                err_msg=f"Mismatch in field: {field_name}",
-            )
-
-    def test_full_scenario_equivalence(self):
-        """Test equivalence on a full scenario with all features."""
+    def test_full_scenario(self):
+        """Test a full scenario with all features."""
         scenario = _make_test_scenario()
         iterations = 100
         seed = 123
@@ -290,53 +262,23 @@ class TestEngineEquivalence:
             seed=seed,
         )
 
-        # Run Python engine
-        python_result = run_with_cached_returns(scenario=scenario, returns=returns)
+        result = run_simulation(scenario=scenario, returns=returns)
 
-        # Run Numba engine
-        numba_result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
-
-        # Compare years
-        assert python_result.years == numba_result.years
-
-        # Compare key financial metrics with tolerance
+        assert len(result.years) == 11  # 2024-2034 inclusive
         key_fields = [
-            "net_worth",
-            "salary_gross",
-            "salary_net",
-            "pension_balance",
-            "isa_balance",
-            "cash_balance",
-            "total_assets",
-            "mortgage_balance",
-            "total_expenses",
+            "net_worth", "salary_gross", "salary_net",
+            "pension_balance", "isa_balance", "cash_balance",
+            "total_assets", "mortgage_balance", "total_expenses",
         ]
-
         for field_name in key_fields:
-            python_vals = python_result.fields[field_name]
-            numba_vals = numba_result.fields.get(field_name)
-            
-            assert numba_vals is not None, f"Missing field: {field_name}"
-            
-            # Use relative tolerance for large values
-            np.testing.assert_allclose(
-                python_vals,
-                numba_vals,
-                rtol=0.01,  # 1% relative tolerance
-                atol=10.0,  # £10 absolute tolerance
-                err_msg=f"Mismatch in field: {field_name}",
-            )
+            assert field_name in result.fields, f"Missing field: {field_name}"
+            assert result.fields[field_name].shape == (iterations, 11)
 
     def test_retirement_year_transition(self):
-        """Test that retirement transitions are handled consistently."""
-        # Create scenario where retirement happens mid-simulation
+        """Test that retirement transitions are handled correctly."""
         scenario = _make_test_scenario(
-            start_year=2038,  # person1 turns 58
-            end_year=2045,    # person1 turns 65 (retired at 60)
+            start_year=2038,
+            end_year=2045,
             annual_spend_target=40_000.0,
         )
         iterations = 30
@@ -348,27 +290,17 @@ class TestEngineEquivalence:
             seed=seed,
         )
 
-        python_result = run_with_cached_returns(scenario=scenario, returns=returns)
-        numba_result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
+        result = run_simulation(scenario=scenario, returns=returns)
+        salary = result.fields["salary_gross"]
 
-        # Salary should drop to zero after retirement
-        python_salary = python_result.fields["salary_gross"]
-        numba_salary = numba_result.fields["salary_gross"]
-
-        np.testing.assert_allclose(
-            python_salary,
-            numba_salary,
-            rtol=0.01,
-            atol=10.0,
-            err_msg="Salary mismatch around retirement",
-        )
+        # Person1 retires at 60 (born 1980, so year 2040)
+        # Person2 retires at 62 (born 1982, so year 2044)
+        # After both retire, salary should be 0
+        year_2045_idx = 2045 - 2038  # index 7
+        assert np.all(salary[:, year_2045_idx] == 0.0), "Salary should be 0 after both retire"
 
     def test_deterministic_with_same_returns(self):
-        """Test that both engines are deterministic with the same cached returns."""
+        """Test that the engine is deterministic with the same cached returns."""
         scenario = _make_simple_scenario()
         iterations = 20
         seed = 789
@@ -379,19 +311,9 @@ class TestEngineEquivalence:
             seed=seed,
         )
 
-        # Run Numba engine twice
-        result1 = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
-        result2 = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
+        result1 = run_simulation(scenario=scenario, returns=returns)
+        result2 = run_simulation(scenario=scenario, returns=returns)
 
-        # Should be exactly equal
         for field_name in result1.fields.keys():
             np.testing.assert_array_equal(
                 result1.fields[field_name],
@@ -399,61 +321,6 @@ class TestEngineEquivalence:
                 err_msg=f"Non-deterministic in field: {field_name}",
             )
 
-    def test_fallback_when_disabled(self):
-        """Test that disabling numba falls back to Python engine."""
-        scenario = _make_simple_scenario()
-        iterations = 10
-        seed = 111
-
-        returns = generate_returns_matrix(
-            scenario=scenario,
-            iterations=iterations,
-            seed=seed,
-        )
-
-        # Run with numba disabled
-        disabled_result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=False),
-        )
-
-        # Run Python directly
-        python_result = run_with_cached_returns(scenario=scenario, returns=returns)
-
-        # Should be exactly equal (same code path)
-        for field_name in python_result.fields.keys():
-            np.testing.assert_array_equal(
-                python_result.fields[field_name],
-                disabled_result.fields[field_name],
-                err_msg=f"Fallback mismatch in field: {field_name}",
-            )
-
-
-class TestEnginePerformance:
-    """Performance-related tests (not strict equivalence)."""
-
-    @pytest.mark.skipif(not _HAS_NUMBA, reason="Numba not installed")
-    def test_numba_compilation_succeeds(self):
-        """Test that the Numba kernel compiles successfully."""
-        scenario = _make_simple_scenario()
-        returns = generate_returns_matrix(
-            scenario=scenario,
-            iterations=10,
-            seed=0,
-        )
-
-        # This should not raise
-        result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
-
-        assert len(result.years) > 0
-        assert "net_worth" in result.fields
-
-    @pytest.mark.skipif(not _HAS_NUMBA, reason="Numba not installed")
     def test_large_iteration_count(self):
         """Test that the engine handles large iteration counts."""
         scenario = _make_simple_scenario()
@@ -466,27 +333,20 @@ class TestEnginePerformance:
             seed=seed,
         )
 
-        result = run_with_cached_returns_fast(
-            scenario=scenario,
-            returns=returns,
-            config=FastEngineConfig(enable_numba=True),
-        )
-
-        # Check shape
+        result = run_simulation(scenario=scenario, returns=returns)
         assert result.fields["net_worth"].shape == (iterations, len(result.years))
 
 
 class TestTaxCalculations:
-    """Test tax calculation equivalence."""
+    """Test tax calculation equivalence between Numba and Python implementations."""
 
-    @pytest.mark.skipif(not _HAS_NUMBA, reason="Numba not installed")
     def test_tax_calculations_match(self):
         """Test that tax calculations match between implementations."""
         from backend.simulation.tax.income_tax import IncomeTaxBands, calculate_income_tax
         from backend.simulation.engine_fast import _calculate_income_tax as fast_income_tax
 
         bands = IncomeTaxBands()
-        
+
         test_incomes = [
             0, 5_000, 12_570, 12_571, 25_000, 50_270, 50_271,
             75_000, 100_000, 125_140, 125_141, 200_000, 500_000,
@@ -503,7 +363,7 @@ class TestTaxCalculations:
                 bands.higher_rate,
                 bands.additional_rate,
             )
-            
+
             np.testing.assert_allclose(
                 python_tax,
                 numba_tax,
@@ -511,3 +371,97 @@ class TestTaxCalculations:
                 atol=0.01,
                 err_msg=f"Tax mismatch for income {income}",
             )
+
+    def test_personal_allowance_tapering(self):
+        """Test that PA tapering kicks in above 100k income."""
+        from backend.simulation.tax.income_tax import IncomeTaxBands, calculate_income_tax
+        from backend.simulation.engine_fast import _calculate_income_tax as fast_income_tax
+
+        bands = IncomeTaxBands()
+
+        # At 100k, full PA: tax on (100k - 12,570) = 87,430
+        tax_100k = calculate_income_tax(taxable_income=100_000.0, bands=bands)
+
+        # At 110k, PA reduced by (110k - 100k) / 2 = 5,000 -> PA = 7,570
+        # Extra 5,000 at basic rate (20%) = 1,000 extra tax vs simple step
+        tax_110k = calculate_income_tax(taxable_income=110_000.0, bands=bands)
+
+        # At 125,140, PA = 0: all income taxed
+        tax_125k = calculate_income_tax(taxable_income=125_140.0, bands=bands)
+
+        # Verify marginal rate is effectively 60% in tapering range
+        marginal_100_to_110 = (tax_110k - tax_100k) / 10_000.0
+        assert marginal_100_to_110 > 0.55, f"Expected ~60% marginal rate, got {marginal_100_to_110:.1%}"
+        assert marginal_100_to_110 < 0.65, f"Expected ~60% marginal rate, got {marginal_100_to_110:.1%}"
+
+        # Numba should match
+        numba_110k = fast_income_tax(
+            110_000.0, bands.personal_allowance, bands.basic_rate_limit,
+            bands.higher_rate_limit, bands.basic_rate, bands.higher_rate, bands.additional_rate,
+        )
+        np.testing.assert_allclose(tax_110k, numba_110k, rtol=1e-6, atol=0.01)
+
+
+class TestFirstYearGrowth:
+    """Test that the first-year growth bug is fixed."""
+
+    def test_salary_uses_configured_value_in_year_one(self):
+        """A salary of 50k with 2% growth should use 50k in year 1, not 51k."""
+        person = PersonEntity(
+            key="person1",
+            birth_date=date(1990, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=67,
+        )
+        salary = SalaryIncome(
+            gross_annual=50_000.0,
+            annual_growth_rate=0.02,
+            employee_pension_pct=0.0,
+            employer_pension_pct=0.0,
+        )
+        pension = PensionPot(balance=0.0, growth_rate_mean=0.0, growth_rate_std=0.0)
+        cash = AssetAccount(
+            name="Cash", asset_type="CASH", withdrawal_priority=0,
+            balance=100_000.0, annual_contribution=0.0,
+            growth_rate_mean=0.0, growth_rate_std=0.0,
+            contributions_end_at_retirement=False, cost_basis=100_000.0,
+        )
+
+        scenario = SimulationScenario(
+            start_year=2024, end_year=2026,
+            people=[person],
+            salary_by_person={"person1": [salary]},
+            pension_by_person={"person1": pension},
+            assets=[cash],
+            mortgage=None,
+            expenses=[],
+            assumptions=SimulationAssumptions(
+                state_pension_annual=0.0,
+                emergency_fund_months=0.0,
+            ),
+        )
+        returns = generate_returns_matrix(scenario=scenario, iterations=1, seed=0)
+
+        # Zero out returns so growth doesn't complicate things
+        returns = type(returns)(
+            years=returns.years,
+            asset_names=returns.asset_names,
+            asset_types=returns.asset_types,
+            asset_withdrawal_priority=returns.asset_withdrawal_priority,
+            initial_asset_balances=returns.initial_asset_balances,
+            initial_asset_cost_bases=returns.initial_asset_cost_bases,
+            asset_returns=np.zeros_like(returns.asset_returns),
+            pension_keys=returns.pension_keys,
+            initial_pension_balances=returns.initial_pension_balances,
+            pension_returns=np.zeros_like(returns.pension_returns),
+        )
+
+        result = run_simulation(scenario=scenario, returns=returns)
+
+        # Year 1 (2024): salary should be 50,000 (not 51,000)
+        year1_salary = result.fields["salary_gross"][0, 0]
+        assert abs(year1_salary - 50_000.0) < 1.0, f"Year 1 salary should be 50k, got {year1_salary:.0f}"
+
+        # Year 2 (2025): salary should be 51,000 (50k * 1.02)
+        year2_salary = result.fields["salary_gross"][0, 1]
+        assert abs(year2_salary - 51_000.0) < 1.0, f"Year 2 salary should be 51k, got {year2_salary:.0f}"

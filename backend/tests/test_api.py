@@ -236,7 +236,6 @@ async def test_simulation_init(client: AsyncClient):
         "scenario_id": scenario_id,
         "iterations": 50,
         "seed": 42,
-        "use_fast_engine": False,
     })
     assert sim_resp.status_code == 200
     data = sim_resp.json()
@@ -254,7 +253,6 @@ async def test_simulation_recalc(client: AsyncClient):
         "scenario_id": scenario_id,
         "iterations": 50,
         "seed": 42,
-        "use_fast_engine": False,
     })
     session_id = init_resp.json()["session_id"]
 
@@ -263,7 +261,6 @@ async def test_simulation_recalc(client: AsyncClient):
         "annual_spend_target": 10000.0,
         "retirement_age_offset": -2,
         "percentile": 50,
-        "use_fast_engine": False,
     })
     assert recalc_resp.status_code == 200
     data = recalc_resp.json()

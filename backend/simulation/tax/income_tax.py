@@ -18,14 +18,21 @@ def calculate_income_tax(*, taxable_income: float, bands: IncomeTaxBands) -> flo
     if taxable_income <= 0:
         return 0.0
 
+    # Personal allowance tapering: reduced by £1 for every £2 above £100k
+    effective_allowance = bands.personal_allowance
+    if taxable_income > 100_000:
+        reduction = min(bands.personal_allowance, (taxable_income - 100_000) / 2.0)
+        effective_allowance = max(0.0, bands.personal_allowance - reduction)
+
     remaining = taxable_income
     tax = 0.0
 
-    allowance = min(remaining, bands.personal_allowance)
+    allowance = min(remaining, effective_allowance)
     remaining -= allowance
     if remaining <= 0:
         return 0.0
 
+    # Use original personal_allowance for band boundary calculation
     basic_band = max(0.0, bands.basic_rate_limit - bands.personal_allowance)
     basic_amount = min(remaining, basic_band)
     tax += basic_amount * bands.basic_rate

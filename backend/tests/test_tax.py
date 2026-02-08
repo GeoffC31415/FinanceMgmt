@@ -69,20 +69,52 @@ class TestIncomeTax:
         assert tax == pytest.approx(expected, abs=1.0)
 
     def test_additional_rate_boundary(self):
-        """At £125,140, both basic and higher bands are full."""
-        basic_tax = (50_270 - 12_570) * 0.20
-        higher_tax = (125_140 - 50_270) * 0.40
-        expected = basic_tax + higher_tax
+        """At £125,140, PA is fully tapered to 0. All income is taxed."""
+        # PA tapered to 0 at 125,140 (100k + 2*12,570)
+        # basic_band = 50,270 - 12,570 = 37,700 (uses original PA for boundary)
+        basic_tax = 37_700 * 0.20  # 7,540
+        higher_tax = (125_140 - 50_270) * 0.40  # 29,948  (higher band from BRL to HRL)
+        # remaining after basic+higher = 125,140 - 37,700 - 74,870 = 12,570 at additional rate
+        additional_tax = 12_570 * 0.45  # 5,656.50
+        expected = basic_tax + higher_tax + additional_tax
         tax = calculate_income_tax(taxable_income=125_140.0, bands=self.bands)
         assert tax == pytest.approx(expected, abs=1.0)
 
     def test_additional_rate_example(self):
-        """£200,000: basic + higher + additional."""
-        basic_tax = (50_270 - 12_570) * 0.20
-        higher_tax = (125_140 - 50_270) * 0.40
-        additional_tax = (200_000 - 125_140) * 0.45
+        """£200,000: PA is 0 (tapered), all income taxed."""
+        # PA tapered to 0 (200k > 125,140)
+        basic_tax = 37_700 * 0.20  # 7,540
+        higher_tax = 74_870 * 0.40  # 29,948 (50,270 to 125,140)
+        additional_tax = (200_000 - 37_700 - 74_870) * 0.45  # remaining at 45%
         expected = basic_tax + higher_tax + additional_tax
         tax = calculate_income_tax(taxable_income=200_000.0, bands=self.bands)
+        assert tax == pytest.approx(expected, abs=1.0)
+
+    def test_personal_allowance_tapering_at_110k(self):
+        """At £110k, PA reduced by (110k-100k)/2 = £5,000 to £7,570."""
+        tax = calculate_income_tax(taxable_income=110_000.0, bands=self.bands)
+        # effective_pa = 12,570 - 5,000 = 7,570
+        # allowance portion: 7,570
+        # remaining: 110,000 - 7,570 = 102,430
+        # basic band: 37,700 -> tax = 7,540
+        # remaining: 102,430 - 37,700 = 64,730
+        # higher band: 74,870 -> min(64,730, 74,870) = 64,730 -> tax = 25,892
+        expected = 37_700 * 0.20 + 64_730 * 0.40
+        assert tax == pytest.approx(expected, abs=1.0)
+
+    def test_personal_allowance_tapering_marginal_rate(self):
+        """Effective marginal rate between 100k and 125,140 should be ~60%."""
+        tax_100k = calculate_income_tax(taxable_income=100_000.0, bands=self.bands)
+        tax_110k = calculate_income_tax(taxable_income=110_000.0, bands=self.bands)
+        marginal = (tax_110k - tax_100k) / 10_000.0
+        # Should be ~60% (40% higher rate + 20% from losing PA at 50p/£1)
+        assert marginal == pytest.approx(0.60, abs=0.01)
+
+    def test_no_tapering_below_100k(self):
+        """Below 100k, PA should not be tapered."""
+        tax = calculate_income_tax(taxable_income=99_999.0, bands=self.bands)
+        # Full PA applies
+        expected = (50_270 - 12_570) * 0.20 + (99_999 - 50_270) * 0.40
         assert tax == pytest.approx(expected, abs=1.0)
 
     def test_custom_bands(self):
