@@ -18,6 +18,7 @@ type Props = {
   net_worth_median: number[];
   net_worth_p90: number[];
   retirement_years: number[];
+  adult_decade_years?: { year: number; age: number; label: string }[];
   isa_balance_median?: number[];
   pension_balance_median?: number[];
   cash_balance_median?: number[];
@@ -33,6 +34,7 @@ export function NetWorthChart({
   net_worth_median,
   net_worth_p90,
   retirement_years,
+  adult_decade_years = [],
   isa_balance_median = [],
   pension_balance_median = [],
   cash_balance_median = [],
@@ -101,7 +103,7 @@ export function NetWorthChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart data={data} margin={{ top: 28, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis
@@ -156,6 +158,22 @@ export function NetWorthChart({
               }}
               contentStyle={{ color: "#e2e8f0" }}
             />
+            {adult_decade_years.map(({ year, age, label }) => (
+              <ReferenceLine
+                key={`decade-${label}-${year}`}
+                x={year}
+                stroke="#a78bfa"
+                strokeOpacity={0.55}
+                strokeDasharray="2 4"
+                yAxisId="left"
+                label={{
+                  value: `${label} ${age}`,
+                  position: "top",
+                  fill: "#a78bfa",
+                  fontSize: 10
+                }}
+              />
+            ))}
             {retirement_years.map((year) => (
               <ReferenceLine
                 key={`retire-${year}`}

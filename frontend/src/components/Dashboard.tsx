@@ -191,6 +191,24 @@ export function Dashboard() {
       .filter((c) => !isNaN(c.year));
   }, [selected]);
 
+  // Years when first two adults turn 40, 50, 60, etc. (for decade markers on net worth chart)
+  const adult_decade_years = useMemo(() => {
+    if (!selected || !display_result || display_result.years.length === 0) return [];
+    const adults = selected.people.filter((p) => !p.is_child).slice(0, 2);
+    const minYear = display_result.years[0];
+    const maxYear = display_result.years[display_result.years.length - 1];
+    const markers: { year: number; age: number; label: string }[] = [];
+    for (const adult of adults) {
+      const birth_year = parseInt(adult.birth_date.split("-")[0], 10);
+      if (isNaN(birth_year)) continue;
+      for (let age = 40; age <= 100; age += 10) {
+        const y = birth_year + age;
+        if (y >= minYear && y <= maxYear) markers.push({ year: y, age, label: adult.label });
+      }
+    }
+    return markers;
+  }, [selected, display_result]);
+
   // Calculate when mortgage is paid off (first year where 50%+ of runs have it paid off)
   const mortgage_payoff_year = useMemo(() => {
     if (!display_result) return null;
@@ -673,6 +691,7 @@ export function Dashboard() {
                   net_worth_median={display_result.net_worth_median}
                   net_worth_p90={display_result.net_worth_p90}
                   retirement_years={display_result.retirement_years}
+                  adult_decade_years={adult_decade_years}
                   isa_balance_median={display_result.isa_balance_median}
                   pension_balance_median={display_result.pension_balance_median}
                   cash_balance_median={display_result.cash_balance_median}
