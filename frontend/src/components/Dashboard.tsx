@@ -865,19 +865,25 @@ export function Dashboard() {
                   </div>
 
                   {/* Progress bar */}
-                  {is_loading_bond_sweep && sweep_progress && sweep_progress.total > 0 && (() => {
-                    const pct = Math.round((sweep_progress.completed / sweep_progress.total) * 100);
+                  {is_loading_bond_sweep && sweep_progress && (() => {
+                    const pct = sweep_progress.total > 0 ? Math.round((sweep_progress.completed / sweep_progress.total) * 100) : 0;
                     return (
                       <div className="mt-3">
                         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                          <span>Testing {sweep_progress.total.toLocaleString()} combinations...</span>
-                          <span>{sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()} ({pct}%)</span>
+                          <span>{sweep_progress.phase || "Starting..."}</span>
+                          {sweep_progress.total > 0 && (
+                            <span>{sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()}</span>
+                          )}
                         </div>
                         <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                            style={{ width: `${pct}%` }}
-                          />
+                          {sweep_progress.total > 0 ? (
+                            <div
+                              className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                              style={{ width: `${pct}%` }}
+                            />
+                          ) : (
+                            <div className="h-full w-full animate-pulse bg-indigo-500/30 rounded-full" />
+                          )}
                         </div>
                       </div>
                     );

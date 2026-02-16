@@ -144,6 +144,7 @@ export async function bond_sweep(payload: BondSweepRequest): Promise<BondSweepRe
 export type BondSweepProgress = {
   completed: number;
   total: number;
+  phase: string;
   running: boolean;
 };
 

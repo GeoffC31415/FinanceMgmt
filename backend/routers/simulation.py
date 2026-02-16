@@ -642,8 +642,8 @@ def _scenario_has_asset_class(scenario: SimulationScenario, asset_class: str) ->
     )
 
 
-# Progress tracking for bond sweep (session_id -> {completed, total})
-_SWEEP_PROGRESS: dict[str, dict[str, int]] = {}
+# Progress tracking for bond sweep
+_SWEEP_PROGRESS: dict[str, dict] = {}
 
 
 @router.get("/bond-sweep/progress")
@@ -651,97 +651,164 @@ async def bond_sweep_progress(session_id: str) -> dict:
     """Poll the progress of a running bond sweep."""
     prog = _SWEEP_PROGRESS.get(session_id)
     if prog is None:
-        return {"completed": 0, "total": 0, "running": False}
+        return {"completed": 0, "total": 0, "phase": "", "running": False}
     return {**prog, "running": prog["completed"] < prog["total"]}
+
+
+def _run_combo(
+    *,
+    isa_pct: float,
+    gia_pct: float,
+    pen_pct: float,
+    active_classes: list[str],
+    sim_scenario: SimulationScenario,
+    iterations: int,
+) -> BondCombo:
+    """Simulate a single ISA/GIA/PENSION bond-allocation combination."""
+    override: dict[str, float] = {}
+    if "ISA" in active_classes:
+        override["ISA"] = isa_pct / 100.0
+    if "GIA" in active_classes:
+        override["GIA"] = gia_pct / 100.0
+    if "PENSION" in active_classes:
+        override["PENSION"] = pen_pct / 100.0
+
+    returns = generate_returns_matrix_with_bond_override(
+        scenario=sim_scenario,
+        iterations=iterations,
+        seed=0,
+        bond_pct_by_class=override,
+    )
+    mats = run_simulation(scenario=sim_scenario, returns=returns)
+
+    nw = mats.fields.get("net_worth")
+    is_bankrupt = mats.fields.get("is_bankrupt")
+    is_depleted = mats.fields.get("is_depleted")
+
+    return BondCombo(
+        isa_bond_pct=isa_pct,
+        gia_bond_pct=gia_pct,
+        pension_bond_pct=pen_pct,
+        bankruptcy_pct=round(float(np.mean(is_bankrupt[:, -1]) * 100) if is_bankrupt is not None and is_bankrupt.size else 0.0, 2),
+        depletion_pct=round(float(np.mean(is_depleted[:, -1]) * 100) if is_depleted is not None and is_depleted.size else 0.0, 2),
+        median_final_net_worth=round(float(np.median(nw[:, -1])) if nw is not None and nw.size else 0.0, 2),
+        p10_final_net_worth=round(float(np.percentile(nw[:, -1], 10)) if nw is not None and nw.size else 0.0, 2),
+    )
+
+
+def _find_best_point(
+    results: list[BondCombo],
+    acceptable_risk: float,
+) -> BondCombo:
+    """Return the single best combo (highest median NW within risk threshold)."""
+    safe = [r for r in results if r.bankruptcy_pct <= acceptable_risk]
+    if safe:
+        return max(safe, key=lambda r: r.median_final_net_worth)
+    return min(results, key=lambda r: r.bankruptcy_pct)
 
 
 @router.post("/bond-sweep", response_model=BondSweepResponse)
 def bond_sweep(
     payload: BondSweepRequest,
 ) -> BondSweepResponse:
-    """Full combinatorial sweep of bond allocations across all asset classes.
+    """Adaptive coarse-to-fine combinatorial sweep of bond allocations.
 
-    Tests every combination of ISA/GIA/Pension bond % in 10% increments
-    (0%, 10%, ... 100%).  Returns the optimal combination, a ranked top-10,
-    and per-class marginal curves (averaged over all other dimensions) for
-    charting.
+    Round 1: 25% steps (coarse scan, ~125 combos for 3 classes)
+    Round 2:  5% steps in the promising zone (±25% around best)
+    Round 3:  1% steps in the refined zone  (±5% around best)
+
+    Skips already-tested combos in each round. Typically ~350 total
+    simulations instead of 1M+ for a brute-force 1% grid.
     """
     cached = get_session(session_id=payload.session_id)
     if cached is None:
         raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
     base = cached.base_scenario
-
     if base.assumptions.return_model != "historical_bootstrap":
-        raise HTTPException(
-            status_code=400,
-            detail="Bond sweep requires historical_bootstrap return model",
-        )
+        raise HTTPException(status_code=400, detail="Bond sweep requires historical_bootstrap return model")
 
     retirement_age_offset = int(payload.retirement_age_offset)
     spend = float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target
     acceptable_risk = float(payload.risk_threshold)
 
     sim_scenario = _build_scenario_from_cached(
-        base=base,
-        annual_spend_target=spend,
-        retirement_age_offset=retirement_age_offset,
+        base=base, annual_spend_target=spend, retirement_age_offset=retirement_age_offset,
     )
 
-    # Determine which asset classes exist in the scenario
     all_classes = ["ISA", "GIA", "PENSION"]
     active_classes = [c for c in all_classes if _scenario_has_asset_class(sim_scenario, c)]
 
-    # 10% increments
-    pct_steps = [round(i * 0.1, 2) for i in range(11)]
-
-    # Build all combinations as dicts mapping class -> bond fraction
-    import itertools
-    class_grids = [pct_steps if c in active_classes else [0.0] for c in all_classes]
-    combos = list(itertools.product(*class_grids))
-
-    # Initialize progress tracking
     sid = payload.session_id
-    _SWEEP_PROGRESS[sid] = {"completed": 0, "total": len(combos)}
-
+    tested: set[tuple[float, float, float]] = set()
     results: list[BondCombo] = []
-    for idx, (isa_pct, gia_pct, pen_pct) in enumerate(combos):
-        override = {}
-        if "ISA" in active_classes:
-            override["ISA"] = isa_pct
-        if "GIA" in active_classes:
-            override["GIA"] = gia_pct
-        if "PENSION" in active_classes:
-            override["PENSION"] = pen_pct
 
-        returns = generate_returns_matrix_with_bond_override(
-            scenario=sim_scenario,
-            iterations=cached.returns.iterations,
-            seed=0,
-            bond_pct_by_class=override,
-        )
-        mats = run_simulation(scenario=sim_scenario, returns=returns)
+    def _grid_for_class(cls: str, values: list[float]) -> list[float]:
+        return values if cls in active_classes else [0.0]
 
-        nw = mats.fields.get("net_worth")
-        is_bankrupt = mats.fields.get("is_bankrupt")
-        is_depleted = mats.fields.get("is_depleted")
+    def _run_round(
+        *,
+        phase: str,
+        isa_vals: list[float],
+        gia_vals: list[float],
+        pen_vals: list[float],
+    ) -> None:
+        import itertools
+        combos = [
+            (i, g, p)
+            for i, g, p in itertools.product(isa_vals, gia_vals, pen_vals)
+            if (i, g, p) not in tested
+        ]
+        _SWEEP_PROGRESS[sid] = {"completed": 0, "total": len(combos), "phase": phase}
+        for idx, (isa, gia, pen) in enumerate(combos):
+            tested.add((isa, gia, pen))
+            results.append(_run_combo(
+                isa_pct=isa, gia_pct=gia, pen_pct=pen,
+                active_classes=active_classes,
+                sim_scenario=sim_scenario,
+                iterations=cached.returns.iterations,
+            ))
+            _SWEEP_PROGRESS[sid] = {"completed": idx + 1, "total": len(combos), "phase": phase}
 
-        median_final = float(np.median(nw[:, -1])) if nw is not None and nw.size else 0.0
-        p10_final = float(np.percentile(nw[:, -1], 10)) if nw is not None and nw.size else 0.0
-        bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100) if is_bankrupt is not None and is_bankrupt.size else 0.0
-        depletion_pct = float(np.mean(is_depleted[:, -1]) * 100) if is_depleted is not None and is_depleted.size else 0.0
+    def _range_around(lo: float, hi: float, pad: float, step: float) -> list[float]:
+        """Generate sorted unique integer percentages in [lo-pad, hi+pad] at given step."""
+        start = max(0.0, lo - pad)
+        end = min(100.0, hi + pad)
+        vals: list[float] = []
+        v = start - (start % step)  # align to step grid
+        while v <= end + 1e-9:
+            rv = round(v, 2)
+            if 0.0 <= rv <= 100.0:
+                vals.append(rv)
+            v += step
+        return sorted(set(vals))
 
-        results.append(BondCombo(
-            isa_bond_pct=round(isa_pct * 100, 0),
-            gia_bond_pct=round(gia_pct * 100, 0),
-            pension_bond_pct=round(pen_pct * 100, 0),
-            bankruptcy_pct=round(bankruptcy_pct, 2),
-            depletion_pct=round(depletion_pct, 2),
-            median_final_net_worth=round(median_final, 2),
-            p10_final_net_worth=round(p10_final, 2),
-        ))
+    # --- Round 1: 25% coarse scan ---
+    coarse = [0.0, 25.0, 50.0, 75.0, 100.0]
+    _run_round(
+        phase="Coarse scan (25% steps)",
+        isa_vals=_grid_for_class("ISA", coarse),
+        gia_vals=_grid_for_class("GIA", coarse),
+        pen_vals=_grid_for_class("PENSION", coarse),
+    )
 
-        _SWEEP_PROGRESS[sid] = {"completed": idx + 1, "total": len(combos)}
+    # --- Round 2: 5% medium scan around best point (±10% pad) ---
+    best = _find_best_point(results, acceptable_risk)
+    _run_round(
+        phase="Refining (5% steps)",
+        isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, best.isa_bond_pct, 10, 5)),
+        gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, best.gia_bond_pct, 10, 5)),
+        pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, best.pension_bond_pct, 10, 5)),
+    )
+
+    # --- Round 3: 1% fine scan around refined best (±3% pad) ---
+    best = _find_best_point(results, acceptable_risk)
+    _run_round(
+        phase="Fine-tuning (1% steps)",
+        isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, best.isa_bond_pct, 3, 1)),
+        gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, best.gia_bond_pct, 3, 1)),
+        pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, best.pension_bond_pct, 3, 1)),
+    )
 
     # Clean up progress
     _SWEEP_PROGRESS.pop(sid, None)
@@ -753,16 +820,16 @@ def bond_sweep(
     else:
         optimal = min(results, key=lambda r: r.bankruptcy_pct)
 
-    # Top 10 ranked by median net worth among safe, then by lowest risk
     ranked = sorted(safe, key=lambda r: -r.median_final_net_worth)[:10] if safe else sorted(results, key=lambda r: r.bankruptcy_pct)[:10]
 
-    # Build marginal curves per active class
+    # Build marginal curves from the coarse round (full 0-100 coverage)
     marginals: list[MarginalCurve] = []
     class_pct_field = {"ISA": "isa_bond_pct", "GIA": "gia_bond_pct", "PENSION": "pension_bond_pct"}
     for cls in active_classes:
         field = class_pct_field[cls]
         points: list[MarginalPoint] = []
-        for pct_val in range(0, 101, 10):
+        all_pct_vals = sorted({getattr(r, field) for r in results})
+        for pct_val in all_pct_vals:
             matching = [r for r in results if getattr(r, field) == pct_val]
             if not matching:
                 continue

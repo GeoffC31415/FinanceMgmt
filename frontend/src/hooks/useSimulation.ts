@@ -25,7 +25,7 @@ export function useSimulation() {
   // Bond sweep state
   const [bond_sweep_result, setBondSweepResult] = useState<BondSweepResponse | null>(null);
   const [is_loading_bond_sweep, setIsLoadingBondSweep] = useState(false);
-  const [sweep_progress, setSweepProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [sweep_progress, setSweepProgress] = useState<{ completed: number; total: number; phase: string } | null>(null);
   const sweep_poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const run = useCallback(async (payload: SimulationRequest) => {
@@ -117,14 +117,14 @@ export function useSimulation() {
       if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
 
       setIsLoadingBondSweep(true);
-      setSweepProgress({ completed: 0, total: 0 });
+      setSweepProgress({ completed: 0, total: 0, phase: "Starting..." });
 
       // Start polling progress
       if (sweep_poll_ref.current) clearInterval(sweep_poll_ref.current);
       sweep_poll_ref.current = setInterval(async () => {
         try {
           const prog = await bond_sweep_progress(effective_session_id);
-          setSweepProgress({ completed: prog.completed, total: prog.total });
+          setSweepProgress({ completed: prog.completed, total: prog.total, phase: prog.phase });
         } catch {
           // ignore polling errors
         }
