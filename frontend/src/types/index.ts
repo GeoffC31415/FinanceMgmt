@@ -204,21 +204,36 @@ export type BondSweepRequest = {
   session_id: string;
   retirement_age_offset?: number;
   annual_spend_target?: number | null;
-  min_bond_pct?: number;
-  max_bond_pct?: number;
-  steps?: number;
+  risk_threshold?: number;
 };
 
-export type BondSweepPoint = {
-  bond_pct: number;
+export type BondCombo = {
+  isa_bond_pct: number;
+  gia_bond_pct: number;
+  pension_bond_pct: number;
   bankruptcy_pct: number;
   depletion_pct: number;
   median_final_net_worth: number;
   p10_final_net_worth: number;
-  p90_final_net_worth: number;
+};
+
+export type MarginalPoint = {
+  bond_pct: number;
+  avg_bankruptcy_pct: number;
+  avg_median_net_worth: number;
+  min_bankruptcy_pct: number;
+  max_median_net_worth: number;
+};
+
+export type MarginalCurve = {
+  asset_class: string;
+  points: MarginalPoint[];
 };
 
 export type BondSweepResponse = {
-  optimal_bond_pct: number;
-  points: BondSweepPoint[];
+  asset_classes: string[];
+  optimal: BondCombo;
+  top_combos: BondCombo[];
+  marginals: MarginalCurve[];
+  total_combos_tested: number;
 };

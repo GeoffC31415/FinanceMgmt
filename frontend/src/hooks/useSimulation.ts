@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   BondSweepRequest,
   BondSweepResponse,
@@ -10,7 +10,7 @@ import type {
   SimulationRequest,
   SimulationResponse
 } from "../types";
-import { bond_sweep, init_simulation, recalc_simulation, run_simulation, safe_withdrawal } from "../api/client";
+import { bond_sweep, bond_sweep_progress, init_simulation, recalc_simulation, run_simulation, safe_withdrawal } from "../api/client";
 
 export function useSimulation() {
   const [result, setResult] = useState<SimulationResponse | null>(null);
@@ -25,6 +25,8 @@ export function useSimulation() {
   // Bond sweep state
   const [bond_sweep_result, setBondSweepResult] = useState<BondSweepResponse | null>(null);
   const [is_loading_bond_sweep, setIsLoadingBondSweep] = useState(false);
+  const [sweep_progress, setSweepProgress] = useState<{ completed: number; total: number } | null>(null);
+  const sweep_poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const run = useCallback(async (payload: SimulationRequest) => {
     setIsLoading(true);
@@ -100,7 +102,6 @@ export function useSimulation() {
         setSafeWithdrawalResult(res);
         return res;
       } catch (e) {
-        // Don't set main error - this is a secondary calculation
         console.error("Safe withdrawal calculation failed:", e);
         throw e;
       } finally {
@@ -116,14 +117,25 @@ export function useSimulation() {
       if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
 
       setIsLoadingBondSweep(true);
+      setSweepProgress({ completed: 0, total: 0 });
+
+      // Start polling progress
+      if (sweep_poll_ref.current) clearInterval(sweep_poll_ref.current);
+      sweep_poll_ref.current = setInterval(async () => {
+        try {
+          const prog = await bond_sweep_progress(effective_session_id);
+          setSweepProgress({ completed: prog.completed, total: prog.total });
+        } catch {
+          // ignore polling errors
+        }
+      }, 500);
+
       try {
         const res = await bond_sweep({
           session_id: effective_session_id,
           retirement_age_offset: payload.retirement_age_offset,
           annual_spend_target: payload.annual_spend_target,
-          min_bond_pct: payload.min_bond_pct,
-          max_bond_pct: payload.max_bond_pct,
-          steps: payload.steps,
+          risk_threshold: payload.risk_threshold,
         });
         setBondSweepResult(res);
         return res;
@@ -131,6 +143,11 @@ export function useSimulation() {
         console.error("Bond sweep calculation failed:", e);
         throw e;
       } finally {
+        if (sweep_poll_ref.current) {
+          clearInterval(sweep_poll_ref.current);
+          sweep_poll_ref.current = null;
+        }
+        setSweepProgress(null);
         setIsLoadingBondSweep(false);
       }
     },
@@ -150,7 +167,7 @@ export function useSimulation() {
     fetch_safe_withdrawal,
     bond_sweep_result,
     is_loading_bond_sweep,
+    sweep_progress,
     fetch_bond_sweep,
   };
 }
-

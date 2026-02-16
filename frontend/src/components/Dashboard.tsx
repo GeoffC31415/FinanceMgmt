@@ -123,6 +123,7 @@ export function Dashboard() {
     fetch_safe_withdrawal,
     bond_sweep_result,
     is_loading_bond_sweep,
+    sweep_progress,
     fetch_bond_sweep,
   } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
@@ -822,45 +823,113 @@ export function Dashboard() {
             {active_tab === "allocation" && (
               <>
                 <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
                       <div className="text-sm font-semibold">Bond Allocation Optimiser</div>
                       <div className="text-xs text-slate-400 mt-1">
-                        Sweeps global bond % across all equity assets to find the optimal equity/bond blend.
-                        Uses historical S&amp;P 500 and US 10-Year Treasury returns.
+                        Tests every combination of ISA/GIA/Pension bond % in 10% increments to find the optimal blend.
+                        Uses historical S&amp;P 500 and US 10-Year Treasury yields.
                       </div>
                     </div>
-                    <button
-                      className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                      disabled={is_loading_bond_sweep || !session_id}
-                      onClick={() => {
-                        if (session_id) {
-                          fetch_bond_sweep({
-                            session_id,
-                            retirement_age_offset,
-                            annual_spend_target,
-                            steps: 20,
-                          }).catch(() => {});
-                        }
-                      }}
-                    >
-                      {is_loading_bond_sweep ? "Running sweep..." : "Run Bond Sweep"}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-500">Max bankruptcy</div>
+                        <select
+                          className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                          value={risk_threshold}
+                          onChange={(e) => setRiskThreshold(Number(e.target.value))}
+                        >
+                          <option value={1}>1%</option>
+                          <option value={2}>2%</option>
+                          <option value={5}>5%</option>
+                          <option value={10}>10%</option>
+                        </select>
+                      </div>
+                      <button
+                        className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        disabled={is_loading_bond_sweep || !session_id}
+                        onClick={() => {
+                          if (session_id) {
+                            fetch_bond_sweep({
+                              session_id,
+                              retirement_age_offset,
+                              annual_spend_target,
+                              risk_threshold,
+                            }).catch(() => {});
+                          }
+                        }}
+                      >
+                        {is_loading_bond_sweep ? "Running..." : "Run Bond Sweep"}
+                      </button>
+                    </div>
                   </div>
 
-                  {bond_sweep_result && (
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="rounded bg-slate-800/50 p-3">
-                        <div className="text-xs text-slate-400">Optimal Bond %</div>
-                        <div className="text-lg font-bold text-green-400">{bond_sweep_result.optimal_bond_pct}%</div>
+                  {/* Progress bar */}
+                  {is_loading_bond_sweep && sweep_progress && sweep_progress.total > 0 && (() => {
+                    const pct = Math.round((sweep_progress.completed / sweep_progress.total) * 100);
+                    return (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                          <span>Testing {sweep_progress.total.toLocaleString()} combinations...</span>
+                          <span>{sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()} ({pct}%)</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
                       </div>
-                      {(() => {
-                        const opt = bond_sweep_result.points.find(
-                          (p) => p.bond_pct === bond_sweep_result.optimal_bond_pct
-                        );
-                        if (!opt) return null;
-                        return (
-                          <>
+                    );
+                  })()}
+
+                  {/* Optimal combination hero card */}
+                  {bond_sweep_result && (() => {
+                    const opt = bond_sweep_result.optimal;
+                    const cls_colors: Record<string, { text: string; bar: string }> = {
+                      ISA: { text: "text-green-400", bar: "#22c55e" },
+                      GIA: { text: "text-blue-400", bar: "#3b82f6" },
+                      PENSION: { text: "text-yellow-400", bar: "#eab308" },
+                    };
+                    const pct_field: Record<string, number> = {
+                      ISA: opt.isa_bond_pct,
+                      GIA: opt.gia_bond_pct,
+                      PENSION: opt.pension_bond_pct,
+                    };
+                    const cls_label: Record<string, string> = { ISA: "ISA", GIA: "GIA", PENSION: "Pension" };
+                    return (
+                      <div className="mt-4">
+                        <div className="text-xs text-slate-400 mb-2">
+                          Optimal allocation ({bond_sweep_result.total_combos_tested.toLocaleString()} combinations tested)
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Per-class bars */}
+                          <div className="space-y-3">
+                            {bond_sweep_result.asset_classes.map((cls) => (
+                              <div key={cls} className="flex items-center gap-3">
+                                <div className={`w-16 text-xs font-semibold ${cls_colors[cls]?.text ?? "text-slate-300"}`}>
+                                  {cls_label[cls] ?? cls}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="relative h-5 rounded bg-slate-700 overflow-hidden">
+                                    {/* Equity portion */}
+                                    <div className="absolute inset-y-0 left-0 bg-indigo-600/40 flex items-center justify-center text-[10px] text-slate-200"
+                                      style={{ width: `${100 - pct_field[cls]}%` }}>
+                                      {100 - pct_field[cls] > 15 ? `${100 - pct_field[cls]}% equity` : ""}
+                                    </div>
+                                    {/* Bond portion */}
+                                    <div className="absolute inset-y-0 right-0 flex items-center justify-center text-[10px] text-slate-200"
+                                      style={{ width: `${pct_field[cls]}%`, background: cls_colors[cls]?.bar ?? "#94a3b8", opacity: 0.7 }}>
+                                      {pct_field[cls] > 15 ? `${pct_field[cls]}% bonds` : ""}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="w-10 text-right text-xs font-mono text-slate-300">{pct_field[cls]}%</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Outcome metrics */}
+                          <div className="grid grid-cols-2 gap-3">
                             <div className="rounded bg-slate-800/50 p-3">
                               <div className="text-xs text-slate-400">Median Final Net Worth</div>
                               <div className="text-lg font-bold text-blue-400">
@@ -870,23 +939,34 @@ export function Dashboard() {
                               </div>
                             </div>
                             <div className="rounded bg-slate-800/50 p-3">
+                              <div className="text-xs text-slate-400">P10 Net Worth</div>
+                              <div className="text-lg font-bold text-slate-300">
+                                {Math.abs(opt.p10_final_net_worth) >= 1_000_000
+                                  ? `\u00A3${(opt.p10_final_net_worth / 1_000_000).toFixed(1)}m`
+                                  : `\u00A3${Math.round(opt.p10_final_net_worth).toLocaleString()}`}
+                              </div>
+                            </div>
+                            <div className="rounded bg-slate-800/50 p-3">
                               <div className="text-xs text-slate-400">Bankruptcy Risk</div>
                               <div className={`text-lg font-bold ${opt.bankruptcy_pct <= 5 ? "text-green-400" : opt.bankruptcy_pct <= 10 ? "text-amber-400" : "text-red-400"}`}>
                                 {opt.bankruptcy_pct.toFixed(1)}%
                               </div>
                             </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
+                            <div className="rounded bg-slate-800/50 p-3">
+                              <div className="text-xs text-slate-400">Depletion Risk</div>
+                              <div className={`text-lg font-bold ${opt.depletion_pct <= 10 ? "text-green-400" : opt.depletion_pct <= 25 ? "text-amber-400" : "text-red-400"}`}>
+                                {opt.depletion_pct.toFixed(1)}%
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {bond_sweep_result && bond_sweep_result.points.length > 0 && (
-                  <BondSweepChart
-                    points={bond_sweep_result.points}
-                    optimal_bond_pct={bond_sweep_result.optimal_bond_pct}
-                  />
+                {bond_sweep_result && (
+                  <BondSweepChart data={bond_sweep_result} />
                 )}
 
                 {!bond_sweep_result && !is_loading_bond_sweep && (

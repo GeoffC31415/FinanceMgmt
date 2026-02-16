@@ -10,9 +10,11 @@ from sqlalchemy.orm import selectinload
 from backend.dependencies import get_db_session
 from backend.models import Asset, Expense, Income, Mortgage, Person, Scenario
 from backend.schemas.simulation import (
-    BondSweepPoint,
+    BondCombo,
     BondSweepRequest,
     BondSweepResponse,
+    MarginalCurve,
+    MarginalPoint,
     SafeWithdrawalRequest,
     SafeWithdrawalResponse,
     SensitivityPoint,
@@ -630,16 +632,39 @@ async def safe_withdrawal(
     )
 
 
+def _scenario_has_asset_class(scenario: SimulationScenario, asset_class: str) -> bool:
+    """Check whether the scenario actually has assets of the given class."""
+    if asset_class == "PENSION":
+        return bool(scenario.pension_by_person)
+    return any(
+        str(getattr(a, "asset_type", "")).upper() == asset_class
+        for a in scenario.assets
+    )
+
+
+# Progress tracking for bond sweep (session_id -> {completed, total})
+_SWEEP_PROGRESS: dict[str, dict[str, int]] = {}
+
+
+@router.get("/bond-sweep/progress")
+async def bond_sweep_progress(session_id: str) -> dict:
+    """Poll the progress of a running bond sweep."""
+    prog = _SWEEP_PROGRESS.get(session_id)
+    if prog is None:
+        return {"completed": 0, "total": 0, "running": False}
+    return {**prog, "running": prog["completed"] < prog["total"]}
+
+
 @router.post("/bond-sweep", response_model=BondSweepResponse)
 async def bond_sweep(
     payload: BondSweepRequest,
 ) -> BondSweepResponse:
-    """Sweep global bond allocation to find the risk-optimal equity/bond blend.
+    """Full combinatorial sweep of bond allocations across all asset classes.
 
-    For each step, generates a returns matrix with the given bond allocation
-    applied uniformly to all non-cash assets, runs the simulation, and
-    collects risk/return metrics. The optimal point is the one with the
-    highest median final net worth among those with acceptable bankruptcy risk.
+    Tests every combination of ISA/GIA/Pension bond % in 10% increments
+    (0%, 10%, ... 100%).  Returns the optimal combination, a ranked top-10,
+    and per-class marginal curves (averaged over all other dimensions) for
+    charting.
     """
     cached = get_session(session_id=payload.session_id)
     if cached is None:
@@ -655,12 +680,7 @@ async def bond_sweep(
 
     retirement_age_offset = int(payload.retirement_age_offset)
     spend = float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target
-    min_bond = float(payload.min_bond_pct)
-    max_bond = float(payload.max_bond_pct)
-    steps = int(payload.steps)
-
-    step_size = (max_bond - min_bond) / steps
-    bond_values = [round(min_bond + i * step_size, 4) for i in range(steps + 1)]
+    acceptable_risk = float(payload.risk_threshold)
 
     sim_scenario = _build_scenario_from_cached(
         base=base,
@@ -668,15 +688,37 @@ async def bond_sweep(
         retirement_age_offset=retirement_age_offset,
     )
 
-    points: list[BondSweepPoint] = []
-    risk_threshold = float(base.assumptions.bankruptcy_threshold)
+    # Determine which asset classes exist in the scenario
+    all_classes = ["ISA", "GIA", "PENSION"]
+    active_classes = [c for c in all_classes if _scenario_has_asset_class(sim_scenario, c)]
 
-    for bond_pct in bond_values:
+    # 10% increments
+    pct_steps = [round(i * 0.1, 2) for i in range(11)]
+
+    # Build all combinations as dicts mapping class -> bond fraction
+    import itertools
+    class_grids = [pct_steps if c in active_classes else [0.0] for c in all_classes]
+    combos = list(itertools.product(*class_grids))
+
+    # Initialize progress tracking
+    sid = payload.session_id
+    _SWEEP_PROGRESS[sid] = {"completed": 0, "total": len(combos)}
+
+    results: list[BondCombo] = []
+    for idx, (isa_pct, gia_pct, pen_pct) in enumerate(combos):
+        override = {}
+        if "ISA" in active_classes:
+            override["ISA"] = isa_pct
+        if "GIA" in active_classes:
+            override["GIA"] = gia_pct
+        if "PENSION" in active_classes:
+            override["PENSION"] = pen_pct
+
         returns = generate_returns_matrix_with_bond_override(
             scenario=sim_scenario,
             iterations=cached.returns.iterations,
             seed=0,
-            bond_pct=bond_pct,
+            bond_pct_by_class=override,
         )
         mats = run_simulation(scenario=sim_scenario, returns=returns)
 
@@ -684,47 +726,64 @@ async def bond_sweep(
         is_bankrupt = mats.fields.get("is_bankrupt")
         is_depleted = mats.fields.get("is_depleted")
 
-        if nw is not None and nw.size:
-            median_final = float(np.median(nw[:, -1]))
-            p10_final = float(np.percentile(nw[:, -1], 10))
-            p90_final = float(np.percentile(nw[:, -1], 90))
-        else:
-            median_final = 0.0
-            p10_final = 0.0
-            p90_final = 0.0
+        median_final = float(np.median(nw[:, -1])) if nw is not None and nw.size else 0.0
+        p10_final = float(np.percentile(nw[:, -1], 10)) if nw is not None and nw.size else 0.0
+        bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100) if is_bankrupt is not None and is_bankrupt.size else 0.0
+        depletion_pct = float(np.mean(is_depleted[:, -1]) * 100) if is_depleted is not None and is_depleted.size else 0.0
 
-        if is_bankrupt is not None and is_bankrupt.size:
-            bankruptcy_pct = float(np.mean(is_bankrupt[:, -1]) * 100)
-        else:
-            bankruptcy_pct = 0.0
-
-        if is_depleted is not None and is_depleted.size:
-            depletion_pct = float(np.mean(is_depleted[:, -1]) * 100)
-        else:
-            depletion_pct = 0.0
-
-        points.append(BondSweepPoint(
-            bond_pct=round(bond_pct * 100, 1),
+        results.append(BondCombo(
+            isa_bond_pct=round(isa_pct * 100, 0),
+            gia_bond_pct=round(gia_pct * 100, 0),
+            pension_bond_pct=round(pen_pct * 100, 0),
             bankruptcy_pct=round(bankruptcy_pct, 2),
             depletion_pct=round(depletion_pct, 2),
             median_final_net_worth=round(median_final, 2),
             p10_final_net_worth=round(p10_final, 2),
-            p90_final_net_worth=round(p90_final, 2),
         ))
 
-    # Find optimal: highest median net worth where bankruptcy risk is acceptable
-    # Use a 5% default risk threshold for the optimization
-    acceptable_risk = 5.0
-    safe_points = [p for p in points if p.bankruptcy_pct <= acceptable_risk]
-    if safe_points:
-        optimal = max(safe_points, key=lambda p: p.median_final_net_worth)
-        optimal_bond_pct = optimal.bond_pct
+        _SWEEP_PROGRESS[sid] = {"completed": idx + 1, "total": len(combos)}
+
+    # Clean up progress
+    _SWEEP_PROGRESS.pop(sid, None)
+
+    # Find optimal: highest median net worth with bankruptcy <= threshold
+    safe = [r for r in results if r.bankruptcy_pct <= acceptable_risk]
+    if safe:
+        optimal = max(safe, key=lambda r: r.median_final_net_worth)
     else:
-        optimal = min(points, key=lambda p: p.bankruptcy_pct)
-        optimal_bond_pct = optimal.bond_pct
+        optimal = min(results, key=lambda r: r.bankruptcy_pct)
+
+    # Top 10 ranked by median net worth among safe, then by lowest risk
+    ranked = sorted(safe, key=lambda r: -r.median_final_net_worth)[:10] if safe else sorted(results, key=lambda r: r.bankruptcy_pct)[:10]
+
+    # Build marginal curves per active class
+    marginals: list[MarginalCurve] = []
+    class_pct_field = {"ISA": "isa_bond_pct", "GIA": "gia_bond_pct", "PENSION": "pension_bond_pct"}
+    for cls in active_classes:
+        field = class_pct_field[cls]
+        points: list[MarginalPoint] = []
+        for pct_val in range(0, 101, 10):
+            matching = [r for r in results if getattr(r, field) == pct_val]
+            if not matching:
+                continue
+            avg_bank = float(np.mean([r.bankruptcy_pct for r in matching]))
+            avg_nw = float(np.mean([r.median_final_net_worth for r in matching]))
+            min_bank = float(min(r.bankruptcy_pct for r in matching))
+            max_nw = float(max(r.median_final_net_worth for r in matching))
+            points.append(MarginalPoint(
+                bond_pct=float(pct_val),
+                avg_bankruptcy_pct=round(avg_bank, 2),
+                avg_median_net_worth=round(avg_nw, 2),
+                min_bankruptcy_pct=round(min_bank, 2),
+                max_median_net_worth=round(max_nw, 2),
+            ))
+        marginals.append(MarginalCurve(asset_class=cls, points=points))
 
     return BondSweepResponse(
-        optimal_bond_pct=optimal_bond_pct,
-        points=points,
+        asset_classes=active_classes,
+        optimal=optimal,
+        top_combos=ranked,
+        marginals=marginals,
+        total_combos_tested=len(results),
     )
 

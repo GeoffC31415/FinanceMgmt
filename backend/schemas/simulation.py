@@ -134,20 +134,37 @@ class BondSweepRequest(BaseModel):
     session_id: str
     retirement_age_offset: int = Field(default=0, ge=-30, le=30)
     annual_spend_target: float | None = Field(default=None, ge=0.0)
-    min_bond_pct: float = Field(default=0.0, ge=0.0, le=1.0)
-    max_bond_pct: float = Field(default=1.0, ge=0.0, le=1.0)
-    steps: int = Field(default=20, ge=5, le=50)
+    risk_threshold: float = Field(default=5.0, ge=0.0, le=100.0)
 
 
-class BondSweepPoint(BaseModel):
-    bond_pct: float
+class BondCombo(BaseModel):
+    """A single tested combination of bond allocations across asset classes."""
+    isa_bond_pct: float
+    gia_bond_pct: float
+    pension_bond_pct: float
     bankruptcy_pct: float
     depletion_pct: float
     median_final_net_worth: float
     p10_final_net_worth: float
-    p90_final_net_worth: float
+
+
+class MarginalPoint(BaseModel):
+    """Aggregated outcome at a single bond % for one asset class (averaged over all other combos)."""
+    bond_pct: float
+    avg_bankruptcy_pct: float
+    avg_median_net_worth: float
+    min_bankruptcy_pct: float
+    max_median_net_worth: float
+
+
+class MarginalCurve(BaseModel):
+    asset_class: str
+    points: list[MarginalPoint]
 
 
 class BondSweepResponse(BaseModel):
-    optimal_bond_pct: float
-    points: list[BondSweepPoint]
+    asset_classes: list[str]
+    optimal: BondCombo
+    top_combos: list[BondCombo]
+    marginals: list[MarginalCurve]
+    total_combos_tested: int

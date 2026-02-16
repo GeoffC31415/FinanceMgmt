@@ -267,12 +267,13 @@ def generate_returns_matrix_with_bond_override(
     scenario: SimulationScenario,
     iterations: int,
     seed: int,
-    bond_pct: float,
+    bond_pct_by_class: dict[str, float],
 ) -> ReturnsMatrix:
-    """Generate returns matrix with a global bond allocation override.
+    """Generate returns matrix with per-asset-class bond allocation overrides.
 
-    Used by the bond sweep endpoint to efficiently test different bond
-    allocations without recomputing block bootstrap indices.
+    bond_pct_by_class maps asset class names (ISA, GIA, PENSION) to a bond
+    fraction (0.0-1.0). Classes not in the dict keep their configured
+    bond_allocation.
     """
     years = np.arange(scenario.start_year, scenario.end_year + 1, dtype=np.int32)
     n_years = int(years.shape[0])
@@ -310,6 +311,10 @@ def generate_returns_matrix_with_bond_override(
         if asset_type_str == "CASH":
             pass
         else:
+            bond_pct = bond_pct_by_class.get(
+                asset_type_str,
+                float(getattr(assets[i], "bond_allocation", 0.0)),
+            )
             asset_returns[:, :, i] = (
                 shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
             )
@@ -319,10 +324,17 @@ def generate_returns_matrix_with_bond_override(
         initial_pension_balances = np.array(
             [float(scenario.pension_by_person[k].balance) for k in pension_keys], dtype=np.float64
         )
+        pension_bond_pct = bond_pct_by_class.get(
+            "PENSION",
+            float(getattr(
+                next(iter(scenario.pension_by_person.values())), "bond_allocation", 0.0
+            )),
+        )
         pension_returns = np.zeros((iterations, n_years, len(pension_keys)), dtype=np.float64)
         for i in range(len(pension_keys)):
             pension_returns[:, :, i] = (
-                shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
+                shared_equity_returns * (1.0 - pension_bond_pct)
+                + shared_bond_returns * pension_bond_pct
             )
     else:
         pension_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)

@@ -140,3 +140,13 @@ export async function bond_sweep(payload: BondSweepRequest): Promise<BondSweepRe
     body: JSON.stringify(payload)
   });
 }
+
+export type BondSweepProgress = {
+  completed: number;
+  total: number;
+  running: boolean;
+};
+
+export async function bond_sweep_progress(session_id: string): Promise<BondSweepProgress> {
+  return await http<BondSweepProgress>(`/simulation/bond-sweep/progress?session_id=${encodeURIComponent(session_id)}`);
+}
