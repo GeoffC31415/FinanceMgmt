@@ -73,22 +73,22 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
         </span>
       </div>
 
-      {/* Risk heatmap strip */}
+      {/* Risk heatmap strip — 0-100% uniform scale */}
       <div className="mb-1">
         <div className="text-[10px] text-slate-500 mb-1">Bankruptcy risk by bond allocation (best achievable)</div>
-        <div className="flex h-6 rounded overflow-hidden border border-slate-700">
+        <div className="relative h-6 rounded overflow-hidden border border-slate-700 bg-slate-800">
           {segments.map((seg, i) => {
             const next = segments[i + 1];
-            const width_pct = next
-              ? ((next.bond_pct - seg.bond_pct) / (max_pct - min_pct || 1)) * 100
-              : ((max_pct - seg.bond_pct + 1) / (max_pct - min_pct || 1)) * 100;
+            const left = seg.bond_pct;
+            const right = next ? next.bond_pct : Math.min(seg.bond_pct + 1, 100);
             const is_optimal = Math.abs(seg.bond_pct - optimal_pct) < 0.5;
             return (
               <div
                 key={seg.bond_pct}
-                className="relative group"
+                className="absolute inset-y-0"
                 style={{
-                  width: `${Math.max(width_pct, 0.5)}%`,
+                  left: `${left}%`,
+                  width: `${Math.max(right - left, 0.3)}%`,
                   background: risk_color(seg.risk),
                   opacity: is_optimal ? 1 : 0.7,
                   borderRight: is_optimal ? "2px solid white" : undefined,
@@ -100,8 +100,11 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
           })}
         </div>
         <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
-          <span>{min_pct}% bonds</span>
-          <span>{max_pct}% bonds</span>
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
         </div>
       </div>
 
@@ -110,8 +113,9 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={segments} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="bond_pct" stroke="#64748b" tick={{ fontSize: 10 }}
-              tickFormatter={(v) => `${v}%`} />
+            <XAxis dataKey="bond_pct" type="number" domain={[0, 100]} stroke="#64748b"
+              tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`}
+              ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} />
             <YAxis yAxisId="risk" stroke="#64748b" tick={{ fontSize: 10 }} domain={[0, "auto"]}
               tickFormatter={(v) => `${v}%`} width={40} />
             <YAxis yAxisId="nw" orientation="right" stroke="#64748b" tick={{ fontSize: 10 }}
