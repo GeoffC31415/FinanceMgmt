@@ -154,9 +154,9 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     }
   ],
   assets: [
-    { name: "ISA", asset_type: "ISA", withdrawal_priority: 30, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false },
-    { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false },
-    { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false }
+    { name: "ISA", asset_type: "ISA", withdrawal_priority: 30, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0 },
+    { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0 },
+    { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0 }
   ],
   mortgage: { balance: 200000, annual_interest_rate: 0.04, monthly_payment: 1200 },
   expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
@@ -302,7 +302,8 @@ export function ScenarioConfigPage() {
                           annual_contribution: a.annual_contribution,
                           growth_rate_mean: a.growth_rate_mean,
                           growth_rate_std: a.growth_rate_std,
-                          contributions_end_at_retirement: a.contributions_end_at_retirement
+                          contributions_end_at_retirement: a.contributions_end_at_retirement,
+                          bond_allocation: (a as any).bond_allocation ?? 0
                         })),
                         mortgage: scenario.mortgage ?? null,
                         expenses: scenario.expenses.map((e) => ({
@@ -427,7 +428,8 @@ export function ScenarioConfigPage() {
                 annual_contribution: a.annual_contribution,
                 growth_rate_mean: a.growth_rate_mean,
                 growth_rate_std: a.growth_rate_std,
-                contributions_end_at_retirement: a.contributions_end_at_retirement
+                contributions_end_at_retirement: a.contributions_end_at_retirement,
+                bond_allocation: (a as any).bond_allocation ?? 0
               })),
               mortgage: scenario.mortgage ?? null,
               expenses: scenario.expenses.map((e) => ({

@@ -16,6 +16,7 @@ async def run_migrations(*, conn: AsyncConnection) -> None:
     await _migrate_assets_table(conn=conn)
     await _migrate_mortgages_table(conn=conn)
     await _migrate_people_table(conn=conn)
+    await _migrate_assets_bond_allocation(conn=conn)
 
 
 async def _get_table_columns(*, conn: AsyncConnection, table_name: str) -> set[str]:
@@ -143,4 +144,12 @@ async def _migrate_people_table(*, conn: AsyncConnection) -> None:
         await conn.execute(text("ALTER TABLE people_new RENAME TO people"))
         
         await conn.commit()
+
+
+async def _migrate_assets_bond_allocation(*, conn: AsyncConnection) -> None:
+    """Add bond_allocation column to assets table (default 0.0 = 100% equity)."""
+    columns = await _get_table_columns(conn=conn, table_name="assets")
+
+    if "bond_allocation" not in columns:
+        await conn.execute(text("ALTER TABLE assets ADD COLUMN bond_allocation FLOAT NOT NULL DEFAULT 0.0"))
 

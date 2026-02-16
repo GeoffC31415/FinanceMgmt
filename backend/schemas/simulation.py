@@ -128,3 +128,26 @@ class SafeWithdrawalResponse(BaseModel):
     max_safe_fun_fund: float
     risk_threshold: float
     sensitivity_curve: list[SensitivityPoint]
+
+
+class BondSweepRequest(BaseModel):
+    session_id: str
+    retirement_age_offset: int = Field(default=0, ge=-30, le=30)
+    annual_spend_target: float | None = Field(default=None, ge=0.0)
+    min_bond_pct: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_bond_pct: float = Field(default=1.0, ge=0.0, le=1.0)
+    steps: int = Field(default=20, ge=5, le=50)
+
+
+class BondSweepPoint(BaseModel):
+    bond_pct: float
+    bankruptcy_pct: float
+    depletion_pct: float
+    median_final_net_worth: float
+    p10_final_net_worth: float
+    p90_final_net_worth: float
+
+
+class BondSweepResponse(BaseModel):
+    optimal_bond_pct: float
+    points: list[BondSweepPoint]

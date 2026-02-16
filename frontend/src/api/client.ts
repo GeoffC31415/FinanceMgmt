@@ -1,4 +1,6 @@
 import type {
+  BondSweepRequest,
+  BondSweepResponse,
   HistoricalReturnsStats,
   SafeWithdrawalRequest,
   SafeWithdrawalResponse,
@@ -130,4 +132,11 @@ export type HistoricalReturnsResponse = {
 
 export async function get_historical_returns(): Promise<HistoricalReturnsResponse> {
   return await http<HistoricalReturnsResponse>("/simulation/historical-returns");
+}
+
+export async function bond_sweep(payload: BondSweepRequest): Promise<BondSweepResponse> {
+  return await http<BondSweepResponse>("/simulation/bond-sweep", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }

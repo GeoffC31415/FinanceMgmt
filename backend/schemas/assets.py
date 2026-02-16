@@ -25,6 +25,7 @@ class AssetCreate(BaseModel):
 
     asset_type: AssetType = Field(default=AssetType.GIA)
     withdrawal_priority: int = Field(default=100, ge=0, le=10_000)
+    bond_allocation: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class AssetRead(AssetCreate):

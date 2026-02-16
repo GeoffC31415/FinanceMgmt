@@ -34,6 +34,7 @@ export type AssetCreate = {
   contributions_end_at_retirement: boolean;
   asset_type?: "CASH" | "ISA" | "GIA" | "PENSION";
   withdrawal_priority?: number;
+  bond_allocation?: number;
 };
 
 export type MortgageCreate = {
@@ -197,4 +198,27 @@ export type SafeWithdrawalResponse = {
   max_safe_fun_fund: number;
   risk_threshold: number;
   sensitivity_curve: SensitivityPoint[];
+};
+
+export type BondSweepRequest = {
+  session_id: string;
+  retirement_age_offset?: number;
+  annual_spend_target?: number | null;
+  min_bond_pct?: number;
+  max_bond_pct?: number;
+  steps?: number;
+};
+
+export type BondSweepPoint = {
+  bond_pct: number;
+  bankruptcy_pct: number;
+  depletion_pct: number;
+  median_final_net_worth: number;
+  p10_final_net_worth: number;
+  p90_final_net_worth: number;
+};
+
+export type BondSweepResponse = {
+  optimal_bond_pct: number;
+  points: BondSweepPoint[];
 };

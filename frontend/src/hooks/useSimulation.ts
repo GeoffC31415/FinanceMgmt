@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import type {
+  BondSweepRequest,
+  BondSweepResponse,
   SafeWithdrawalRequest,
   SafeWithdrawalResponse,
   SimulationInitRequest,
@@ -8,7 +10,7 @@ import type {
   SimulationRequest,
   SimulationResponse
 } from "../types";
-import { init_simulation, recalc_simulation, run_simulation, safe_withdrawal } from "../api/client";
+import { bond_sweep, init_simulation, recalc_simulation, run_simulation, safe_withdrawal } from "../api/client";
 
 export function useSimulation() {
   const [result, setResult] = useState<SimulationResponse | null>(null);
@@ -19,6 +21,10 @@ export function useSimulation() {
   // Safe withdrawal state
   const [safe_withdrawal_result, setSafeWithdrawalResult] = useState<SafeWithdrawalResponse | null>(null);
   const [is_loading_safe_withdrawal, setIsLoadingSafeWithdrawal] = useState(false);
+
+  // Bond sweep state
+  const [bond_sweep_result, setBondSweepResult] = useState<BondSweepResponse | null>(null);
+  const [is_loading_bond_sweep, setIsLoadingBondSweep] = useState(false);
 
   const run = useCallback(async (payload: SimulationRequest) => {
     setIsLoading(true);
@@ -104,6 +110,33 @@ export function useSimulation() {
     [session_id]
   );
 
+  const fetch_bond_sweep = useCallback(
+    async (payload: Omit<BondSweepRequest, "session_id"> & { session_id?: string | null }) => {
+      const effective_session_id = payload.session_id ?? session_id;
+      if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
+
+      setIsLoadingBondSweep(true);
+      try {
+        const res = await bond_sweep({
+          session_id: effective_session_id,
+          retirement_age_offset: payload.retirement_age_offset,
+          annual_spend_target: payload.annual_spend_target,
+          min_bond_pct: payload.min_bond_pct,
+          max_bond_pct: payload.max_bond_pct,
+          steps: payload.steps,
+        });
+        setBondSweepResult(res);
+        return res;
+      } catch (e) {
+        console.error("Bond sweep calculation failed:", e);
+        throw e;
+      } finally {
+        setIsLoadingBondSweep(false);
+      }
+    },
+    [session_id]
+  );
+
   return {
     result,
     session_id,
@@ -115,6 +148,9 @@ export function useSimulation() {
     safe_withdrawal_result,
     is_loading_safe_withdrawal,
     fetch_safe_withdrawal,
+    bond_sweep_result,
+    is_loading_bond_sweep,
+    fetch_bond_sweep,
   };
 }
 

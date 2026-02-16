@@ -66,6 +66,11 @@ async def init_db(*, engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Run lightweight additive migrations for columns added after initial schema
+    from backend.migrations import run_migrations
+    async with engine.begin() as conn:
+        await run_migrations(conn=conn)
+
 
 async def provide_session(*, sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
     async with sessionmaker() as session:

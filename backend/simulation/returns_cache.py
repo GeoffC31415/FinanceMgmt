@@ -124,6 +124,35 @@ def _scenario_assets_for_returns(*, scenario: SimulationScenario) -> list[Any]:
     return assets
 
 
+def _block_bootstrap_indices(
+    rng: np.random.Generator,
+    n_historical: int,
+    n_years: int,
+    iterations: int,
+    mean_block_length: int = 10,
+) -> np.ndarray:
+    """Stationary block bootstrap: contiguous blocks with geometric block lengths.
+
+    For each iteration, picks a random start index into the historical data and
+    advances contiguously. When a block expires (geometric distribution with the
+    given mean), a new random start is chosen. This preserves multi-year
+    bull/bear sequences while providing unique paths across iterations.
+    """
+    indices = np.empty((iterations, n_years), dtype=np.int64)
+    p = 1.0 / mean_block_length
+    for it in range(iterations):
+        start = int(rng.integers(0, n_historical))
+        block_remaining = int(rng.geometric(p))
+        for y in range(n_years):
+            indices[it, y] = start % n_historical
+            start += 1
+            block_remaining -= 1
+            if block_remaining <= 0:
+                start = int(rng.integers(0, n_historical))
+                block_remaining = int(rng.geometric(p))
+    return indices
+
+
 def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, seed: int) -> ReturnsMatrix:
     """
     Generate all stochastic draws for a scenario up-front.
@@ -158,12 +187,14 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
     use_bootstrap = scenario.assumptions.return_model == "historical_bootstrap"
 
     if use_bootstrap:
-        from backend.simulation.historical_returns import get_historical_returns
-        historical = get_historical_returns()
+        from backend.simulation.historical_returns import get_aligned_equity_bond_returns
+        historical_equity, historical_bonds = get_aligned_equity_bond_returns()
 
-        # Sample shared year indices: all equity assets get the same return per (iteration, year)
-        year_indices = rng.integers(0, len(historical), size=(iterations, n_years))
-        shared_returns = historical[year_indices]  # (iterations, n_years)
+        # Use block bootstrap for temporally-correlated sampling
+        # Both arrays are aligned to the same overlapping year range
+        year_indices = _block_bootstrap_indices(rng, len(historical_equity), n_years, iterations)
+        shared_equity_returns = historical_equity[year_indices]  # (iterations, n_years)
+        shared_bond_returns = historical_bonds[year_indices]  # same indices for correlation
 
         asset_returns = np.zeros((iterations, n_years, n_assets), dtype=np.float64)
         for i in range(n_assets):
@@ -171,7 +202,10 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
             if asset_type_str == "CASH":
                 pass  # stays zero
             else:
-                asset_returns[:, :, i] = shared_returns
+                bond_pct = float(getattr(assets[i], "bond_allocation", 0.0))
+                asset_returns[:, :, i] = (
+                    shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
+                )
     else:
         asset_means = np.array([float(getattr(a, "growth_rate_mean", 0.0)) for a in assets], dtype=np.float64)
         asset_stds = np.array([float(getattr(a, "growth_rate_std", 0.0)) for a in assets], dtype=np.float64)
@@ -192,10 +226,12 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
         )
 
         if use_bootstrap:
-            # Pensions also use the same shared bootstrapped returns
             pension_returns = np.zeros((iterations, n_years, len(pension_keys)), dtype=np.float64)
-            for i in range(len(pension_keys)):
-                pension_returns[:, :, i] = shared_returns
+            for i, k in enumerate(pension_keys):
+                bond_pct = float(getattr(scenario.pension_by_person[k], "bond_allocation", 0.0))
+                pension_returns[:, :, i] = (
+                    shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
+                )
         else:
             pension_means = np.array(
                 [float(scenario.pension_by_person[k].growth_rate_mean) for k in pension_keys], dtype=np.float64
@@ -208,6 +244,86 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
                 scale=pension_stds.reshape(1, 1, -1),
                 size=(iterations, n_years, len(pension_keys)),
             ).astype(np.float64)
+    else:
+        pension_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
+        initial_pension_balances = np.zeros(0, dtype=np.float64)
+
+    return ReturnsMatrix(
+        years=years,
+        asset_names=asset_names,
+        asset_types=asset_types,
+        asset_withdrawal_priority=asset_withdrawal_priority,
+        initial_asset_balances=initial_asset_balances,
+        initial_asset_cost_bases=initial_asset_cost_bases,
+        asset_returns=asset_returns,
+        pension_keys=pension_keys,
+        initial_pension_balances=initial_pension_balances,
+        pension_returns=pension_returns,
+    )
+
+
+def generate_returns_matrix_with_bond_override(
+    *,
+    scenario: SimulationScenario,
+    iterations: int,
+    seed: int,
+    bond_pct: float,
+) -> ReturnsMatrix:
+    """Generate returns matrix with a global bond allocation override.
+
+    Used by the bond sweep endpoint to efficiently test different bond
+    allocations without recomputing block bootstrap indices.
+    """
+    years = np.arange(scenario.start_year, scenario.end_year + 1, dtype=np.int32)
+    n_years = int(years.shape[0])
+
+    rng = np.random.default_rng(seed)
+
+    assets = _scenario_assets_for_returns(scenario=scenario)
+    asset_names = [str(getattr(a, "name", "")) for a in assets]
+    asset_types = np.array(
+        [_asset_type_code(str(getattr(a, "asset_type", ""))) for a in assets],
+        dtype=np.int8,
+    )
+    asset_withdrawal_priority = np.array(
+        [int(getattr(a, "withdrawal_priority", 0)) for a in assets], dtype=np.int32
+    )
+    initial_asset_balances = np.array(
+        [float(getattr(a, "balance", 0.0)) for a in assets], dtype=np.float64
+    )
+    initial_asset_cost_bases = np.array(
+        [float(getattr(a, "cost_basis", getattr(a, "balance", 0.0))) for a in assets],
+        dtype=np.float64,
+    )
+    n_assets = len(assets)
+
+    from backend.simulation.historical_returns import get_aligned_equity_bond_returns
+    historical_equity, historical_bonds = get_aligned_equity_bond_returns()
+
+    year_indices = _block_bootstrap_indices(rng, len(historical_equity), n_years, iterations)
+    shared_equity_returns = historical_equity[year_indices]
+    shared_bond_returns = historical_bonds[year_indices]
+
+    asset_returns = np.zeros((iterations, n_years, n_assets), dtype=np.float64)
+    for i in range(n_assets):
+        asset_type_str = str(getattr(assets[i], "asset_type", "")).upper()
+        if asset_type_str == "CASH":
+            pass
+        else:
+            asset_returns[:, :, i] = (
+                shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
+            )
+
+    pension_keys = sorted(list(scenario.pension_by_person.keys()))
+    if pension_keys:
+        initial_pension_balances = np.array(
+            [float(scenario.pension_by_person[k].balance) for k in pension_keys], dtype=np.float64
+        )
+        pension_returns = np.zeros((iterations, n_years, len(pension_keys)), dtype=np.float64)
+        for i in range(len(pension_keys)):
+            pension_returns[:, :, i] = (
+                shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
+            )
     else:
         pension_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
         initial_pension_balances = np.zeros(0, dtype=np.float64)

@@ -285,7 +285,8 @@ const schema = z.object({
       annual_contribution: z.coerce.number(),
       growth_rate_mean: z.coerce.number(),
       growth_rate_std: z.coerce.number().min(0),
-      contributions_end_at_retirement: z.coerce.boolean()
+      contributions_end_at_retirement: z.coerce.boolean(),
+      bond_allocation: z.coerce.number().min(0).max(1).default(0)
     })
   ),
   mortgage: z
@@ -373,6 +374,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
         growth_rate_mean: a.growth_rate_mean,
         growth_rate_std: a.growth_rate_std,
         contributions_end_at_retirement: a.contributions_end_at_retirement,
+        bond_allocation: (a as any).bond_allocation ?? 0,
         person_id: a.person_id ?? ""
       };
     }),
@@ -426,6 +428,7 @@ function to_scenario_create(values: FormValues, original: ScenarioRead): Scenari
       growth_rate_mean: a.growth_rate_mean,
       growth_rate_std: a.growth_rate_std,
       contributions_end_at_retirement: a.contributions_end_at_retirement,
+      bond_allocation: a.bond_allocation ?? 0,
       person_id: normalize_person_id(a.person_id)
     })),
     mortgage: values.mortgage ?? null,
@@ -922,7 +925,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
             </div>
 
             <div className="mt-3 overflow-auto">
-              <div className="hidden min-w-[1320px] grid-cols-10 gap-3 text-xs text-slate-400 md:grid">
+              <div className="hidden min-w-[1420px] grid-cols-11 gap-3 text-xs text-slate-400 md:grid">
                 <div>Assigned_to</div>
                 <div>Name</div>
                 <div>Type</div>
@@ -935,14 +938,18 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                 <div>Growth_mean</div>
                 <div>Growth_std</div>
                 <div className="flex items-center">
+                  Bond_%
+                  <InfoTip text="Fraction allocated to bonds (0% = 100% S&P 500, 100% = 100% US 10Y Treasury). Only used with historical bootstrap." />
+                </div>
+                <div className="flex items-center">
                   End_at_retire
                   <InfoTip text="If enabled, this asset stops receiving new investments once everyone is retired. Existing balance still grows and can still be withdrawn." />
                 </div>
                 <div></div>
               </div>
-              <div className="min-w-[1320px] space-y-2">
+              <div className="min-w-[1420px] space-y-2">
                 {assets.fields.map((asset, idx) => (
-                  <div key={asset.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-10">
+                  <div key={asset.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-11">
                     <select
                       className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                       {...form.register(`assets.${idx}.person_id`)}
@@ -987,6 +994,10 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                           <div className={is_disabled ? "opacity-40 pointer-events-none" : ""} title={is_disabled ? "Using S&P 500 historical returns (set in Assumptions tab)" : undefined}>
                             <PercentInput control={form.control} name={`assets.${idx}.growth_rate_std`} placeholder="%" />
                             {is_disabled && <div className="mt-1 text-xs text-indigo-300">bootstrap</div>}
+                          </div>
+                          <div className={is_bootstrap && is_equity ? "" : "opacity-40 pointer-events-none"} title={is_bootstrap && is_equity ? "Fraction allocated to bonds" : "Only used with historical bootstrap for non-cash assets"}>
+                            <PercentInput control={form.control} name={`assets.${idx}.bond_allocation`} placeholder="0%" />
+                            {is_bootstrap && is_equity && <div className="mt-1 text-xs text-indigo-300">bonds</div>}
                           </div>
                         </>
                       );
@@ -1034,6 +1045,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                   growth_rate_mean: 0.05,
                   growth_rate_std: 0.1,
                   contributions_end_at_retirement: false,
+                  bond_allocation: 0,
                   person_id: ""
                 } as any)
               }

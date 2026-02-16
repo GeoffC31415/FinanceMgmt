@@ -78,9 +78,9 @@ function default_draft(): ScenarioCreate {
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
     assets: [
-      { name: "ISA", asset_type: "ISA", withdrawal_priority: 20, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
-      { name: "Pension", asset_type: "PENSION", withdrawal_priority: 30, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null },
-      { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, person_id: null }
+      { name: "ISA", asset_type: "ISA", withdrawal_priority: 20, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
+      { name: "Pension", asset_type: "PENSION", withdrawal_priority: 30, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
+      { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }
     ],
     mortgage: null,
     expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
@@ -115,6 +115,7 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       growth_rate_mean: a.growth_rate_mean,
       growth_rate_std: a.growth_rate_std,
       contributions_end_at_retirement: a.contributions_end_at_retirement,
+      bond_allocation: (a as any).bond_allocation ?? 0,
       person_id: a.person_id ?? null
     })),
     mortgage: scenario.mortgage ?? null,
@@ -650,7 +651,7 @@ export function ConfigWizard() {
                 onClick={() =>
                   setDraft((d) => ({
                     ...d,
-                    assets: [...d.assets, { name: "New asset", asset_type: "GIA", withdrawal_priority: 100, balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, person_id: null }]
+                    assets: [...d.assets, { name: "New asset", asset_type: "GIA", withdrawal_priority: 100, balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }]
                   }))
                 }
               >

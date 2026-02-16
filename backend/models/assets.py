@@ -29,6 +29,9 @@ class Asset(Base, TimestampMixin):
     # Withdrawal priority: lower numbers are withdrawn first when covering a shortfall.
     withdrawal_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
+    # Fraction of this asset allocated to bonds (0.0 = 100% equity, 1.0 = 100% bonds).
+    bond_allocation: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
     scenario = relationship("Scenario", back_populates="assets")
     person = relationship("Person")
 

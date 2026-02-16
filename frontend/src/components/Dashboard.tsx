@@ -6,6 +6,7 @@ import { AssetsChart } from "./charts/AssetsChart";
 import { AssetDetailChart } from "./charts/AssetDetailChart";
 import { SensitivityChart } from "./charts/SensitivityChart";
 import { RiskTimelineChart } from "./charts/RiskTimelineChart";
+import { BondSweepChart } from "./charts/BondSweepChart";
 import { RiskSummaryPanel } from "./RiskSummaryPanel";
 import { OverviewInsights } from "./OverviewInsights";
 // Lazy-load exceljs only when the user clicks Export
@@ -19,6 +20,7 @@ const TABS = [
   { id: "income-spending", label: "Income & Spending" },
   { id: "assets", label: "Assets" },
   { id: "risk", label: "Risk Analysis" },
+  { id: "allocation", label: "Allocation" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -119,6 +121,9 @@ export function Dashboard() {
     safe_withdrawal_result,
     is_loading_safe_withdrawal,
     fetch_safe_withdrawal,
+    bond_sweep_result,
+    is_loading_bond_sweep,
+    fetch_bond_sweep,
   } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
@@ -809,6 +814,89 @@ export function Dashboard() {
                     is_bankrupt_median={display_result.is_bankrupt_median}
                     retirement_years={display_result.retirement_years}
                   />
+                )}
+              </>
+            )}
+
+            {/* ===== ALLOCATION TAB ===== */}
+            {active_tab === "allocation" && (
+              <>
+                <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold">Bond Allocation Optimiser</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        Sweeps global bond % across all equity assets to find the optimal equity/bond blend.
+                        Uses historical S&amp;P 500 and US 10-Year Treasury returns.
+                      </div>
+                    </div>
+                    <button
+                      className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                      disabled={is_loading_bond_sweep || !session_id}
+                      onClick={() => {
+                        if (session_id) {
+                          fetch_bond_sweep({
+                            session_id,
+                            retirement_age_offset,
+                            annual_spend_target,
+                            steps: 20,
+                          }).catch(() => {});
+                        }
+                      }}
+                    >
+                      {is_loading_bond_sweep ? "Running sweep..." : "Run Bond Sweep"}
+                    </button>
+                  </div>
+
+                  {bond_sweep_result && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="rounded bg-slate-800/50 p-3">
+                        <div className="text-xs text-slate-400">Optimal Bond %</div>
+                        <div className="text-lg font-bold text-green-400">{bond_sweep_result.optimal_bond_pct}%</div>
+                      </div>
+                      {(() => {
+                        const opt = bond_sweep_result.points.find(
+                          (p) => p.bond_pct === bond_sweep_result.optimal_bond_pct
+                        );
+                        if (!opt) return null;
+                        return (
+                          <>
+                            <div className="rounded bg-slate-800/50 p-3">
+                              <div className="text-xs text-slate-400">Median Final Net Worth</div>
+                              <div className="text-lg font-bold text-blue-400">
+                                {Math.abs(opt.median_final_net_worth) >= 1_000_000
+                                  ? `\u00A3${(opt.median_final_net_worth / 1_000_000).toFixed(1)}m`
+                                  : `\u00A3${Math.round(opt.median_final_net_worth).toLocaleString()}`}
+                              </div>
+                            </div>
+                            <div className="rounded bg-slate-800/50 p-3">
+                              <div className="text-xs text-slate-400">Bankruptcy Risk</div>
+                              <div className={`text-lg font-bold ${opt.bankruptcy_pct <= 5 ? "text-green-400" : opt.bankruptcy_pct <= 10 ? "text-amber-400" : "text-red-400"}`}>
+                                {opt.bankruptcy_pct.toFixed(1)}%
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {bond_sweep_result && bond_sweep_result.points.length > 0 && (
+                  <BondSweepChart
+                    points={bond_sweep_result.points}
+                    optimal_bond_pct={bond_sweep_result.optimal_bond_pct}
+                  />
+                )}
+
+                {!bond_sweep_result && !is_loading_bond_sweep && (
+                  <div className="rounded border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-400">
+                    Click "Run Bond Sweep" to analyse the optimal equity/bond blend for your scenario.
+                    <br />
+                    <span className="text-xs">
+                      This requires the historical bootstrap return model.
+                    </span>
+                  </div>
                 )}
               </>
             )}
