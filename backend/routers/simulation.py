@@ -656,7 +656,7 @@ async def bond_sweep_progress(session_id: str) -> dict:
 
 
 @router.post("/bond-sweep", response_model=BondSweepResponse)
-async def bond_sweep(
+def bond_sweep(
     payload: BondSweepRequest,
 ) -> BondSweepResponse:
     """Full combinatorial sweep of bond allocations across all asset classes.
