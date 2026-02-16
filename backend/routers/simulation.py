@@ -38,6 +38,24 @@ async def simulation_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/historical-returns")
+async def historical_returns() -> dict:
+    """Return S&P 500 historical returns data and summary statistics."""
+    from backend.simulation.historical_returns import (
+        get_historical_returns,
+        get_historical_stats,
+        get_historical_years,
+    )
+    years = get_historical_years()
+    returns = get_historical_returns()
+    stats = get_historical_stats()
+    return {
+        "years": years.tolist(),
+        "returns": returns.tolist(),
+        "stats": stats,
+    }
+
+
 def _scenario_query():
     return (
         select(Scenario)
@@ -76,7 +94,12 @@ def _build_simulation_scenario(
     from backend.simulation.tax.tax_config import tax_config_from_assumptions
     tax_cfg = tax_config_from_assumptions(assumptions_json)
 
+    return_model = str(assumptions_json.get("return_model", "parametric"))
+    if return_model not in ("parametric", "historical_bootstrap"):
+        return_model = "parametric"
+
     assumptions = SimulationAssumptions(
+        return_model=return_model,
         inflation_rate=_coerce_float(assumptions_json.get("inflation_rate"), 0.02),
         isa_annual_limit=_coerce_float(assumptions_json.get("isa_annual_limit"), 20_000.0),
         state_pension_annual=_coerce_float(assumptions_json.get("state_pension_annual"), 11_500.0),

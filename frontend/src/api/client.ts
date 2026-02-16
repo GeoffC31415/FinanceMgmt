@@ -1,4 +1,5 @@
 import type {
+  HistoricalReturnsStats,
   SafeWithdrawalRequest,
   SafeWithdrawalResponse,
   ScenarioCreate,
@@ -119,4 +120,14 @@ export async function safe_withdrawal(payload: SafeWithdrawalRequest): Promise<S
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export type HistoricalReturnsResponse = {
+  years: number[];
+  returns: number[];
+  stats: HistoricalReturnsStats;
+};
+
+export async function get_historical_returns(): Promise<HistoricalReturnsResponse> {
+  return await http<HistoricalReturnsResponse>("/simulation/historical-returns");
 }

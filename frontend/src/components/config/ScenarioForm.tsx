@@ -3,8 +3,8 @@ import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import type { ScenarioCreate, ScenarioRead } from "../../types";
-import { list_tax_years, type TaxYearPreset } from "../../api/client";
+import type { HistoricalReturnsStats, ReturnModel, ScenarioCreate, ScenarioRead } from "../../types";
+import { get_historical_returns, list_tax_years, type TaxYearPreset } from "../../api/client";
 
 function parse_number_input(raw: string): number {
   const cleaned = raw.replace(/,/g, "").trim();
@@ -175,6 +175,65 @@ function TaxYearSelector({ value, onChange }: { value?: string; onChange: (year:
   );
 }
 
+function ReturnModelSelector({ value, onChange }: { value: ReturnModel; onChange: (model: ReturnModel) => void }) {
+  const [stats, setStats] = useState<HistoricalReturnsStats | null>(null);
+
+  useEffect(() => {
+    get_historical_returns()
+      .then((res) => setStats(res.stats))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="rounded border border-slate-800 bg-slate-900/30 p-4 md:col-span-2">
+      <label className="block text-sm font-medium">Investment Return Model</label>
+      <p className="text-xs text-slate-400 mt-1">
+        Choose how annual investment returns are modelled for equity assets (ISA, GIA, Pension). Cash always earns 0%.
+      </p>
+      <div className="mt-3 flex flex-col gap-2">
+        <label className="flex items-start gap-3 cursor-pointer rounded border border-slate-700 bg-slate-950/50 p-3 hover:border-slate-500">
+          <input
+            type="radio"
+            className="mt-0.5 h-4 w-4"
+            checked={value === "historical_bootstrap"}
+            onChange={() => onChange("historical_bootstrap")}
+          />
+          <div>
+            <div className="text-sm font-medium">S&amp;P 500 Historical Bootstrap</div>
+            <div className="text-xs text-slate-400 mt-0.5">
+              Randomly samples from {stats?.count ?? "..."} years ({stats?.first_year ?? "..."}&#8211;{stats?.last_year ?? "..."}) of actual S&amp;P 500 annual returns.
+              Captures real-world fat tails and crash severity. All equity assets share the same market return each year.
+            </div>
+            {stats && (
+              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 rounded border border-slate-800 bg-slate-950/50 p-2 sm:grid-cols-4">
+                <div>Mean: <span className="text-slate-200">{(stats.mean * 100).toFixed(1)}%</span></div>
+                <div>Std dev: <span className="text-slate-200">{(stats.std * 100).toFixed(1)}%</span></div>
+                <div>Best: <span className="text-emerald-300">+{(stats.max * 100).toFixed(1)}%</span> ({stats.max_year})</div>
+                <div>Worst: <span className="text-rose-300">{(stats.min * 100).toFixed(1)}%</span> ({stats.min_year})</div>
+              </div>
+            )}
+          </div>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer rounded border border-slate-700 bg-slate-950/50 p-3 hover:border-slate-500">
+          <input
+            type="radio"
+            className="mt-0.5 h-4 w-4"
+            checked={value === "parametric"}
+            onChange={() => onChange("parametric")}
+          />
+          <div>
+            <div className="text-sm font-medium">Custom (Normal distribution)</div>
+            <div className="text-xs text-slate-400 mt-0.5">
+              Each asset uses its own mean and standard deviation (configured in Assets tab).
+              Returns are drawn from a normal distribution independently per asset.
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 const schema = z.object({
   name: z.string().min(1).max(200),
   assumptions: z.object({
@@ -188,6 +247,7 @@ const schema = z.object({
     debt_interest_rate: z.coerce.number().min(0).max(1),
     bankruptcy_threshold: z.coerce.number().max(0),
     tax_year: z.string().optional(),
+    return_model: z.enum(["parametric", "historical_bootstrap"]).default("parametric"),
   }),
   people: z
     .array(
@@ -259,6 +319,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
   const annual_spend_target = (assumptions.annual_spend_target ?? 30000) as number;
   const debt_interest_rate = (assumptions.debt_interest_rate ?? 0.08) as number;
   const bankruptcy_threshold = (assumptions.bankruptcy_threshold ?? -100000) as number;
+  const return_model = (assumptions.return_model ?? "parametric") as ReturnModel;
 
   return {
     name: scenario.name,
@@ -271,7 +332,8 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       end_year,
       annual_spend_target,
       debt_interest_rate,
-      bankruptcy_threshold
+      bankruptcy_threshold,
+      return_model,
     },
     people: scenario.people.map((p) => ({
       id: p.id,
@@ -479,6 +541,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                 />
               </div>
             </div>
+
+            {/* Return Model Selector */}
+            <ReturnModelSelector
+              value={form.watch("assumptions.return_model") ?? "parametric"}
+              onChange={(model) => form.setValue("assumptions.return_model", model, { shouldDirty: true })}
+            />
 
             <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
               <label className="block text-sm font-medium">Inflation rate</label>
@@ -905,8 +973,24 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                       <NumberInput control={form.control} name={`assets.${idx}.annual_contribution`} min={0} />
                       <div className="mt-1 text-xs text-slate-400">0 = no cap</div>
                     </div>
-                    <PercentInput control={form.control} name={`assets.${idx}.growth_rate_mean`} placeholder="%" />
-                    <PercentInput control={form.control} name={`assets.${idx}.growth_rate_std`} placeholder="%" />
+                    {(() => {
+                      const is_bootstrap = form.watch("assumptions.return_model") === "historical_bootstrap";
+                      const asset_type = form.watch(`assets.${idx}.asset_type` as any);
+                      const is_equity = asset_type !== "CASH";
+                      const is_disabled = is_bootstrap && is_equity;
+                      return (
+                        <>
+                          <div className={is_disabled ? "opacity-40 pointer-events-none" : ""} title={is_disabled ? "Using S&P 500 historical returns (set in Assumptions tab)" : undefined}>
+                            <PercentInput control={form.control} name={`assets.${idx}.growth_rate_mean`} placeholder="%" />
+                            {is_disabled && <div className="mt-1 text-xs text-indigo-300">S&amp;P 500</div>}
+                          </div>
+                          <div className={is_disabled ? "opacity-40 pointer-events-none" : ""} title={is_disabled ? "Using S&P 500 historical returns (set in Assumptions tab)" : undefined}>
+                            <PercentInput control={form.control} name={`assets.${idx}.growth_rate_std`} placeholder="%" />
+                            {is_disabled && <div className="mt-1 text-xs text-indigo-300">bootstrap</div>}
+                          </div>
+                        </>
+                      );
+                    })()}
                     <div className="flex items-center">
                       <label className="flex items-center gap-2 text-xs text-slate-300">
                         <input

@@ -50,9 +50,27 @@ export type ExpenseCreate = {
   is_inflation_linked: boolean;
 };
 
+export type ReturnModel = "parametric" | "historical_bootstrap";
+
+export type Assumptions = Record<string, unknown> & {
+  return_model?: ReturnModel;
+};
+
+export type HistoricalReturnsStats = {
+  count: number;
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+  min_year: number;
+  max_year: number;
+  first_year: number;
+  last_year: number;
+};
+
 export type ScenarioCreate = {
   name: string;
-  assumptions: Record<string, unknown>;
+  assumptions: Assumptions;
   people: PersonCreate[];
   incomes: IncomeCreate[];
   assets: AssetCreate[];

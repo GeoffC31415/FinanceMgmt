@@ -133,7 +133,8 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     end_year: new Date().getFullYear() + 60,
     annual_spend_target: 30000,
     debt_interest_rate: 0.08,
-    bankruptcy_threshold: -100000
+    bankruptcy_threshold: -100000,
+    return_model: "historical_bootstrap",
   },
   people: [
     {

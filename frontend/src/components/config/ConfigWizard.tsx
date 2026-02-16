@@ -72,7 +72,8 @@ function default_draft(): ScenarioCreate {
       pension_access_age: 55,
       start_year: year,
       end_year: year + 60,
-      annual_spend_target: 30000
+      annual_spend_target: 30000,
+      return_model: "historical_bootstrap",
     },
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],

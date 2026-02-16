@@ -121,6 +121,22 @@ async def test_simulation_health(client: AsyncClient):
     assert resp.status_code == 200
 
 
+# ────────────────────────── Historical Returns ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_historical_returns_endpoint(client: AsyncClient):
+    resp = await client.get("/api/simulation/historical-returns")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "years" in data
+    assert "returns" in data
+    assert "stats" in data
+    assert len(data["years"]) == len(data["returns"])
+    assert data["stats"]["count"] >= 90
+    assert data["stats"]["first_year"] == 1928
+
+
 # ────────────────────────────── Scenario CRUD ──────────────────────────────
 
 

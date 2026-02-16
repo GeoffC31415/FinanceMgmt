@@ -18,6 +18,7 @@ from backend.simulation.entities.asset import AssetAccount
 
 @dataclass(frozen=True)
 class SimulationAssumptions:
+    return_model: str = "parametric"  # "parametric" or "historical_bootstrap"
     inflation_rate: float = 0.02
     isa_annual_limit: float = 20_000.0
     state_pension_annual: float = 11_500.0

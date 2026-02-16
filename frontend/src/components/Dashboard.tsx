@@ -197,13 +197,14 @@ export function Dashboard() {
     const adults = selected.people.filter((p) => !p.is_child).slice(0, 2);
     const minYear = display_result.years[0];
     const maxYear = display_result.years[display_result.years.length - 1];
-    const markers: { year: number; age: number; label: string }[] = [];
-    for (const adult of adults) {
+    const markers: { year: number; age: number; label: string; adultIndex: number }[] = [];
+    for (let ai = 0; ai < adults.length; ai++) {
+      const adult = adults[ai];
       const birth_year = parseInt(adult.birth_date.split("-")[0], 10);
       if (isNaN(birth_year)) continue;
       for (let age = 40; age <= 100; age += 10) {
         const y = birth_year + age;
-        if (y >= minYear && y <= maxYear) markers.push({ year: y, age, label: adult.label });
+        if (y >= minYear && y <= maxYear) markers.push({ year: y, age, label: adult.label, adultIndex: ai });
       }
     }
     return markers;

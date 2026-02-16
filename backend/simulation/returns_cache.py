@@ -154,34 +154,60 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
         [float(getattr(a, "cost_basis", getattr(a, "balance", 0.0))) for a in assets],
         dtype=np.float64,
     )
-    asset_means = np.array([float(getattr(a, "growth_rate_mean", 0.0)) for a in assets], dtype=np.float64)
-    asset_stds = np.array([float(getattr(a, "growth_rate_std", 0.0)) for a in assets], dtype=np.float64)
+    n_assets = len(assets)
+    use_bootstrap = scenario.assumptions.return_model == "historical_bootstrap"
 
-    # Broadcast normals per asset.
-    # (iterations, years, assets)
-    asset_returns = rng.normal(
-        loc=asset_means.reshape(1, 1, -1),
-        scale=asset_stds.reshape(1, 1, -1),
-        size=(iterations, n_years, int(asset_means.shape[0])),
-    ).astype(np.float64)
+    if use_bootstrap:
+        from backend.simulation.historical_returns import get_historical_returns
+        historical = get_historical_returns()
+
+        # Sample shared year indices: all equity assets get the same return per (iteration, year)
+        year_indices = rng.integers(0, len(historical), size=(iterations, n_years))
+        shared_returns = historical[year_indices]  # (iterations, n_years)
+
+        asset_returns = np.zeros((iterations, n_years, n_assets), dtype=np.float64)
+        for i in range(n_assets):
+            asset_type_str = str(getattr(assets[i], "asset_type", "")).upper()
+            if asset_type_str == "CASH":
+                pass  # stays zero
+            else:
+                asset_returns[:, :, i] = shared_returns
+    else:
+        asset_means = np.array([float(getattr(a, "growth_rate_mean", 0.0)) for a in assets], dtype=np.float64)
+        asset_stds = np.array([float(getattr(a, "growth_rate_std", 0.0)) for a in assets], dtype=np.float64)
+
+        # Broadcast normals per asset.
+        # (iterations, years, assets)
+        asset_returns = rng.normal(
+            loc=asset_means.reshape(1, 1, -1),
+            scale=asset_stds.reshape(1, 1, -1),
+            size=(iterations, n_years, n_assets),
+        ).astype(np.float64)
 
     # Pensions: model per-person (keyed) returns using each pension's configured growth rates.
     pension_keys = sorted(list(scenario.pension_by_person.keys()))
     if pension_keys:
-        pension_means = np.array(
-            [float(scenario.pension_by_person[k].growth_rate_mean) for k in pension_keys], dtype=np.float64
-        )
-        pension_stds = np.array(
-            [float(scenario.pension_by_person[k].growth_rate_std) for k in pension_keys], dtype=np.float64
-        )
         initial_pension_balances = np.array(
             [float(scenario.pension_by_person[k].balance) for k in pension_keys], dtype=np.float64
         )
-        pension_returns = rng.normal(
-            loc=pension_means.reshape(1, 1, -1),
-            scale=pension_stds.reshape(1, 1, -1),
-            size=(iterations, n_years, len(pension_keys)),
-        ).astype(np.float64)
+
+        if use_bootstrap:
+            # Pensions also use the same shared bootstrapped returns
+            pension_returns = np.zeros((iterations, n_years, len(pension_keys)), dtype=np.float64)
+            for i in range(len(pension_keys)):
+                pension_returns[:, :, i] = shared_returns
+        else:
+            pension_means = np.array(
+                [float(scenario.pension_by_person[k].growth_rate_mean) for k in pension_keys], dtype=np.float64
+            )
+            pension_stds = np.array(
+                [float(scenario.pension_by_person[k].growth_rate_std) for k in pension_keys], dtype=np.float64
+            )
+            pension_returns = rng.normal(
+                loc=pension_means.reshape(1, 1, -1),
+                scale=pension_stds.reshape(1, 1, -1),
+                size=(iterations, n_years, len(pension_keys)),
+            ).astype(np.float64)
     else:
         pension_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
         initial_pension_balances = np.zeros(0, dtype=np.float64)

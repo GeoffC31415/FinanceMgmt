@@ -18,7 +18,7 @@ type Props = {
   net_worth_median: number[];
   net_worth_p90: number[];
   retirement_years: number[];
-  adult_decade_years?: { year: number; age: number; label: string }[];
+  adult_decade_years?: { year: number; age: number; label: string; adultIndex: number }[];
   isa_balance_median?: number[];
   pension_balance_median?: number[];
   cash_balance_median?: number[];
@@ -112,7 +112,13 @@ export function NetWorthChart({
               scale={useLogScale ? "log" : "linear"}
               domain={useLogScale ? [LOG_MIN, "auto"] : ["auto", "auto"]}
               allowDataOverflow={useLogScale}
-              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
+              tickFormatter={(v: number) => {
+                const abs = Math.abs(v);
+                if (abs >= 1_000_000_000) return `£${+(v / 1_000_000_000).toPrecision(3)}b`;
+                if (abs >= 1_000_000) return `£${+(v / 1_000_000).toPrecision(3)}m`;
+                if (abs >= 1_000) return `£${+(v / 1_000).toPrecision(3)}k`;
+                return `£${v}`;
+              }}
             />
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}
@@ -158,22 +164,28 @@ export function NetWorthChart({
               }}
               contentStyle={{ color: "#e2e8f0" }}
             />
-            {adult_decade_years.map(({ year, age, label }) => (
-              <ReferenceLine
-                key={`decade-${label}-${year}`}
-                x={year}
-                stroke="#a78bfa"
-                strokeOpacity={0.55}
-                strokeDasharray="2 4"
-                yAxisId="left"
-                label={{
-                  value: `${label} ${age}`,
-                  position: "top",
-                  fill: "#a78bfa",
-                  fontSize: 10
-                }}
-              />
-            ))}
+            {adult_decade_years.map(({ year, age, label, adultIndex }) => {
+              const FONT_SIZE = 10;
+              const baseOffset = 5;
+              const offset = baseOffset + (adultIndex === 0 ? FONT_SIZE * 1.5 : 0);
+              return (
+                <ReferenceLine
+                  key={`decade-${label}-${year}`}
+                  x={year}
+                  stroke="#a78bfa"
+                  strokeOpacity={0.55}
+                  strokeDasharray="2 4"
+                  yAxisId="left"
+                  label={{
+                    value: `${label} ${age}`,
+                    position: "top",
+                    fill: "#a78bfa",
+                    fontSize: FONT_SIZE,
+                    offset
+                  }}
+                />
+              );
+            })}
             {retirement_years.map((year) => (
               <ReferenceLine
                 key={`retire-${year}`}
