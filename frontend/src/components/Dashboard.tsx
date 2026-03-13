@@ -589,7 +589,7 @@ export function Dashboard() {
               {bankruptcy_info.first_year_any && (
                 <span> (first occurrence in {bankruptcy_info.first_year_any})</span>
               )}
-              . Consider reducing retirement spending, delaying retirement, or increasing savings.
+              . Consider optimising bond allocations (compute here, then change config), retiring later, or reducing spending.
             </span>
           </div>
         </div>
