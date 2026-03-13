@@ -32,6 +32,16 @@ function format_currency_compact(value: number): string {
   return `£${Math.round(value).toLocaleString()}`;
 }
 
+function format_duration(seconds: number): string {
+  const total_seconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total_seconds / 3600);
+  const minutes = Math.floor((total_seconds % 3600) / 60);
+  const secs = total_seconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
 /**
  * Adjust an array of nominal values to real (today's purchasing power) values.
  * Formula: real_value = nominal_value / (1 + inflation_rate)^(year - start_year)
@@ -894,12 +904,17 @@ export function Dashboard() {
                   {/* Progress bar */}
                   {is_loading_bond_sweep && sweep_progress && (() => {
                     const pct = sweep_progress.total > 0 ? Math.round((sweep_progress.completed / sweep_progress.total) * 100) : 0;
+                    const has_eta = sweep_progress.eta_seconds != null && sweep_progress.total > sweep_progress.completed;
+                    const eta_label = has_eta ? format_duration(sweep_progress.eta_seconds ?? 0) : "";
                     return (
                       <div className="mt-3">
                         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                           <span>{sweep_progress.phase || "Starting..."}</span>
                           {sweep_progress.total > 0 && (
-                            <span>{sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()}</span>
+                            <span>
+                              {sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()}
+                              {has_eta ? ` - ~${eta_label} left` : ""}
+                            </span>
                           )}
                         </div>
                         <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
@@ -933,7 +948,7 @@ export function Dashboard() {
                     return (
                       <div className="mt-4">
                         <div className="text-xs text-slate-400 mb-2">
-                          Optimal allocation ({bond_sweep_result.total_combos_tested.toLocaleString()} combinations tested)
+                          Optimal allocation ({bond_sweep_result.total_combos_tested.toLocaleString()} simulation runs)
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {/* Per-class bars */}

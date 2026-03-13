@@ -25,8 +25,14 @@ export function useSimulation() {
   // Bond sweep state
   const [bond_sweep_result, setBondSweepResult] = useState<BondSweepResponse | null>(null);
   const [is_loading_bond_sweep, setIsLoadingBondSweep] = useState(false);
-  const [sweep_progress, setSweepProgress] = useState<{ completed: number; total: number; phase: string } | null>(null);
+  const [sweep_progress, setSweepProgress] = useState<{
+    completed: number;
+    total: number;
+    phase: string;
+    eta_seconds: number | null;
+  } | null>(null);
   const sweep_poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sweep_started_at_ms_ref = useRef<number | null>(null);
 
   const run = useCallback(async (payload: SimulationRequest) => {
     setIsLoading(true);
@@ -117,14 +123,30 @@ export function useSimulation() {
       if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
 
       setIsLoadingBondSweep(true);
-      setSweepProgress({ completed: 0, total: 0, phase: "Starting..." });
+      sweep_started_at_ms_ref.current = Date.now();
+      setSweepProgress({ completed: 0, total: 0, phase: "Starting...", eta_seconds: null });
 
       // Start polling progress
       if (sweep_poll_ref.current) clearInterval(sweep_poll_ref.current);
       sweep_poll_ref.current = setInterval(async () => {
         try {
           const prog = await bond_sweep_progress(effective_session_id);
-          setSweepProgress({ completed: prog.completed, total: prog.total, phase: prog.phase });
+          const started_at_ms = sweep_started_at_ms_ref.current ?? Date.now();
+          const elapsed_seconds = (Date.now() - started_at_ms) / 1000;
+          const has_progress = prog.completed > 0 && prog.total > prog.completed;
+          let eta_seconds: number | null = null;
+          if (has_progress && elapsed_seconds > 0) {
+            const runs_per_second = prog.completed / elapsed_seconds;
+            if (runs_per_second > 0) {
+              eta_seconds = Math.max(0, Math.round((prog.total - prog.completed) / runs_per_second));
+            }
+          }
+          setSweepProgress({
+            completed: prog.completed,
+            total: prog.total,
+            phase: prog.phase,
+            eta_seconds,
+          });
         } catch {
           // ignore polling errors
         }
@@ -134,8 +156,9 @@ export function useSimulation() {
         const res = await bond_sweep({
           session_id: effective_session_id,
           retirement_age_offset: payload.retirement_age_offset,
-          annual_spend_target: payload.annual_spend_target,
           risk_threshold: payload.risk_threshold,
+          target_year: payload.target_year,
+          max_spend: payload.max_spend,
         });
         setBondSweepResult(res);
         return res;
@@ -147,6 +170,7 @@ export function useSimulation() {
           clearInterval(sweep_poll_ref.current);
           sweep_poll_ref.current = null;
         }
+        sweep_started_at_ms_ref.current = null;
         setSweepProgress(null);
         setIsLoadingBondSweep(false);
       }

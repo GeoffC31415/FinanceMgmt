@@ -24,20 +24,19 @@ function fmt_money(v: number): string {
   return `\u00A3${Math.round(v)}`;
 }
 
-function risk_color(pct: number): string {
-  if (pct <= 2) return "#22c55e";
-  if (pct <= 5) return "#86efac";
-  if (pct <= 10) return "#fbbf24";
-  if (pct <= 20) return "#f97316";
-  return "#ef4444";
-}
-
 function risk_label(pct: number): string {
   if (pct <= 2) return "Safe";
   if (pct <= 5) return "Low risk";
   if (pct <= 10) return "Moderate";
   if (pct <= 20) return "Risky";
   return "Dangerous";
+}
+
+function fun_fund_color(value: number, min_value: number, max_value: number): string {
+  const spread = Math.max(max_value - min_value, 1);
+  const ratio = Math.max(0, Math.min(1, (value - min_value) / spread));
+  const hue = 10 + ratio * 110; // red -> green
+  return `hsl(${hue}, 75%, 50%)`;
 }
 
 /** Single asset-class panel with heatmap strip + dual-axis chart */
@@ -52,16 +51,15 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
       bond_pct: pt.bond_pct,
       risk: pt.min_bankruptcy_pct,
       avg_risk: pt.avg_bankruptcy_pct,
-      nw: pt.max_median_net_worth,
-      avg_nw: pt.avg_median_net_worth,
+      best_fun_fund: pt.best_max_fun_fund,
+      avg_fun_fund: pt.avg_max_fun_fund,
     }));
   }, [pts]);
 
   if (segments.length === 0) return null;
 
-  // Find the range of bond_pct values we have data for
-  const min_pct = segments[0].bond_pct;
-  const max_pct = segments[segments.length - 1].bond_pct;
+  const min_fun_fund = Math.min(...segments.map((seg) => seg.best_fun_fund));
+  const max_fun_fund = Math.max(...segments.map((seg) => seg.best_fun_fund));
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -75,7 +73,7 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
 
       {/* Risk heatmap strip — 0-100% uniform scale */}
       <div className="mb-1">
-        <div className="text-[10px] text-slate-500 mb-1">Bankruptcy risk by bond allocation (best achievable)</div>
+        <div className="text-[10px] text-slate-500 mb-1">Safe fun fund by bond allocation (best achievable at selected risk)</div>
         <div className="relative h-6 rounded overflow-hidden border border-slate-700 bg-slate-800">
           {segments.map((seg, i) => {
             const next = segments[i + 1];
@@ -89,12 +87,12 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
                 style={{
                   left: `${left}%`,
                   width: `${Math.max(right - left, 0.3)}%`,
-                  background: risk_color(seg.risk),
+                  background: fun_fund_color(seg.best_fun_fund, min_fun_fund, max_fun_fund),
                   opacity: is_optimal ? 1 : 0.7,
                   borderRight: is_optimal ? "2px solid white" : undefined,
                   borderLeft: is_optimal ? "2px solid white" : undefined,
                 }}
-                title={`${seg.bond_pct}% bonds: ${seg.risk.toFixed(1)}% bankruptcy (${risk_label(seg.risk)})`}
+                title={`${seg.bond_pct}% bonds: ${fmt_money(seg.best_fun_fund)} safe fun fund, ${seg.risk.toFixed(1)}% bankruptcy (${risk_label(seg.risk)})`}
               />
             );
           })}
@@ -108,7 +106,7 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
         </div>
       </div>
 
-      {/* Dual-axis chart: risk + net worth */}
+      {/* Dual-axis chart: risk + safe fun fund */}
       <div className="h-[180px] mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={segments} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
@@ -118,15 +116,15 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
               ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} />
             <YAxis yAxisId="risk" stroke="#64748b" tick={{ fontSize: 10 }} domain={[0, "auto"]}
               tickFormatter={(v) => `${v}%`} width={40} />
-            <YAxis yAxisId="nw" orientation="right" stroke="#64748b" tick={{ fontSize: 10 }}
+            <YAxis yAxisId="fund" orientation="right" stroke="#64748b" tick={{ fontSize: 10 }}
               tickFormatter={fmt_money} width={55} />
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0", fontSize: 11 }}
               formatter={(value: number, name: string) => {
                 if (name === "avg_risk") return [`${value.toFixed(1)}%`, "Avg bankruptcy"];
                 if (name === "risk") return [`${value.toFixed(1)}%`, "Best-case bankruptcy"];
-                if (name === "avg_nw") return [fmt_money(value), "Avg net worth"];
-                if (name === "nw") return [fmt_money(value), "Best-case net worth"];
+                if (name === "avg_fun_fund") return [fmt_money(value), "Avg max safe fun fund"];
+                if (name === "best_fun_fund") return [fmt_money(value), "Best max safe fun fund"];
                 return [String(value), name];
               }}
               labelFormatter={(l) => `${l}% bonds`}
@@ -136,11 +134,11 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
               stroke="#ef4444" strokeWidth={1.5} dot={false} name="avg_risk" />
             <Line type="monotone" dataKey="risk" yAxisId="risk" stroke="#ef4444" strokeWidth={1}
               strokeDasharray="3 2" dot={false} name="risk" />
-            {/* Net worth line */}
-            <Line type="monotone" dataKey="avg_nw" yAxisId="nw" stroke={style.color} strokeWidth={2}
-              dot={false} name="avg_nw" />
-            <Line type="monotone" dataKey="nw" yAxisId="nw" stroke={style.color} strokeWidth={1}
-              strokeDasharray="3 2" dot={false} name="nw" />
+            {/* Safe fun fund line */}
+            <Line type="monotone" dataKey="avg_fun_fund" yAxisId="fund" stroke={style.color} strokeWidth={2}
+              dot={false} name="avg_fun_fund" />
+            <Line type="monotone" dataKey="best_fun_fund" yAxisId="fund" stroke={style.color} strokeWidth={1}
+              strokeDasharray="3 2" dot={false} name="best_fun_fund" />
             {/* Optimal marker */}
             <ReferenceLine x={optimal_pct} yAxisId="risk" stroke="white" strokeDasharray="4 4"
               strokeWidth={1.5} />
@@ -152,8 +150,8 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
       <div className="flex gap-4 mt-1 text-[10px] text-slate-400 justify-center">
         <span><span className="inline-block w-3 h-0.5 bg-red-500 mr-1 align-middle" /> Avg risk</span>
         <span><span className="inline-block w-3 h-0.5 border-t border-dashed border-red-500 mr-1 align-middle" /> Best risk</span>
-        <span><span className="inline-block w-3 h-0.5 mr-1 align-middle" style={{ background: style.color }} /> Avg net worth</span>
-        <span><span className="inline-block w-3 h-0.5 border-t border-dashed mr-1 align-middle" style={{ borderColor: style.color }} /> Best net worth</span>
+        <span><span className="inline-block w-3 h-0.5 mr-1 align-middle" style={{ background: style.color }} /> Avg max safe fun fund</span>
+        <span><span className="inline-block w-3 h-0.5 border-t border-dashed mr-1 align-middle" style={{ borderColor: style.color }} /> Best max safe fun fund</span>
       </div>
     </div>
   );
@@ -206,7 +204,7 @@ export function BondSweepChart({ data }: Props) {
         <div className="mb-3 text-sm font-semibold">
           Top Combinations
           <span className="ml-2 text-xs font-normal text-slate-400">
-            {data.total_combos_tested.toLocaleString()} tested, ranked by median net worth within risk threshold
+            {data.total_combos_tested.toLocaleString()} tested, ranked by max safe fun fund at {data.target_year} within risk threshold
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -217,8 +215,7 @@ export function BondSweepChart({ data }: Props) {
                 {data.asset_classes.includes("ISA") && <th className="px-3 py-2 text-right text-green-400">ISA bonds</th>}
                 {data.asset_classes.includes("GIA") && <th className="px-3 py-2 text-right text-blue-400">GIA bonds</th>}
                 {data.asset_classes.includes("PENSION") && <th className="px-3 py-2 text-right text-yellow-400">Pension bonds</th>}
-                <th className="px-3 py-2 text-right">Median NW</th>
-                <th className="px-3 py-2 text-right">P10 NW</th>
+                <th className="px-3 py-2 text-right">Max Fun Fund</th>
                 <th className="px-3 py-2 text-right">Bankruptcy</th>
               </tr>
             </thead>
@@ -233,8 +230,7 @@ export function BondSweepChart({ data }: Props) {
                     {data.asset_classes.includes("ISA") && <td className="px-3 py-2 text-right font-mono">{combo.isa_bond_pct}%</td>}
                     {data.asset_classes.includes("GIA") && <td className="px-3 py-2 text-right font-mono">{combo.gia_bond_pct}%</td>}
                     {data.asset_classes.includes("PENSION") && <td className="px-3 py-2 text-right font-mono">{combo.pension_bond_pct}%</td>}
-                    <td className="px-3 py-2 text-right font-mono">{fmt_money(combo.median_final_net_worth)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt_money(combo.p10_final_net_worth)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{fmt_money(combo.max_safe_fun_fund)}</td>
                     <td className={`px-3 py-2 text-right font-mono ${combo.bankruptcy_pct <= 5 ? "text-green-400" : combo.bankruptcy_pct <= 10 ? "text-amber-400" : "text-red-400"}`}>
                       {combo.bankruptcy_pct.toFixed(1)}%
                     </td>

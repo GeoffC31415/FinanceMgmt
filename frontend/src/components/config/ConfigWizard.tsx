@@ -78,8 +78,8 @@ function default_draft(): ScenarioCreate {
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
     assets: [
-      { name: "ISA", asset_type: "ISA", withdrawal_priority: 20, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
-      { name: "Pension", asset_type: "PENSION", withdrawal_priority: 30, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
+      { name: "ISA", asset_type: "ISA", withdrawal_priority: 30, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
+      { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
       { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }
     ],
     mortgage: null,
@@ -513,8 +513,8 @@ export function ConfigWizard() {
               <div className="hidden md:grid md:grid-cols-9 md:gap-3 text-xs text-slate-400">
                 <Label tooltip="Optional: link to a person for retirement-aware contributions">Person</Label>
                 <Label tooltip="A friendly name for this account">Name</Label>
-                <Label tooltip="CASH: Emergency fund, no growth. ISA: Tax-free growth & withdrawals. GIA: Taxable gains. PENSION: Managed separately via income contributions.">Type</Label>
-                <Label tooltip="Lower numbers are withdrawn first when cash is needed. Cash is always 0, so ISA (20) is used before Pension (30).">Priority</Label>
+                <Label tooltip="CASH: Float/emergency fund, not included in withdrawal order. ISA: Tax-free growth & withdrawals. GIA: Taxable gains (CGT may apply). PENSION: Funded via salary pension contributions; withdrawals taxed as income, age-restricted.">Type</Label>
+                <Label tooltip="Higher numbers are withdrawn first. Cash accounts are excluded from this order (always used as the float). Suggested: ISA 30, GIA 20, Pension 10.">Priority</Label>
                 <Label tooltip="Current value of this account. Starting point for the simulation.">Balance (£)</Label>
                 <Label tooltip="Maximum annual investment into this account. 0 = unlimited (within ISA annual limits).">Annual Cap (£)</Label>
                 <Label tooltip="Expected average annual return (0.05 = 5%). Used with std dev for Monte Carlo simulation.">Growth Mean</Label>
@@ -907,7 +907,7 @@ export function ConfigWizard() {
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Target annual spending in retirement. If defined expenses are less than this, the simulation adds extra spending to meet this lifestyle budget.">Annual Spend Target (£)</Label>
+                  <Label tooltip="Extra spending added on top of your configured expenses each year once everyone is retired. Grows with inflation. This is the same value as the 'Extra spend (retired)' slider on the dashboard.">Extra Retirement Spending (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     value={String((draft.assumptions as any).annual_spend_target ?? "")}
@@ -918,7 +918,7 @@ export function ConfigWizard() {
                       }))
                     }
                   />
-                  <Hint>Set to 0 to only use defined expenses. Otherwise, this is your retirement "lifestyle" target.</Hint>
+                  <Hint>Set to 0 for no extra spending in retirement. This is added on top of your regular expenses, not instead of them.</Hint>
                 </div>
               </div>
             </div>

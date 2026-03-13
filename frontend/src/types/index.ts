@@ -203,8 +203,9 @@ export type SafeWithdrawalResponse = {
 export type BondSweepRequest = {
   session_id: string;
   retirement_age_offset?: number;
-  annual_spend_target?: number | null;
   risk_threshold?: number;
+  target_year?: number | null;
+  max_spend?: number;
 };
 
 export type BondCombo = {
@@ -213,16 +214,15 @@ export type BondCombo = {
   pension_bond_pct: number;
   bankruptcy_pct: number;
   depletion_pct: number;
-  median_final_net_worth: number;
-  p10_final_net_worth: number;
+  max_safe_fun_fund: number;
 };
 
 export type MarginalPoint = {
   bond_pct: number;
   avg_bankruptcy_pct: number;
-  avg_median_net_worth: number;
+  avg_max_fun_fund: number;
   min_bankruptcy_pct: number;
-  max_median_net_worth: number;
+  best_max_fun_fund: number;
 };
 
 export type MarginalCurve = {
@@ -235,5 +235,6 @@ export type BondSweepResponse = {
   optimal: BondCombo;
   top_combos: BondCombo[];
   marginals: MarginalCurve[];
+  target_year: number;
   total_combos_tested: number;
 };

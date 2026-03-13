@@ -133,8 +133,9 @@ class SafeWithdrawalResponse(BaseModel):
 class BondSweepRequest(BaseModel):
     session_id: str
     retirement_age_offset: int = Field(default=0, ge=-30, le=30)
-    annual_spend_target: float | None = Field(default=None, ge=0.0)
     risk_threshold: float = Field(default=5.0, ge=0.0, le=100.0)
+    target_year: int | None = Field(default=None, ge=1900, le=2200)
+    max_spend: float = Field(default=200_000.0, ge=0.0)
 
 
 class BondCombo(BaseModel):
@@ -144,17 +145,16 @@ class BondCombo(BaseModel):
     pension_bond_pct: float
     bankruptcy_pct: float
     depletion_pct: float
-    median_final_net_worth: float
-    p10_final_net_worth: float
+    max_safe_fun_fund: float
 
 
 class MarginalPoint(BaseModel):
     """Aggregated outcome at a single bond % for one asset class (averaged over all other combos)."""
     bond_pct: float
     avg_bankruptcy_pct: float
-    avg_median_net_worth: float
+    avg_max_fun_fund: float
     min_bankruptcy_pct: float
-    max_median_net_worth: float
+    best_max_fun_fund: float
 
 
 class MarginalCurve(BaseModel):
@@ -167,4 +167,5 @@ class BondSweepResponse(BaseModel):
     optimal: BondCombo
     top_combos: list[BondCombo]
     marginals: list[MarginalCurve]
+    target_year: int
     total_combos_tested: int
