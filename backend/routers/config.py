@@ -117,6 +117,7 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
                 contributions_end_at_retirement=asset.contributions_end_at_retirement,
                 asset_type=asset.asset_type,
                 withdrawal_priority=asset.withdrawal_priority,
+                bond_allocation=asset.bond_allocation,
             )
             for asset in payload.assets
         ]
@@ -238,6 +239,7 @@ async def update_scenario(
                 contributions_end_at_retirement=asset.contributions_end_at_retirement,
                 asset_type=asset.asset_type,
                 withdrawal_priority=asset.withdrawal_priority,
+                bond_allocation=asset.bond_allocation,
             )
             for asset in payload.assets
         ]
