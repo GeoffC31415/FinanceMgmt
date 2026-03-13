@@ -133,6 +133,7 @@ export function Dashboard() {
   const [show_real_values, setShowRealValues] = useState<boolean>(false);
   const [percentile, setPercentile] = useState<number>(50);
   const [risk_threshold, setRiskThreshold] = useState<number>(5);
+  const [bond_target_year, setBondTargetYear] = useState<number | null>(null);
   const [active_tab, setActiveTab] = useState<TabId>("overview");
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
@@ -180,6 +181,18 @@ export function Dashboard() {
     if (!result) return null;
     return show_real_values ? applyInflationAdjustment(result) : result;
   }, [result, show_real_values]);
+
+  useEffect(() => {
+    if (!display_result || display_result.years.length === 0) {
+      setBondTargetYear(null);
+      return;
+    }
+    const default_year = display_result.years[display_result.years.length - 1];
+    setBondTargetYear((current) => {
+      if (current != null && display_result.years.includes(current)) return current;
+      return default_year;
+    });
+  }, [display_result]);
 
   // Calculate when children leave home for the expense chart markers
   const children_leaving = useMemo(() => {
@@ -644,7 +657,7 @@ export function Dashboard() {
                         <span className="text-sm font-normal text-slate-500">/yr</span>
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
-                        retirement spending limit
+                        max extra retirement spend at {risk_threshold}% risk
                       </div>
                     </div>
 
@@ -828,7 +841,7 @@ export function Dashboard() {
                       <div className="text-sm font-semibold">Bond Allocation Optimiser</div>
                       <div className="text-xs text-slate-400 mt-1">
                         Tests every combination of ISA/GIA/Pension bond % in 10% increments to find the optimal blend.
-                        Uses historical S&amp;P 500 and US 10-Year Treasury yields.
+                        Uses historical S&amp;P 500 and US 10-Year Treasury total returns.
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -845,6 +858,19 @@ export function Dashboard() {
                           <option value={10}>10%</option>
                         </select>
                       </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-500" title="The year at which the bankruptcy rate is evaluated to determine the safe allocation">Risk horizon</div>
+                        <select
+                          className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                          value={bond_target_year ?? ""}
+                          onChange={(e) => setBondTargetYear(Number(e.target.value))}
+                          disabled={!display_result || display_result.years.length === 0}
+                        >
+                          {(display_result?.years ?? []).map((year) => (
+                            <option key={year} value={year}>{year}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
                         disabled={is_loading_bond_sweep || !session_id}
@@ -853,8 +879,9 @@ export function Dashboard() {
                             fetch_bond_sweep({
                               session_id,
                               retirement_age_offset,
-                              annual_spend_target,
                               risk_threshold,
+                              target_year: bond_target_year,
+                              max_spend: Math.max(200_000, annual_spend_target * 2),
                             }).catch(() => {});
                           }
                         }}
@@ -937,19 +964,17 @@ export function Dashboard() {
                           {/* Outcome metrics */}
                           <div className="grid grid-cols-2 gap-3">
                             <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">Median Final Net Worth</div>
+                              <div className="text-xs text-slate-400">Max Safe Fun Fund</div>
                               <div className="text-lg font-bold text-blue-400">
-                                {Math.abs(opt.median_final_net_worth) >= 1_000_000
-                                  ? `\u00A3${(opt.median_final_net_worth / 1_000_000).toFixed(1)}m`
-                                  : `\u00A3${Math.round(opt.median_final_net_worth).toLocaleString()}`}
+                                {Math.abs(opt.max_safe_fun_fund) >= 1_000_000
+                                  ? `\u00A3${(opt.max_safe_fun_fund / 1_000_000).toFixed(1)}m`
+                                  : `\u00A3${Math.round(opt.max_safe_fun_fund).toLocaleString()}`}
                               </div>
                             </div>
                             <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">P10 Net Worth</div>
+                              <div className="text-xs text-slate-400">Risk horizon</div>
                               <div className="text-lg font-bold text-slate-300">
-                                {Math.abs(opt.p10_final_net_worth) >= 1_000_000
-                                  ? `\u00A3${(opt.p10_final_net_worth / 1_000_000).toFixed(1)}m`
-                                  : `\u00A3${Math.round(opt.p10_final_net_worth).toLocaleString()}`}
+                                {bond_sweep_result.target_year} @ {risk_threshold}% risk
                               </div>
                             </div>
                             <div className="rounded bg-slate-800/50 p-3">
