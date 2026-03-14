@@ -24,6 +24,7 @@ type Props = {
   pension_contributions_median: number[];
   total_tax_median: number[];
   fun_fund_median: number[];
+  property_maintenance_median: number[];
   retirement_years: number[];
   children_leaving?: ChildLeavingInfo[];
   mortgage_payoff_year?: number | null;
@@ -71,6 +72,7 @@ export function ExpensesChart({
   pension_contributions_median,
   total_tax_median,
   fun_fund_median,
+  property_maintenance_median,
   retirement_years,
   children_leaving = [],
   mortgage_payoff_year = null,
@@ -94,13 +96,14 @@ export function ExpensesChart({
     const mortgage_payment = sanitize(mortgage_payment_median[idx]);
     const total_tax = sanitize(total_tax_median[idx]);
     const fun_fund = sanitize(fun_fund_median[idx]);
+    const property_maintenance = sanitize(property_maintenance_median[idx]);
     
-    // Living expenses = total_expenses - mortgage - fun_fund (what's left after known components)
-    const living_expenses = Math.max(0, total_expenses - mortgage_payment - fun_fund);
+    // Living expenses = total_expenses - mortgage - fun_fund - property_maintenance
+    const living_expenses = Math.max(0, total_expenses - mortgage_payment - fun_fund - property_maintenance);
     
-    // Total outgoings includes: living expenses + mortgage + tax + fun fund
+    // Total outgoings includes: living expenses + mortgage + tax + fun fund + property maintenance
     // Note: Pension contributions are excluded as they are investments, not expenses
-    const total_outgoings = living_expenses + mortgage_payment + total_tax + fun_fund;
+    const total_outgoings = living_expenses + mortgage_payment + total_tax + fun_fund + property_maintenance;
     
     return {
       year,
@@ -108,7 +111,8 @@ export function ExpensesChart({
       living_expenses: clampForLog(living_expenses),
       mortgage_payment: clampForLog(mortgage_payment),
       total_tax: clampForLog(total_tax),
-      fun_fund: clampForLog(fun_fund)
+      fun_fund: clampForLog(fun_fund),
+      property_maintenance: clampForLog(property_maintenance)
     };
   });
 
@@ -160,6 +164,8 @@ export function ExpensesChart({
                           ? "Living expenses"
                           : name === "fun_fund"
                             ? "Fun fund"
+                          : name === "property_maintenance"
+                            ? "Property maintenance"
                             : name;
                 return [`£${Math.round(Number(value)).toLocaleString()}`, label];
               }}
@@ -175,6 +181,7 @@ export function ExpensesChart({
                 if (value === "total_tax") return "Tax";
                 if (value === "living_expenses") return "Living expenses";
                 if (value === "fun_fund") return "Fun fund";
+                if (value === "property_maintenance") return "Property maintenance";
                 return value;
               }}
             />
@@ -251,6 +258,15 @@ export function ExpensesChart({
               dot={false}
               yAxisId="left"
               name="fun_fund"
+            />
+            <Line
+              type="monotone"
+              dataKey="property_maintenance"
+              stroke="#f97316"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="property_maintenance"
             />
           </ComposedChart>
         </ResponsiveContainer>

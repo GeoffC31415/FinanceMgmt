@@ -16,6 +16,7 @@ type Props = {
   isa_balance_median: number[];
   pension_balance_median: number[];
   cash_balance_median: number[];
+  property_value_median: number[];
   total_assets_median: number[];
   retirement_years: number[];
   percentile?: number;
@@ -26,6 +27,7 @@ export function AssetsChart({
   isa_balance_median,
   pension_balance_median,
   cash_balance_median,
+  property_value_median,
   total_assets_median,
   retirement_years,
   percentile = 50
@@ -46,15 +48,17 @@ export function AssetsChart({
     const isa = sanitize(isa_balance_median[idx]);
     const pension = sanitize(pension_balance_median[idx]);
     const cash = sanitize(cash_balance_median[idx]);
+    const property = sanitize(property_value_median[idx]);
     const totalAssets = sanitize(total_assets_median[idx]);
-    // GIA = total assets - ISA - pension - cash
-    const gia = totalAssets - isa - pension - cash;
+    // GIA = total assets - ISA - pension - cash - property
+    const gia = totalAssets - isa - pension - cash - property;
     
     return {
       year,
       isa_balance: clampForLog(isa),
       pension_balance: clampForLog(pension),
       cash_balance: clampForLog(cash),
+      property_balance: clampForLog(property),
       gia_balance: clampForLog(gia),
       total_assets: clampForLog(totalAssets)
     };
@@ -106,6 +110,8 @@ export function AssetsChart({
                         ? "ISA"
                         : name === "pension_balance"
                           ? "Pension"
+                      : name === "property_balance"
+                        ? "Property"
                           : name === "gia_balance"
                             ? "GIA"
                             : name;
@@ -121,6 +127,7 @@ export function AssetsChart({
                 if (value === "cash_balance") return "Cash";
                 if (value === "isa_balance") return "ISA";
                 if (value === "pension_balance") return "Pension";
+                if (value === "property_balance") return "Property";
                 if (value === "gia_balance") return "GIA";
                 return value;
               }}
@@ -170,6 +177,15 @@ export function AssetsChart({
               dot={false}
               yAxisId="left"
               name="pension_balance"
+            />
+            <Line
+              type="monotone"
+              dataKey="property_balance"
+              stroke="#f97316"
+              strokeWidth={1.5}
+              dot={false}
+              yAxisId="left"
+              name="property_balance"
             />
             <Line
               type="monotone"

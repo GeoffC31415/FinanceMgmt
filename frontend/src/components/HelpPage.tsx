@@ -86,7 +86,7 @@ export function HelpPage() {
         <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
           <li>
             <span className="font-semibold">Asset withdrawal order:</span> assets are sorted by{" "}
-            <span className="font-mono">withdrawal_priority</span> (lower number = used earlier).
+            <span className="font-mono">withdrawal_priority</span> (higher number = used earlier).
           </li>
           <li>
             <span className="font-semibold">ISA withdrawals:</span> treated as tax-free.

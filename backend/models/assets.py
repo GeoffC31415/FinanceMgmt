@@ -26,7 +26,7 @@ class Asset(Base, TimestampMixin):
     # Values: CASH, ISA, GIA
     asset_type: Mapped[str] = mapped_column(String(20), nullable=False, default="GIA")
 
-    # Withdrawal priority: lower numbers are withdrawn first when covering a shortfall.
+    # Withdrawal priority: higher numbers are withdrawn first when covering a shortfall.
     withdrawal_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
     # Fraction of this asset allocated to bonds (0.0 = 100% equity, 1.0 = 100% bonds).

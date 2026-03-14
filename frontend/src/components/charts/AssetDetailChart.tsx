@@ -12,7 +12,7 @@ import {
   YAxis
 } from "recharts";
 
-type AssetGroup = "ISA" | "GIA" | "CASH" | "PENSION" | "DEBT";
+type AssetGroup = "ISA" | "GIA" | "CASH" | "PENSION" | "PROPERTY" | "DEBT";
 
 type Props = {
   years: number[];
@@ -24,6 +24,7 @@ type Props = {
   gia_balance_median: number[];
   cash_balance_median: number[];
   pension_balance_median: number[];
+  property_value_median: number[];
   debt_balance_median: number[];
 
   // Flows
@@ -34,6 +35,7 @@ type Props = {
   gia_returns_median: number[];
   cash_returns_median: number[];
   pension_returns_median: number[];
+  property_returns_median: number[];
 
   isa_contributions_median: number[];
   gia_contributions_median: number[];
@@ -41,6 +43,8 @@ type Props = {
   isa_withdrawals_median: number[];
   gia_withdrawals_median: number[];
   pension_withdrawals_median: number[];
+  property_rental_income_median: number[];
+  property_maintenance_median: number[];
 };
 
 const sanitize = (v: number | undefined | null): number => {
@@ -58,6 +62,7 @@ export function AssetDetailChart({
   gia_balance_median,
   cash_balance_median,
   pension_balance_median,
+  property_value_median,
   debt_balance_median,
   pension_contributions_median,
   debt_interest_paid_median,
@@ -65,11 +70,14 @@ export function AssetDetailChart({
   gia_returns_median,
   cash_returns_median,
   pension_returns_median,
+  property_returns_median,
   isa_contributions_median,
   gia_contributions_median,
   isa_withdrawals_median,
   gia_withdrawals_median,
-  pension_withdrawals_median
+  pension_withdrawals_median,
+  property_rental_income_median,
+  property_maintenance_median
 }: Props) {
   const [selected, setSelected] = useState<AssetGroup>("ISA");
 
@@ -79,6 +87,7 @@ export function AssetDetailChart({
       GIA: gia_balance_median,
       CASH: cash_balance_median,
       PENSION: pension_balance_median,
+      PROPERTY: property_value_median,
       DEBT: debt_balance_median
     };
 
@@ -87,6 +96,7 @@ export function AssetDetailChart({
       GIA: gia_returns_median,
       CASH: cash_returns_median,
       PENSION: pension_returns_median,
+      PROPERTY: property_returns_median,
       DEBT: []
     };
 
@@ -95,6 +105,7 @@ export function AssetDetailChart({
       GIA: gia_contributions_median,
       CASH: [],
       PENSION: pension_contributions_median,
+      PROPERTY: property_rental_income_median,
       DEBT: []
     };
 
@@ -103,6 +114,7 @@ export function AssetDetailChart({
       GIA: gia_withdrawals_median,
       CASH: [],
       PENSION: pension_withdrawals_median,
+      PROPERTY: property_maintenance_median,
       DEBT: []
     };
 
@@ -111,6 +123,7 @@ export function AssetDetailChart({
       GIA: "GIA balance",
       CASH: "Cash balance",
       PENSION: "Pension balance",
+      PROPERTY: "Property value",
       DEBT: "Debt balance"
     };
 
@@ -139,6 +152,7 @@ export function AssetDetailChart({
     gia_balance_median,
     cash_balance_median,
     pension_balance_median,
+    property_value_median,
     debt_balance_median,
     pension_contributions_median,
     debt_interest_paid_median,
@@ -146,11 +160,14 @@ export function AssetDetailChart({
     gia_returns_median,
     cash_returns_median,
     pension_returns_median,
+    property_returns_median,
     isa_contributions_median,
     gia_contributions_median,
     isa_withdrawals_median,
     gia_withdrawals_median,
-    pension_withdrawals_median
+    pension_withdrawals_median,
+    property_rental_income_median,
+    property_maintenance_median
   ]);
 
   return (
@@ -173,6 +190,7 @@ export function AssetDetailChart({
             <option value="GIA">GIA</option>
             <option value="CASH">Cash</option>
             <option value="PENSION">Pension</option>
+            <option value="PROPERTY">Property</option>
             <option value="DEBT">Debt</option>
           </select>
         </div>

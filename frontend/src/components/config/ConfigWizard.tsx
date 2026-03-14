@@ -8,20 +8,22 @@ type StepId =
   | "people"
   | "income"
   | "assets"
+  | "property"
   | "mortgage"
   | "expenses"
   | "assumptions"
-  | "review";
+  | "summary";
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: "start", label: "Start" },
   { id: "people", label: "People" },
   { id: "income", label: "Income" },
   { id: "assets", label: "Assets" },
+  { id: "property", label: "Property" },
   { id: "mortgage", label: "Mortgage" },
   { id: "expenses", label: "Expenses" },
   { id: "assumptions", label: "Assumptions" },
-  { id: "review", label: "Review" }
+  { id: "summary", label: "Summary" }
 ];
 
 // --- Tooltip component ---
@@ -186,7 +188,7 @@ export function ConfigWizard() {
 
   async function next_step() {
     const idx = step_index(step);
-    const next = STEPS[Math.min(STEPS.length - 1, idx + 1)]?.id ?? "review";
+    const next = STEPS[Math.min(STEPS.length - 1, idx + 1)]?.id ?? "summary";
     setStep(next);
   }
 
@@ -533,7 +535,7 @@ export function ConfigWizard() {
                 <Label tooltip="Link this income to a specific person's retirement timeline (for salary only)">Person</Label>
                 <Label tooltip="Salary: taxed with NI, ends at retirement. Rental: income tax only. Gift: tax-free.">Type</Label>
                 <Label tooltip="Annual amount before any tax deductions.">Gross Annual (£)</Label>
-                <Label tooltip="How much this income increases each year (e.g. 0.02 = 2%).">Growth Rate</Label>
+                <Label tooltip="How much this income increases each year (e.g. 2 = 2%).">Growth Rate (%)</Label>
                 <Label tooltip="Salary only: Percentage you contribute to pension. Deducted before tax.">Employee Pension %</Label>
                 <Label tooltip="Salary only: Percentage your employer adds to your pension.">Employer Pension %</Label>
               </div>
@@ -584,52 +586,61 @@ export function ConfigWizard() {
                       }
                       placeholder="60000"
                     />
-                    <input
-                      className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      type="number"
-                      step="0.01"
-                      value={inc.annual_growth_rate}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, annual_growth_rate: Number(e.target.value) } : x))
-                        }))
-                      }
-                      placeholder="0.02"
-                    />
-                    <input
-                      className={`rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm ${isSalary ? "" : "opacity-40"}`}
-                      type="number"
-                      step="0.01"
-                      value={inc.employee_pension_pct}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employee_pension_pct: Number(e.target.value) } : x))
-                        }))
-                      }
-                      placeholder="0.05"
-                      disabled={!isSalary}
-                    />
-                    <input
-                      className={`rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm ${isSalary ? "" : "opacity-40"}`}
-                      type="number"
-                      step="0.01"
-                      value={inc.employer_pension_pct}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employer_pension_pct: Number(e.target.value) } : x))
-                        }))
-                      }
-                      placeholder="0.05"
-                      disabled={!isSalary}
-                    />
+                    <div className="relative">
+                      <input
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                        type="number"
+                        step="0.1"
+                        value={Math.round(inc.annual_growth_rate * 10000) / 100}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            incomes: d.incomes.map((x, i) => (i === idx ? { ...x, annual_growth_rate: Number(e.target.value) / 100 } : x))
+                          }))
+                        }
+                        placeholder="2"
+                      />
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        className={`w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm ${isSalary ? "" : "opacity-40"}`}
+                        type="number"
+                        step="0.1"
+                        value={Math.round(inc.employee_pension_pct * 10000) / 100}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employee_pension_pct: Number(e.target.value) / 100 } : x))
+                          }))
+                        }
+                        placeholder="5"
+                        disabled={!isSalary}
+                      />
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        className={`w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm ${isSalary ? "" : "opacity-40"}`}
+                        type="number"
+                        step="0.1"
+                        value={Math.round(inc.employer_pension_pct * 10000) / 100}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            incomes: d.incomes.map((x, i) => (i === idx ? { ...x, employer_pension_pct: Number(e.target.value) / 100 } : x))
+                          }))
+                        }
+                        placeholder="5"
+                        disabled={!isSalary}
+                      />
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                    </div>
                   </div>
                 );
               })}
               <Hint>
-                Salary income stops when the assigned person retires. Rental and gift income can continue — use the full config editor to set start/end years. Use decimal format for percentages (0.05 = 5%).
+                Salary income stops when the assigned person retires. Rental and gift income can continue — use the full config editor to set start/end years.
               </Hint>
               <button
                 type="button"
@@ -660,7 +671,7 @@ export function ConfigWizard() {
             <div className="space-y-3">
               <div className="text-sm font-semibold">Assets</div>
               <StepIntro>
-                Define your investment accounts. The simulation automatically manages cash flow: excess cash is invested (ISA first, then GIA), and assets are withdrawn when needed to cover expenses. Lower withdrawal priority = withdrawn first.
+                Define your investment accounts. The simulation automatically manages cash flow: excess cash is invested (ISA first, then GIA), and assets are withdrawn when needed to cover expenses. Higher withdrawal priority = withdrawn first.
               </StepIntro>
               
               <div className="hidden md:grid md:grid-cols-9 md:gap-3 text-xs text-slate-400">
@@ -813,6 +824,241 @@ export function ConfigWizard() {
             </div>
           )}
 
+          {step === "property" && (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Property</div>
+              <StepIntro>
+                Add any properties (e.g. main home, BTL). Properties are sold in order of withdrawal priority when funds run low — after liquidating financial assets first. Higher priority number = sold first.
+              </StepIntro>
+
+              {draft.properties.map((prop, idx) => (
+                <div key={idx} className="rounded border border-slate-700/60 bg-slate-800/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-200">{prop.name}</span>
+                    {draft.properties.length > 0 && (
+                      <button
+                        type="button"
+                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                        onClick={() =>
+                          setDraft((d) => ({ ...d, properties: d.properties.filter((_, i) => i !== idx) }))
+                        }
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <Label tooltip="A friendly name for this property">Name</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        value={prop.name}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x))
+                          }))
+                        }
+                        placeholder="e.g. Home, BTL"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Link to a person for ownership">Person</Label>
+                      <select
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        value={prop.person_id ?? ""}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, person_id: e.target.value || null } : x))
+                          }))
+                        }
+                      >
+                        <option value="">Household</option>
+                        {draft.people.filter((p) => !p.is_child).map((p) => (
+                          <option key={p.id ?? p.label} value={p.id ?? ""}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label tooltip="Current market value">Current Value (£)</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={prop.value}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, value: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="300000"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Expected average annual appreciation (0.03 = 3%)">Appreciation Mean</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        value={prop.appreciation_rate_mean}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, appreciation_rate_mean: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="0.03"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Volatility of property value">Appreciation Std</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        value={prop.appreciation_rate_std}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, appreciation_rate_std: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="0.05"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="0 for owner-occupied">Monthly Rental Income (£)</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={prop.monthly_rental_income}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, monthly_rental_income: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="How much rental income grows each year">Rental Growth Rate</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        value={prop.rental_growth_rate}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, rental_growth_rate: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="0.02"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="0–1, e.g. 0.95 for 95% occupancy">Occupancy Rate</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={1}
+                        value={prop.occupancy_rate}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, occupancy_rate: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="1.0"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Annual maintenance cost">Annual Maintenance (£)</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={prop.annual_maintenance_cost}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, annual_maintenance_cost: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="1500"
+                      />
+                    </div>
+                    <div>
+                      <Label tooltip="Higher = sold first when liquidating">Withdrawal Priority</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        value={prop.withdrawal_priority}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, withdrawal_priority: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="5"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={prop.maintenance_is_inflation_linked}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              properties: d.properties.map((x, i) => (i === idx ? { ...x, maintenance_is_inflation_linked: e.target.checked } : x))
+                            }))
+                          }
+                        />
+                        Maintenance inflation linked
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Hint>
+                Owner-occupied: set rental income to 0 and occupancy to 1. BTL: set rental income and occupancy as appropriate. Properties are liquidated after financial assets when funds run low.
+              </Hint>
+              <button
+                type="button"
+                className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                onClick={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    properties: [
+                      ...d.properties,
+                      {
+                        name: "Home",
+                        value: 300000,
+                        appreciation_rate_mean: 0.03,
+                        appreciation_rate_std: 0.05,
+                        monthly_rental_income: 0,
+                        rental_growth_rate: 0.02,
+                        occupancy_rate: 1.0,
+                        annual_maintenance_cost: 1500,
+                        maintenance_is_inflation_linked: true,
+                        withdrawal_priority: 5,
+                        person_id: null
+                      }
+                    ]
+                  }))
+                }
+              >
+                Add property
+              </button>
+            </div>
+          )}
+
           {step === "mortgage" && (
             <div className="space-y-3">
               <div className="text-sm font-semibold">Mortgage</div>
@@ -823,7 +1069,7 @@ export function ConfigWizard() {
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={draft.mortgage !== null}
+                  checked={draft.mortgage != null}
                   onChange={(e) =>
                     setDraft((d) => ({
                       ...d,
@@ -833,7 +1079,7 @@ export function ConfigWizard() {
                 />
                 I have a mortgage to include
               </label>
-              {draft.mortgage !== null && (
+              {draft.mortgage != null && (
                 <>
                   <div className="grid gap-3 md:grid-cols-3">
                     <div>
@@ -845,25 +1091,28 @@ export function ConfigWizard() {
                         onChange={(e) =>
                           setDraft((d) => ({
                             ...d,
-                            mortgage: d.mortgage ? { ...d.mortgage, balance: Number(e.target.value) } : null
+                            mortgage: d.mortgage != null ? { ...d.mortgage, balance: Number(e.target.value) } : null
                           }))
                         }
                       />
                     </div>
                     <div>
-                      <Label tooltip="Your current mortgage interest rate as a decimal (0.04 = 4%)">Annual Interest Rate</Label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        step="0.01"
-                        value={draft.mortgage.annual_interest_rate}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            mortgage: d.mortgage ? { ...d.mortgage, annual_interest_rate: Number(e.target.value) } : null
-                          }))
-                        }
-                      />
+                      <Label tooltip="Your current mortgage interest rate (e.g. 4 = 4%)">Annual Interest Rate (%)</Label>
+                      <div className="relative mt-1">
+                        <input
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                          type="number"
+                          step="0.1"
+                          value={Math.round(draft.mortgage.annual_interest_rate * 10000) / 100}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              mortgage: d.mortgage != null ? { ...d.mortgage, annual_interest_rate: Number(e.target.value) / 100 } : null
+                            }))
+                          }
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                      </div>
                     </div>
                     <div>
                       <Label tooltip="Your current monthly mortgage payment. Stays fixed until paid off.">Monthly Payment (£)</Label>
@@ -874,7 +1123,7 @@ export function ConfigWizard() {
                         onChange={(e) =>
                           setDraft((d) => ({
                             ...d,
-                            mortgage: d.mortgage ? { ...d.mortgage, monthly_payment: Number(e.target.value) } : null
+                            mortgage: d.mortgage != null ? { ...d.mortgage, monthly_payment: Number(e.target.value) } : null
                           }))
                         }
                       />
@@ -1077,61 +1326,164 @@ export function ConfigWizard() {
             </div>
           )}
 
-          {step === "review" && (
-            <div className="space-y-3">
-              <div className="text-sm font-semibold">Review</div>
-              <StepIntro>
-                Here's your complete scenario configuration. After finishing, you can run simulations to see projected outcomes, or return to edit any section.
-              </StepIntro>
-              
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">People</div>
-                  <div className="mt-1 text-sm">{draft.people.length} person(s)</div>
+          {step === "summary" && (() => {
+            const adults = draft.people.filter((p) => !p.is_child);
+            const statePensionAnnual = (draft.assumptions as any).state_pension_annual ?? 0;
+
+            const sellOrder = [
+              ...draft.assets
+                .filter((a) => ((a as any).asset_type ?? "GIA") !== "CASH")
+                .map((a) => ({
+                  name: a.name,
+                  type: (a as any).asset_type ?? "GIA",
+                  balance: a.balance,
+                  priority: ((a as any).withdrawal_priority ?? 100) as number,
+                })),
+              ...draft.properties.map((p) => ({
+                name: p.name,
+                type: "PROPERTY",
+                balance: p.value,
+                priority: p.withdrawal_priority,
+              })),
+            ].sort((a, b) => b.priority - a.priority);
+
+            const totalIncome =
+              draft.incomes.reduce((s, i) => s + i.gross_annual, 0) +
+              adults.length * statePensionAnnual;
+
+            const totalExpensesAnnual = draft.expenses.reduce((s, e) => s + e.monthly_amount * 12, 0);
+            const mortgageAnnual = draft.mortgage ? draft.mortgage.monthly_payment * 12 : 0;
+            const grandTotalOutgoings = totalExpensesAnnual + mortgageAnnual;
+
+            const personLabel = (id: string | null) =>
+              id ? adults.find((p) => p.id === id)?.label ?? "Household" : "Household";
+
+            return (
+              <div className="space-y-6">
+                <div className="text-sm font-semibold">Summary</div>
+                <StepIntro>
+                  Here's your complete scenario configuration. After finishing, you can run simulations to see projected outcomes, or return to edit any section.
+                </StepIntro>
+
+                <div className="space-y-4">
+                  <section className="rounded border border-slate-700/50 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-medium text-slate-300">Asset sell order</h3>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Higher priority = withdrawn/sold first. CASH accounts are excluded (used as float).
+                    </p>
+                    {sellOrder.length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500">No assets in sell order</p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        <div className="grid grid-cols-[1fr_5rem_6rem_5rem] gap-2 px-3 text-xs text-slate-500">
+                          <span>Name</span>
+                          <span>Type</span>
+                          <span className="text-right">Value</span>
+                          <span className="text-right">Priority</span>
+                        </div>
+                        {sellOrder.map((item, i) => (
+                          <div key={`${item.name}-${i}`} className="grid grid-cols-[1fr_5rem_6rem_5rem] gap-2 items-center rounded bg-slate-900/50 px-3 py-2 text-sm">
+                            <span className="font-medium text-slate-200 truncate">{item.name}</span>
+                            <span className="rounded bg-slate-700 px-2 py-0.5 text-xs font-medium text-slate-400 text-center">
+                              {item.type}
+                            </span>
+                            <span className="text-slate-300 text-right">£{item.balance.toLocaleString()}</span>
+                            <span className="text-xs text-slate-500 text-right">{item.priority}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="rounded border border-slate-700/50 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-medium text-slate-300">Income summary</h3>
+                    <p className="mt-1 text-sm font-semibold text-emerald-400">
+                      Total gross annual: £{totalIncome.toLocaleString()}
+                    </p>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700 text-left text-xs text-slate-400">
+                            <th className="pb-2 pr-4">Person</th>
+                            <th className="pb-2 pr-4">Type</th>
+                            <th className="pb-2">Annual (£)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {draft.incomes.map((inc, idx) => (
+                            <tr key={idx} className="border-b border-slate-800">
+                              <td className="py-2 pr-4 text-slate-300">{personLabel(inc.person_id ?? null)}</td>
+                              <td className="py-2 pr-4 text-slate-300 capitalize">{inc.kind}</td>
+                              <td className="py-2 text-slate-200">£{inc.gross_annual.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          {adults.map((p) => (
+                            <tr key={`sp-${p.id ?? p.label}`} className="border-b border-slate-800">
+                              <td className="py-2 pr-4 text-slate-300">{p.label}</td>
+                              <td className="py-2 pr-4 text-slate-300">State pension</td>
+                              <td className="py-2 text-slate-200">£{statePensionAnnual.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="rounded border border-slate-700/50 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-medium text-slate-300">Expenditure summary</h3>
+                    <p className="mt-1 text-sm font-semibold text-rose-400">
+                      Grand total annual: £{grandTotalOutgoings.toLocaleString()}
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {draft.expenses.map((ex, idx) => (
+                        <li key={idx} className="flex items-center justify-between gap-4 rounded bg-slate-900/50 px-3 py-2 text-sm">
+                          <span className="text-slate-200">{ex.name}</span>
+                          <span className="text-slate-300">
+                            £{ex.monthly_amount.toLocaleString()}/mo → £{(ex.monthly_amount * 12).toLocaleString()}/yr
+                          </span>
+                          {ex.is_inflation_linked && (
+                            <span className="rounded px-2 py-0.5 text-xs text-amber-600 bg-amber-950/50">Inflation linked</span>
+                          )}
+                        </li>
+                      ))}
+                      {draft.mortgage && draft.mortgage.monthly_payment > 0 && (
+                        <li className="flex items-center justify-between gap-4 rounded bg-slate-900/50 px-3 py-2 text-sm">
+                          <span className="text-slate-200">Mortgage</span>
+                          <span className="text-slate-300">
+                            £{draft.mortgage.monthly_payment.toLocaleString()}/mo → £{mortgageAnnual.toLocaleString()}/yr
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Expenses: £{totalExpensesAnnual.toLocaleString()}/yr
+                      {draft.mortgage ? ` + Mortgage: £${mortgageAnnual.toLocaleString()}/yr` : ""}
+                    </p>
+                  </section>
                 </div>
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">Income Sources</div>
-                  <div className="mt-1 text-sm">{draft.incomes.length} income(s)</div>
-                </div>
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">Assets</div>
-                  <div className="mt-1 text-sm">{draft.assets.length} account(s)</div>
-                </div>
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">Mortgage</div>
-                  <div className="mt-1 text-sm">{draft.mortgage ? `£${draft.mortgage.balance.toLocaleString()}` : "None"}</div>
-                </div>
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">Expenses</div>
-                  <div className="mt-1 text-sm">{draft.expenses.length} expense(s)</div>
-                </div>
-                <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <div className="text-xs font-medium text-slate-400">Simulation Period</div>
-                  <div className="mt-1 text-sm">{(draft.assumptions as any).start_year} – {(draft.assumptions as any).end_year}</div>
+
+                <details className="rounded border border-slate-700/50 bg-slate-800/20">
+                  <summary className="cursor-pointer px-3 py-2 text-sm text-slate-300 hover:text-white">
+                    View raw JSON configuration
+                  </summary>
+                  <pre className="max-h-[400px] overflow-auto p-3 text-xs text-slate-200">
+                    {JSON.stringify(draft, null, 2)}
+                  </pre>
+                </details>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
+                    disabled={!scenario_id}
+                    onClick={() => navigate(`/config?selected=${encodeURIComponent(scenario_id ?? "")}`)}
+                  >
+                    Finish and view scenario
+                  </button>
                 </div>
               </div>
-              
-              <details className="rounded border border-slate-700/50 bg-slate-800/20">
-                <summary className="cursor-pointer px-3 py-2 text-sm text-slate-300 hover:text-white">
-                  View raw JSON configuration
-                </summary>
-                <pre className="max-h-[400px] overflow-auto p-3 text-xs text-slate-200">
-                  {JSON.stringify(draft, null, 2)}
-                </pre>
-              </details>
-              
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
-                  disabled={!scenario_id}
-                  onClick={() => navigate(`/config?selected=${encodeURIComponent(scenario_id ?? "")}`)}
-                >
-                  Finish and view scenario
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="flex items-center justify-between border-t border-slate-800 pt-4">
             <button
@@ -1143,7 +1495,7 @@ export function ConfigWizard() {
               Back
             </button>
             <div className="flex gap-3">
-              {step !== "review" && (
+              {step !== "summary" && (
                 <button
                   type="button"
                   className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50"

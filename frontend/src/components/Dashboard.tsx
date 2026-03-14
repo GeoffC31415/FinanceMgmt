@@ -725,6 +725,7 @@ export function Dashboard() {
                   isa_balance_median={display_result.isa_balance_median}
                   pension_balance_median={display_result.pension_balance_median}
                   cash_balance_median={display_result.cash_balance_median}
+                  property_value_median={display_result.property_value_median}
                   total_assets_median={display_result.total_assets_median}
                   percentile={percentile}
                   bankruptcy_year={bankruptcy_info?.first_year_at_percentile}
@@ -756,6 +757,7 @@ export function Dashboard() {
                   pension_contributions_median={display_result.pension_contributions_median}
                   total_tax_median={display_result.total_tax_median}
                   fun_fund_median={display_result.fun_fund_median}
+                  property_maintenance_median={display_result.property_maintenance_median}
                   retirement_years={display_result.retirement_years}
                   children_leaving={children_leaving}
                   mortgage_payoff_year={mortgage_payoff_year}
@@ -772,6 +774,7 @@ export function Dashboard() {
                   isa_balance_median={display_result.isa_balance_median}
                   pension_balance_median={display_result.pension_balance_median}
                   cash_balance_median={display_result.cash_balance_median}
+                  property_value_median={display_result.property_value_median}
                   total_assets_median={display_result.total_assets_median}
                   retirement_years={display_result.retirement_years}
                   percentile={percentile}
@@ -784,6 +787,7 @@ export function Dashboard() {
                   gia_balance_median={display_result.gia_balance_median}
                   cash_balance_median={display_result.cash_balance_median}
                   pension_balance_median={display_result.pension_balance_median}
+                  property_value_median={display_result.property_value_median}
                   debt_balance_median={display_result.debt_balance_median}
                   pension_contributions_median={display_result.pension_contributions_median}
                   debt_interest_paid_median={display_result.debt_interest_paid_median}
@@ -791,11 +795,14 @@ export function Dashboard() {
                   gia_returns_median={display_result.gia_returns_median}
                   cash_returns_median={display_result.cash_returns_median}
                   pension_returns_median={display_result.pension_returns_median}
+                  property_returns_median={display_result.property_returns_median}
                   isa_contributions_median={display_result.isa_contributions_median}
                   gia_contributions_median={display_result.gia_contributions_median}
                   isa_withdrawals_median={display_result.isa_withdrawals_median}
                   gia_withdrawals_median={display_result.gia_withdrawals_median}
                   pension_withdrawals_median={display_result.pension_withdrawals_median}
+                  property_rental_income_median={display_result.property_rental_income_median}
+                  property_maintenance_median={display_result.property_maintenance_median}
                 />
               </>
             )}
