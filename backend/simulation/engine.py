@@ -7,7 +7,6 @@ import numpy as np
 from backend.simulation.entities import (
     ExpenseItem,
     GiftIncome,
-    MortgageAccount,
     PensionPot,
     PersonEntity,
     PropertyEntity,
@@ -52,7 +51,6 @@ class SimulationScenario:
     pension_by_person: dict[str, PensionPot]
 
     assets: list[AssetAccount]
-    mortgage: MortgageAccount | None
     expenses: list[ExpenseItem]
     properties: list[PropertyEntity] = None  # type: ignore[assignment]
 

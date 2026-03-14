@@ -24,13 +24,13 @@ from backend.simulation.engine_fast import run_simulation
 from backend.simulation.entities import (
     ExpenseItem,
     GiftIncome,
-    MortgageAccount,
     PensionPot,
     PersonEntity,
     RentalIncome,
     SalaryIncome,
 )
 from backend.simulation.entities.asset import AssetAccount
+from backend.simulation.entities.property import PropertyEntity
 from backend.simulation.returns_cache import generate_returns_matrix
 
 
@@ -101,18 +101,31 @@ def create_benchmark_scenario(
         for i in range(n_expenses)
     ]
 
-    mortgage = MortgageAccount(
-        balance=250_000.0,
-        annual_interest_rate=0.04,
-        monthly_payment=1_400.0,
-    )
-
     rental_incomes = [
         RentalIncome(gross_annual=12_000.0, annual_growth_rate=0.02)
     ]
 
     gift_incomes = [
         GiftIncome(gross_annual=5_000.0, annual_growth_rate=0.0, start_year=2025, end_year=2030)
+    ]
+
+    properties = [
+        PropertyEntity(
+            name="Benchmark Property",
+            person_key="person1",
+            withdrawal_priority=15,
+            value=300_000.0,
+            appreciation_rate_mean=0.03,
+            appreciation_rate_std=0.08,
+            monthly_rental_income=1_500.0,
+            rental_growth_rate=0.02,
+            occupancy_rate=0.95,
+            annual_maintenance_cost=2_000.0,
+            mortgage_ltv=0.75,
+            mortgage_rate=0.04,
+            mortgage_term_years=25,
+            cost_basis=300_000.0,
+        )
     ]
 
     return SimulationScenario(
@@ -122,7 +135,7 @@ def create_benchmark_scenario(
         salary_by_person=salary_by_person,
         pension_by_person=pension_by_person,
         assets=assets,
-        mortgage=mortgage,
+        properties=properties,
         expenses=expenses,
         rental_incomes=rental_incomes,
         gift_incomes=gift_incomes,

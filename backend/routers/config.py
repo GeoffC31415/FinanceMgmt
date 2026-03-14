@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db_session
-from backend.models import Asset, Expense, Income, Mortgage, Person, Property, Scenario
+from backend.models import Asset, Expense, Income, Person, Property, Scenario
 from backend.schemas.scenario import ScenarioCreate, ScenarioRead
 
 router = APIRouter()
@@ -47,7 +47,6 @@ def _scenario_query():
         .options(selectinload(Scenario.incomes))
         .options(selectinload(Scenario.assets))
         .options(selectinload(Scenario.properties))
-        .options(selectinload(Scenario.mortgage))
         .options(selectinload(Scenario.expenses))
     )
 
@@ -139,6 +138,9 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
                 monthly_rental_income=property_.monthly_rental_income,
                 rental_growth_rate=property_.rental_growth_rate,
                 occupancy_rate=property_.occupancy_rate,
+                mortgage_ltv=property_.mortgage_ltv,
+                mortgage_rate=property_.mortgage_rate,
+                mortgage_term_years=property_.mortgage_term_years,
                 annual_maintenance_cost=property_.annual_maintenance_cost,
                 maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
                 withdrawal_priority=property_.withdrawal_priority,
@@ -146,16 +148,6 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
             for property_ in payload.properties
         ]
     )
-
-    if payload.mortgage is not None:
-        session.add(
-            Mortgage(
-                scenario_id=scenario.id,
-                balance=payload.mortgage.balance,
-                annual_interest_rate=payload.mortgage.annual_interest_rate,
-                monthly_payment=payload.mortgage.monthly_payment,
-            )
-        )
 
     session.add_all(
         [
@@ -282,6 +274,9 @@ async def update_scenario(
                 monthly_rental_income=property_.monthly_rental_income,
                 rental_growth_rate=property_.rental_growth_rate,
                 occupancy_rate=property_.occupancy_rate,
+                mortgage_ltv=property_.mortgage_ltv,
+                mortgage_rate=property_.mortgage_rate,
+                mortgage_term_years=property_.mortgage_term_years,
                 annual_maintenance_cost=property_.annual_maintenance_cost,
                 maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
                 withdrawal_priority=property_.withdrawal_priority,
@@ -289,22 +284,6 @@ async def update_scenario(
             for property_ in payload.properties
         ]
     )
-
-    if payload.mortgage is None:
-        if scenario.mortgage is not None:
-            scenario.mortgage = None
-    else:
-        if scenario.mortgage is None:
-            scenario.mortgage = Mortgage(
-                scenario_id=scenario.id,
-                balance=payload.mortgage.balance,
-                annual_interest_rate=payload.mortgage.annual_interest_rate,
-                monthly_payment=payload.mortgage.monthly_payment,
-            )
-        else:
-            scenario.mortgage.balance = payload.mortgage.balance
-            scenario.mortgage.annual_interest_rate = payload.mortgage.annual_interest_rate
-            scenario.mortgage.monthly_payment = payload.mortgage.monthly_payment
 
     scenario.expenses.extend(
         [

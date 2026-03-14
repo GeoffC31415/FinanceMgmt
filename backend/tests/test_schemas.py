@@ -7,11 +7,11 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from backend.schemas.person import PersonCreate
 from backend.schemas.assets import AssetCreate, AssetType
-from backend.schemas.income import IncomeCreate
-from backend.schemas.mortgage import MortgageCreate
 from backend.schemas.expenses import ExpenseCreate
+from backend.schemas.income import IncomeCreate
+from backend.schemas.person import PersonCreate
+from backend.schemas.property import PropertyCreate
 from backend.schemas.scenario import ScenarioCreate
 from backend.schemas.simulation import SimulationRequest, SimulationRecalcRequest
 
@@ -121,27 +121,41 @@ class TestIncomeSchema:
             IncomeCreate(kind="salary", gross_annual=1.0, employer_pension_pct=-0.1)
 
 
-# ────────────────────────────── MortgageCreate ──────────────────────────────
+# ────────────────────────────── PropertyCreate ──────────────────────────────
 
 
-class TestMortgageSchema:
-    def test_valid_mortgage(self):
-        m = MortgageCreate(balance=200_000.0, annual_interest_rate=0.04, monthly_payment=1_200.0)
-        assert m.balance == 200_000.0
+class TestPropertySchema:
+    def test_valid_property_mortgage_fields(self):
+        p = PropertyCreate(
+            name="Flat",
+            value=200_000.0,
+            mortgage_ltv=0.75,
+            mortgage_rate=0.04,
+            mortgage_term_years=25,
+        )
+        assert p.mortgage_ltv == 0.75
+        assert p.mortgage_rate == 0.04
+        assert p.mortgage_term_years == 25
 
-    def test_negative_balance_rejected(self):
+    def test_negative_property_value_rejected(self):
         with pytest.raises(ValidationError):
-            MortgageCreate(balance=-1.0)
+            PropertyCreate(name="Flat", value=-1.0)
 
-    def test_interest_rate_bounds(self):
+    def test_mortgage_ltv_bounds(self):
         with pytest.raises(ValidationError):
-            MortgageCreate(balance=1.0, annual_interest_rate=-0.01)
+            PropertyCreate(name="Flat", mortgage_ltv=-0.01)
         with pytest.raises(ValidationError):
-            MortgageCreate(balance=1.0, annual_interest_rate=1.5)
+            PropertyCreate(name="Flat", mortgage_ltv=1.5)
 
-    def test_negative_payment_rejected(self):
+    def test_mortgage_rate_bounds(self):
         with pytest.raises(ValidationError):
-            MortgageCreate(balance=1.0, monthly_payment=-100.0)
+            PropertyCreate(name="Flat", mortgage_rate=-0.01)
+        with pytest.raises(ValidationError):
+            PropertyCreate(name="Flat", mortgage_rate=1.5)
+
+    def test_negative_term_rejected(self):
+        with pytest.raises(ValidationError):
+            PropertyCreate(name="Flat", mortgage_term_years=-1)
 
 
 # ────────────────────────────── ExpenseCreate ──────────────────────────────
@@ -170,7 +184,7 @@ class TestScenarioSchema:
         s = ScenarioCreate(name="Test")
         assert s.name == "Test"
         assert s.people == []
-        assert s.mortgage is None
+        assert s.properties == []
 
     def test_empty_name_rejected(self):
         with pytest.raises(ValidationError):
@@ -193,7 +207,15 @@ class TestScenarioSchema:
             assets=[
                 AssetCreate(name="ISA", balance=10_000.0),
             ],
-            mortgage=MortgageCreate(balance=200_000.0, annual_interest_rate=0.04, monthly_payment=1_200.0),
+            properties=[
+                PropertyCreate(
+                    name="Flat",
+                    value=250_000.0,
+                    mortgage_ltv=0.8,
+                    mortgage_rate=0.04,
+                    mortgage_term_years=25,
+                ),
+            ],
             expenses=[
                 ExpenseCreate(name="Living", monthly_amount=2_000.0),
             ],
@@ -201,7 +223,7 @@ class TestScenarioSchema:
         assert len(s.people) == 1
         assert len(s.incomes) == 1
         assert len(s.assets) == 1
-        assert s.mortgage is not None
+        assert len(s.properties) == 1
         assert len(s.expenses) == 1
 
 

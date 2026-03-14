@@ -78,6 +78,9 @@ class ArrayScenario:
     property_monthly_rental_income: np.ndarray
     property_rental_growth_rate: np.ndarray
     property_occupancy_rate: np.ndarray
+    property_mortgage_balance: np.ndarray
+    property_mortgage_rate: np.ndarray
+    property_mortgage_monthly_payment: np.ndarray
     property_annual_maintenance_cost: np.ndarray
     property_maintenance_is_inflation_linked: np.ndarray
     property_names: list[str]
@@ -85,11 +88,6 @@ class ArrayScenario:
     pension_person_idx: np.ndarray
     pension_balances: np.ndarray
     pension_keys: list[str]
-
-    has_mortgage: bool
-    mortgage_balance: float
-    mortgage_annual_interest_rate: float
-    mortgage_monthly_payment: float
 
     expense_annual_amount: np.ndarray
     expense_is_inflation_linked: np.ndarray
@@ -237,6 +235,27 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
     property_occupancy_rate = np.array(
         [float(getattr(p, "occupancy_rate", 0.0)) for p in properties], dtype=np.float64
     )
+    property_mortgage_balance = np.array(
+        [
+            float(getattr(p, "value", 0.0)) * float(getattr(p, "mortgage_ltv", 0.0))
+            for p in properties
+        ],
+        dtype=np.float64,
+    )
+    property_mortgage_rate = np.array(
+        [float(getattr(p, "mortgage_rate", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_mortgage_monthly_payment = np.array(
+        [
+            _property_monthly_payment(
+                balance=float(getattr(p, "value", 0.0)) * float(getattr(p, "mortgage_ltv", 0.0)),
+                annual_rate=float(getattr(p, "mortgage_rate", 0.0)),
+                term_years=int(getattr(p, "mortgage_term_years", 0) or 0),
+            )
+            for p in properties
+        ],
+        dtype=np.float64,
+    )
     property_annual_maintenance_cost = np.array(
         [float(getattr(p, "annual_maintenance_cost", 0.0)) for p in properties], dtype=np.float64
     )
@@ -254,11 +273,6 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         [float(scenario.pension_by_person[key].balance) for key in pension_keys],
         dtype=np.float64,
     )
-
-    has_mortgage = scenario.mortgage is not None
-    mortgage_balance = float(scenario.mortgage.balance) if has_mortgage else 0.0
-    mortgage_annual_interest_rate = float(scenario.mortgage.annual_interest_rate) if has_mortgage else 0.0
-    mortgage_monthly_payment = float(scenario.mortgage.monthly_payment) if has_mortgage else 0.0
 
     expense_annual_amount = np.array([float(e.annual_amount) for e in scenario.expenses], dtype=np.float64)
     expense_is_inflation_linked = np.array(
@@ -327,16 +341,15 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         property_monthly_rental_income=property_monthly_rental_income,
         property_rental_growth_rate=property_rental_growth_rate,
         property_occupancy_rate=property_occupancy_rate,
+        property_mortgage_balance=property_mortgage_balance,
+        property_mortgage_rate=property_mortgage_rate,
+        property_mortgage_monthly_payment=property_mortgage_monthly_payment,
         property_annual_maintenance_cost=property_annual_maintenance_cost,
         property_maintenance_is_inflation_linked=property_maintenance_is_inflation_linked,
         property_names=property_names,
         pension_person_idx=pension_person_idx,
         pension_balances=pension_balances,
         pension_keys=pension_keys,
-        has_mortgage=has_mortgage,
-        mortgage_balance=mortgage_balance,
-        mortgage_annual_interest_rate=mortgage_annual_interest_rate,
-        mortgage_monthly_payment=mortgage_monthly_payment,
         expense_annual_amount=expense_annual_amount,
         expense_is_inflation_linked=expense_is_inflation_linked,
         annual_spend_target=float(scenario.annual_spend_target),
@@ -375,3 +388,19 @@ def _scenario_assets_for_arrays(*, scenario: SimulationScenario) -> list[object]
             )()
         ]
     return assets
+
+
+def _property_monthly_payment(*, balance: float, annual_rate: float, term_years: int) -> float:
+    if balance <= 0.0 or annual_rate < 0.0:
+        return 0.0
+
+    monthly_rate = annual_rate / 12.0
+    if term_years <= 0:
+        return balance * monthly_rate
+
+    n_periods = term_years * 12
+    if monthly_rate == 0.0:
+        return balance / float(n_periods) if n_periods > 0 else 0.0
+
+    growth = (1.0 + monthly_rate) ** n_periods
+    return balance * monthly_rate * growth / (growth - 1.0)

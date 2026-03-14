@@ -22,6 +22,5 @@ class Scenario(Base, TimestampMixin):
     incomes = relationship("Income", back_populates="scenario", cascade="all, delete-orphan")
     assets = relationship("Asset", back_populates="scenario", cascade="all, delete-orphan")
     properties = relationship("Property", back_populates="scenario", cascade="all, delete-orphan")
-    mortgage = relationship("Mortgage", back_populates="scenario", uselist=False, cascade="all, delete-orphan")
     expenses = relationship("Expense", back_populates="scenario", cascade="all, delete-orphan")
 

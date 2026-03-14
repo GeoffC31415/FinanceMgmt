@@ -16,13 +16,13 @@ from backend.simulation.engine_fast import (
 from backend.simulation.entities import (
     ExpenseItem,
     GiftIncome,
-    MortgageAccount,
     PensionPot,
     PersonEntity,
     RentalIncome,
     SalaryIncome,
 )
 from backend.simulation.entities.asset import AssetAccount
+from backend.simulation.entities.property import PropertyEntity
 from backend.simulation.returns_cache import generate_returns_matrix
 
 
@@ -108,10 +108,21 @@ def _make_test_scenario(
         cost_basis=10_000.0,
     )
 
-    mortgage = MortgageAccount(
-        balance=200_000.0,
-        annual_interest_rate=0.04,
-        monthly_payment=1_200.0,
+    property_ = PropertyEntity(
+        name="Flat",
+        person_key="person1",
+        withdrawal_priority=15,
+        value=250_000.0,
+        appreciation_rate_mean=0.03,
+        appreciation_rate_std=0.08,
+        monthly_rental_income=1_500.0,
+        rental_growth_rate=0.02,
+        occupancy_rate=0.95,
+        annual_maintenance_cost=1_500.0,
+        mortgage_ltv=0.8,
+        mortgage_rate=0.04,
+        mortgage_term_years=25,
+        cost_basis=250_000.0,
     )
 
     expenses = [
@@ -140,7 +151,7 @@ def _make_test_scenario(
         salary_by_person={"person1": [salary1], "person2": [salary2]},
         pension_by_person={"person1": pension1, "person2": pension2},
         assets=[isa, gia, cash],
-        mortgage=mortgage,
+        properties=[property_],
         expenses=expenses,
         rental_incomes=[rental],
         gift_incomes=[gift],
@@ -218,7 +229,7 @@ def _make_simple_scenario() -> SimulationScenario:
         salary_by_person={"person1": [salary]},
         pension_by_person={"person1": pension},
         assets=[cash, isa],
-        mortgage=None,
+        properties=[],
         expenses=expenses,
         rental_incomes=[],
         gift_incomes=[],
@@ -433,7 +444,7 @@ class TestFirstYearGrowth:
             salary_by_person={"person1": [salary]},
             pension_by_person={"person1": pension},
             assets=[cash],
-            mortgage=None,
+            properties=[],
             expenses=[],
             assumptions=SimulationAssumptions(
                 state_pension_annual=0.0,
@@ -451,6 +462,12 @@ class TestFirstYearGrowth:
             initial_asset_balances=returns.initial_asset_balances,
             initial_asset_cost_bases=returns.initial_asset_cost_bases,
             asset_returns=np.zeros_like(returns.asset_returns),
+            property_names=returns.property_names,
+            property_person_keys=returns.property_person_keys,
+            property_withdrawal_priority=returns.property_withdrawal_priority,
+            initial_property_values=returns.initial_property_values,
+            initial_property_cost_bases=returns.initial_property_cost_bases,
+            property_returns=np.zeros_like(returns.property_returns),
             pension_keys=returns.pension_keys,
             initial_pension_balances=returns.initial_pension_balances,
             pension_returns=np.zeros_like(returns.pension_returns),

@@ -46,15 +46,12 @@ export type PropertyCreate = {
   monthly_rental_income: number;
   rental_growth_rate: number;
   occupancy_rate: number;
+  mortgage_ltv: number;
+  mortgage_rate: number;
+  mortgage_term_years: number;
   annual_maintenance_cost: number;
   maintenance_is_inflation_linked: boolean;
   withdrawal_priority: number;
-};
-
-export type MortgageCreate = {
-  balance: number;
-  annual_interest_rate: number;
-  monthly_payment: number;
 };
 
 export type ExpenseCreate = {
@@ -90,7 +87,6 @@ export type ScenarioCreate = {
   incomes: IncomeCreate[];
   assets: AssetCreate[];
   properties: PropertyCreate[];
-  mortgage?: MortgageCreate | null;
   expenses: ExpenseCreate[];
 };
 

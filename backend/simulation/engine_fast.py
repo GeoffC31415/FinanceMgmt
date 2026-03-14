@@ -179,6 +179,9 @@ def _run_monte_carlo_fast(
         property_monthly_rental_income=sc.property_monthly_rental_income.copy(),
         property_rental_growth_rate=sc.property_rental_growth_rate,
         property_occupancy_rate=sc.property_occupancy_rate,
+        property_mortgage_balance=sc.property_mortgage_balance.copy(),
+        property_mortgage_rate=sc.property_mortgage_rate,
+        property_mortgage_monthly_payment=sc.property_mortgage_monthly_payment,
         property_annual_maintenance_cost=sc.property_annual_maintenance_cost.copy(),
         property_maintenance_is_inflation_linked=sc.property_maintenance_is_inflation_linked,
         property_returns=returns.property_returns,
@@ -188,11 +191,6 @@ def _run_monte_carlo_fast(
         pension_balances=sc.pension_balances.copy(),
         pension_returns=returns.pension_returns,
         n_pensions=n_pensions,
-        # Mortgage
-        has_mortgage=sc.has_mortgage,
-        mortgage_balance=sc.mortgage_balance,
-        mortgage_annual_interest_rate=sc.mortgage_annual_interest_rate,
-        mortgage_monthly_payment=sc.mortgage_monthly_payment,
         # Expenses
         expense_annual_amount=sc.expense_annual_amount.copy(),
         expense_is_inflation_linked=sc.expense_is_inflation_linked,
@@ -444,6 +442,9 @@ def _simulate_all_iterations(
     property_monthly_rental_income: np.ndarray,
     property_rental_growth_rate: np.ndarray,
     property_occupancy_rate: np.ndarray,
+    property_mortgage_balance: np.ndarray,
+    property_mortgage_rate: np.ndarray,
+    property_mortgage_monthly_payment: np.ndarray,
     property_annual_maintenance_cost: np.ndarray,
     property_maintenance_is_inflation_linked: np.ndarray,
     property_returns: np.ndarray,
@@ -453,11 +454,6 @@ def _simulate_all_iterations(
     pension_balances: np.ndarray,
     pension_returns: np.ndarray,
     n_pensions: int,
-    # Mortgage
-    has_mortgage: bool,
-    mortgage_balance: float,
-    mortgage_annual_interest_rate: float,
-    mortgage_monthly_payment: float,
     # Expenses
     expense_annual_amount: np.ndarray,
     expense_is_inflation_linked: np.ndarray,
@@ -506,9 +502,9 @@ def _simulate_all_iterations(
         it_property_values = property_values.copy()
         it_property_cost_bases = property_cost_bases.copy()
         it_property_monthly_rents = property_monthly_rental_income.copy()
+        it_property_mortgage_balances = property_mortgage_balance.copy()
         it_property_maintenance_costs = property_annual_maintenance_cost.copy()
         it_pension_balances = pension_balances.copy()
-        it_mortgage_balance = mortgage_balance
         it_salary_gross = salary_gross_annual.copy()
         it_rental_gross = rental_gross_annual.copy()
         it_gift_gross = gift_gross_annual.copy()
@@ -542,8 +538,11 @@ def _simulate_all_iterations(
                         cash_balance += it_asset_balances[a_idx]
                 for prop_idx in range(n_properties):
                     property_value_total += it_property_values[prop_idx]
+                total_property_mortgage_balance = 0.0
+                for prop_idx in range(n_properties):
+                    total_property_mortgage_balance += it_property_mortgage_balances[prop_idx]
                 total_assets = total_asset_balance + property_value_total + pension_balance
-                total_liabilities = it_mortgage_balance + it_debt_balance
+                total_liabilities = total_property_mortgage_balance + it_debt_balance
                 net_worth = total_assets - total_liabilities
 
                 out[it, y_idx, F_NET_WORTH] = net_worth
@@ -551,7 +550,7 @@ def _simulate_all_iterations(
                 out[it, y_idx, F_PENSION_BALANCE] = pension_balance
                 out[it, y_idx, F_CASH_BALANCE] = cash_balance
                 out[it, y_idx, F_TOTAL_ASSETS] = total_assets
-                out[it, y_idx, F_MORTGAGE_BALANCE] = it_mortgage_balance
+                out[it, y_idx, F_MORTGAGE_BALANCE] = total_property_mortgage_balance
                 out[it, y_idx, F_TOTAL_LIABILITIES] = total_liabilities
                 out[it, y_idx, F_IS_DEPLETED] = 1.0
                 out[it, y_idx, F_IS_BANKRUPT] = 1.0
@@ -699,12 +698,16 @@ def _simulate_all_iterations(
 
             # Mortgage payment
             mortgage_payment = 0.0
-            if has_mortgage and it_mortgage_balance > 0:
-                it_mortgage_balance, mortgage_payment = _step_mortgage(
-                    it_mortgage_balance,
-                    mortgage_annual_interest_rate,
-                    mortgage_monthly_payment,
+            for prop_idx in range(n_properties):
+                if it_property_mortgage_balances[prop_idx] <= 0.0:
+                    continue
+                updated_balance, property_payment = _step_mortgage(
+                    it_property_mortgage_balances[prop_idx],
+                    property_mortgage_rate[prop_idx],
+                    property_mortgage_monthly_payment[prop_idx],
                 )
+                it_property_mortgage_balances[prop_idx] = updated_balance
+                mortgage_payment += property_payment
 
             # Expenses
             expense_total = 0.0
@@ -858,9 +861,17 @@ def _simulate_all_iterations(
                         cgt_allowance_remaining -= allowance_used
                         cgt_paid += tax
                         it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        mortgage_repayment = 0.0
+                        if balance > 0.0 and it_property_mortgage_balances[prop_idx] > 0.0 and gross > 0.0:
+                            mortgage_repayment = min(
+                                it_property_mortgage_balances[prop_idx],
+                                it_property_mortgage_balances[prop_idx] * (gross / balance),
+                            )
+                            it_property_mortgage_balances[prop_idx] -= mortgage_repayment
                         it_property_values[prop_idx] -= gross
-                        it_asset_balances[cash_idx] += net
-                        shortfall -= net
+                        net_after_mortgage = max(0.0, net - mortgage_repayment)
+                        it_asset_balances[cash_idx] += net_after_mortgage
+                        shortfall -= net_after_mortgage
 
                 # Track negative cash as debt (don't clamp to 0)
                 if it_asset_balances[cash_idx] < 0:
@@ -965,8 +976,16 @@ def _simulate_all_iterations(
                         cgt_allowance_remaining -= allowance_used
                         cgt_paid += tax
                         it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        mortgage_repayment = 0.0
+                        if balance > 0.0 and it_property_mortgage_balances[prop_idx] > 0.0 and gross > 0.0:
+                            mortgage_repayment = min(
+                                it_property_mortgage_balances[prop_idx],
+                                it_property_mortgage_balances[prop_idx] * (gross / balance),
+                            )
+                            it_property_mortgage_balances[prop_idx] -= mortgage_repayment
                         it_property_values[prop_idx] -= gross
-                        actual_repayment = min(net, it_debt_balance)
+                        net_after_mortgage = max(0.0, net - mortgage_repayment)
+                        actual_repayment = min(net_after_mortgage, it_debt_balance)
                         it_debt_balance -= actual_repayment
                         debt_to_repay -= actual_repayment
 
@@ -1071,9 +1090,12 @@ def _simulate_all_iterations(
 
             for prop_idx in range(n_properties):
                 property_value_total += it_property_values[prop_idx]
+            total_property_mortgage_balance = 0.0
+            for prop_idx in range(n_properties):
+                total_property_mortgage_balance += it_property_mortgage_balances[prop_idx]
 
             total_assets = total_asset_balance + property_value_total + pension_balance
-            total_liabilities = it_mortgage_balance + it_debt_balance
+            total_liabilities = total_property_mortgage_balance + it_debt_balance
             net_worth = total_assets - total_liabilities
 
             # Check bankruptcy threshold
@@ -1087,7 +1109,7 @@ def _simulate_all_iterations(
             out[it, y_idx, F_NET_WORTH] = net_worth
             out[it, y_idx, F_SALARY_GROSS] = salary_gross_total
             out[it, y_idx, F_SALARY_NET] = salary_net
-            out[it, y_idx, F_RENTAL_INCOME] = rental_income_net
+            out[it, y_idx, F_RENTAL_INCOME] = rental_income_gross
             out[it, y_idx, F_GIFT_INCOME] = gift_income_total
             out[it, y_idx, F_PENSION_INCOME] = pension_income_net
             out[it, y_idx, F_STATE_PENSION_INCOME] = state_pension_income
@@ -1104,9 +1126,9 @@ def _simulate_all_iterations(
             out[it, y_idx, F_PENSION_BALANCE] = pension_balance
             out[it, y_idx, F_CASH_BALANCE] = cash_balance
             out[it, y_idx, F_TOTAL_ASSETS] = total_assets
-            out[it, y_idx, F_MORTGAGE_BALANCE] = it_mortgage_balance
+            out[it, y_idx, F_MORTGAGE_BALANCE] = total_property_mortgage_balance
             out[it, y_idx, F_TOTAL_LIABILITIES] = total_liabilities
-            out[it, y_idx, F_MORTGAGE_PAID_OFF] = 1.0 if it_mortgage_balance <= 0 else 0.0
+            out[it, y_idx, F_MORTGAGE_PAID_OFF] = 1.0 if total_property_mortgage_balance <= 0 else 0.0
             out[it, y_idx, F_IS_DEPLETED] = 1.0 if total_assets <= 0 else 0.0
             out[it, y_idx, F_IS_BANKRUPT] = 1.0 if it_is_bankrupt else 0.0
             out[it, y_idx, F_DEBT_BALANCE] = it_debt_balance

@@ -2,7 +2,14 @@
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    extend: {}
+    extend: {
+      gridTemplateColumns: {
+        13: "repeat(13, minmax(0, 1fr))"
+      },
+      gridColumn: {
+        "span-13": "span 13 / span 13"
+      }
+    }
   },
   plugins: []
 };

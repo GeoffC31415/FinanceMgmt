@@ -24,6 +24,20 @@ function format_currency(value: number): string {
   return `£${Math.round(value).toLocaleString()}`;
 }
 
+function mortgage_monthly_payment(property: ScenarioRead["properties"][number]): number {
+  const balance = property.value * property.mortgage_ltv;
+  if (balance <= 0 || property.mortgage_rate < 0) return 0;
+
+  const monthly_rate = property.mortgage_rate / 12;
+  if (property.mortgage_term_years <= 0) return balance * monthly_rate;
+
+  const periods = property.mortgage_term_years * 12;
+  if (monthly_rate === 0) return periods > 0 ? balance / periods : 0;
+
+  const growth = (1 + monthly_rate) ** periods;
+  return (balance * monthly_rate * growth) / (growth - 1);
+}
+
 const ICON_PATHS: Record<Insight["icon"], string> = {
   check: "M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
   info: "M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z",
@@ -62,9 +76,10 @@ export function OverviewInsights({
       (sum, e) => sum + e.monthly_amount * 12,
       0
     );
-    const mortgage_annual = scenario.mortgage
-      ? scenario.mortgage.monthly_payment * 12
-      : 0;
+    const mortgage_annual = scenario.properties.reduce(
+      (sum, property) => sum + mortgage_monthly_payment(property) * 12,
+      0
+    );
     const base_annual_costs = fixed_annual_expenses + mortgage_annual;
 
     // Safe spending insight

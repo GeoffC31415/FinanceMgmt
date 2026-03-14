@@ -156,32 +156,48 @@ async def _migrate_assets_bond_allocation(*, conn: AsyncConnection) -> None:
 
 
 async def _migrate_properties_table(*, conn: AsyncConnection) -> None:
-    """Create properties table for buy-to-let properties if it does not exist."""
+    """Create properties table and add per-property mortgage columns."""
     result = await conn.execute(text(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='properties'"
     ))
-    if result.first() is not None:
+    if result.first() is None:
+        await conn.execute(text("""
+            CREATE TABLE properties (
+                id VARCHAR(36) NOT NULL PRIMARY KEY,
+                scenario_id VARCHAR(36) NOT NULL,
+                person_id VARCHAR(36),
+                name VARCHAR(200) NOT NULL,
+                value FLOAT NOT NULL DEFAULT 0.0,
+                appreciation_rate_mean FLOAT NOT NULL DEFAULT 0.0,
+                appreciation_rate_std FLOAT NOT NULL DEFAULT 0.0,
+                monthly_rental_income FLOAT NOT NULL DEFAULT 0.0,
+                rental_growth_rate FLOAT NOT NULL DEFAULT 0.0,
+                occupancy_rate FLOAT NOT NULL DEFAULT 1.0,
+                mortgage_ltv FLOAT NOT NULL DEFAULT 0.0,
+                mortgage_rate FLOAT NOT NULL DEFAULT 0.0,
+                mortgage_term_years INTEGER NOT NULL DEFAULT 0,
+                annual_maintenance_cost FLOAT NOT NULL DEFAULT 0.0,
+                maintenance_is_inflation_linked BOOLEAN NOT NULL DEFAULT 1,
+                withdrawal_priority INTEGER NOT NULL DEFAULT 15,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(scenario_id) REFERENCES scenarios(id) ON DELETE CASCADE,
+                FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
+            )
+        """))
         return
 
-    await conn.execute(text("""
-        CREATE TABLE properties (
-            id VARCHAR(36) NOT NULL PRIMARY KEY,
-            scenario_id VARCHAR(36) NOT NULL,
-            person_id VARCHAR(36),
-            name VARCHAR(200) NOT NULL,
-            value FLOAT NOT NULL DEFAULT 0.0,
-            appreciation_rate_mean FLOAT NOT NULL DEFAULT 0.0,
-            appreciation_rate_std FLOAT NOT NULL DEFAULT 0.0,
-            monthly_rental_income FLOAT NOT NULL DEFAULT 0.0,
-            rental_growth_rate FLOAT NOT NULL DEFAULT 0.0,
-            occupancy_rate FLOAT NOT NULL DEFAULT 1.0,
-            annual_maintenance_cost FLOAT NOT NULL DEFAULT 0.0,
-            maintenance_is_inflation_linked BOOLEAN NOT NULL DEFAULT 1,
-            withdrawal_priority INTEGER NOT NULL DEFAULT 15,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(scenario_id) REFERENCES scenarios(id) ON DELETE CASCADE,
-            FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
-        )
-    """))
+    columns = await _get_table_columns(conn=conn, table_name="properties")
+    if "mortgage_ltv" not in columns:
+        await conn.execute(text("ALTER TABLE properties ADD COLUMN mortgage_ltv FLOAT NOT NULL DEFAULT 0.0"))
+    if "mortgage_rate" not in columns:
+        await conn.execute(text("ALTER TABLE properties ADD COLUMN mortgage_rate FLOAT NOT NULL DEFAULT 0.0"))
+    if "mortgage_term_years" not in columns:
+        await conn.execute(text("ALTER TABLE properties ADD COLUMN mortgage_term_years INTEGER NOT NULL DEFAULT 0"))
+
+    obsolete_mortgage = await conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='mortgages'"
+    ))
+    if obsolete_mortgage.first() is not None:
+        await conn.execute(text("DROP TABLE mortgages"))
 

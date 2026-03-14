@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db_session
-from backend.models import Asset, Expense, Income, Mortgage, Person, Scenario
+from backend.models import Asset, Expense, Income, Person, Scenario
 from backend.schemas.simulation import (
     BondCombo,
     BondSweepRequest,
@@ -32,7 +32,7 @@ from backend.simulation.engine import (
 )
 from backend.simulation.engine_fast import run_simulation
 from backend.simulation.returns_cache import create_session, get_session, generate_returns_matrix, generate_returns_matrix_with_bond_override
-from backend.simulation.entities import ExpenseItem, GiftIncome, MortgageAccount, PensionPot, PersonEntity, RentalIncome, SalaryIncome
+from backend.simulation.entities import ExpenseItem, GiftIncome, PensionPot, PersonEntity, RentalIncome, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
 from backend.simulation.entities.property import PropertyEntity
 
@@ -78,7 +78,6 @@ def _scenario_query():
         .options(selectinload(Scenario.incomes))
         .options(selectinload(Scenario.assets))
         .options(selectinload(Scenario.properties))
-        .options(selectinload(Scenario.mortgage))
         .options(selectinload(Scenario.expenses))
     )
 
@@ -266,17 +265,12 @@ def _build_simulation_scenario(
                 rental_growth_rate=property_.rental_growth_rate,
                 occupancy_rate=property_.occupancy_rate,
                 annual_maintenance_cost=property_.annual_maintenance_cost,
+                mortgage_ltv=float(getattr(property_, "mortgage_ltv", 0.0) or 0.0),
+                mortgage_rate=float(getattr(property_, "mortgage_rate", 0.0) or 0.0),
+                mortgage_term_years=int(getattr(property_, "mortgage_term_years", 0) or 0),
                 maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
                 cost_basis=property_.value,
             )
-        )
-
-    mortgage = None
-    if scenario.mortgage is not None:
-        mortgage = MortgageAccount(
-            balance=scenario.mortgage.balance,
-            annual_interest_rate=scenario.mortgage.annual_interest_rate,
-            monthly_payment=scenario.mortgage.monthly_payment,
         )
 
     expenses = [
@@ -296,7 +290,6 @@ def _build_simulation_scenario(
         pension_by_person=pension_by_person,
         assets=assets,
         properties=properties,
-        mortgage=mortgage,
         expenses=expenses,
         rental_incomes=rental_incomes,
         gift_incomes=gift_incomes,
@@ -522,7 +515,6 @@ def _build_scenario_from_cached(
         pension_by_person=base.pension_by_person,
         assets=base.assets,
         properties=base.properties,
-        mortgage=base.mortgage,
         expenses=base.expenses,
         rental_incomes=base.rental_incomes,
         gift_incomes=base.gift_incomes,

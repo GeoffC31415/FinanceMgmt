@@ -88,11 +88,23 @@ def _minimal_scenario_payload(name: str = "Test Scenario") -> dict:
                 "withdrawal_priority": 100,
             },
         ],
-        "mortgage": {
-            "balance": 200000.0,
-            "annual_interest_rate": 0.04,
-            "monthly_payment": 1200.0,
-        },
+        "properties": [
+            {
+                "name": "Flat",
+                "value": 250000.0,
+                "appreciation_rate_mean": 0.03,
+                "appreciation_rate_std": 0.08,
+                "monthly_rental_income": 1500.0,
+                "rental_growth_rate": 0.02,
+                "occupancy_rate": 0.95,
+                "mortgage_ltv": 0.8,
+                "mortgage_rate": 0.04,
+                "mortgage_term_years": 25,
+                "annual_maintenance_cost": 1500.0,
+                "maintenance_is_inflation_linked": True,
+                "withdrawal_priority": 15,
+            }
+        ],
         "expenses": [
             {"name": "Living", "monthly_amount": 2000.0, "is_inflation_linked": True}
         ],
@@ -150,7 +162,8 @@ async def test_create_scenario(client: AsyncClient):
     assert "id" in data
     assert len(data["people"]) == 1
     assert len(data["assets"]) == 2
-    assert data["mortgage"] is not None
+    assert len(data["properties"]) == 1
+    assert data["properties"][0]["mortgage_ltv"] == pytest.approx(0.8)
     assert len(data["expenses"]) == 1
 
 

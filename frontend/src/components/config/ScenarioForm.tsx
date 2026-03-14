@@ -34,6 +34,34 @@ function format_percent_input(value: number): string {
   return (value * 100).toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+function property_mortgage_balance(property: {
+  value: number;
+  mortgage_ltv: number;
+}): number {
+  return (Number(property.value) || 0) * (Number(property.mortgage_ltv) || 0);
+}
+
+function property_mortgage_monthly_payment(property: {
+  value: number;
+  mortgage_ltv: number;
+  mortgage_rate: number;
+  mortgage_term_years: number;
+}): number {
+  const balance = property_mortgage_balance(property);
+  const annual_rate = Number(property.mortgage_rate) || 0;
+  const term_years = Number(property.mortgage_term_years) || 0;
+  if (balance <= 0 || annual_rate < 0) return 0;
+
+  const monthly_rate = annual_rate / 12;
+  if (term_years <= 0) return balance * monthly_rate;
+
+  const periods = term_years * 12;
+  if (monthly_rate === 0) return periods > 0 ? balance / periods : 0;
+
+  const growth = (1 + monthly_rate) ** periods;
+  return (balance * monthly_rate * growth) / (growth - 1);
+}
+
 function NumberInput({
   control,
   name,
@@ -119,6 +147,82 @@ function PercentInput({
         </div>
       )}
     />
+  );
+}
+
+function RentalSection({
+  control,
+  index,
+  initialOpen,
+  annualRent,
+  propRent,
+  propOccupancy,
+  setValue,
+}: {
+  control: any;
+  index: number;
+  initialOpen: boolean;
+  annualRent: number;
+  propRent: number;
+  propOccupancy: number;
+  setValue: (name: any, value: any, options?: any) => void;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+
+  const handleToggle = (checked: boolean) => {
+    setOpen(checked);
+    if (!checked) {
+      setValue(`properties.${index}.monthly_rental_income`, 0, { shouldDirty: true });
+      setValue(`properties.${index}.rental_growth_rate`, 0, { shouldDirty: true });
+      setValue(`properties.${index}.occupancy_rate`, 0.95, { shouldDirty: true });
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-800/60 pt-4">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={open}
+          onChange={(e) => handleToggle(e.target.checked)}
+        />
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Rental Income
+        </span>
+        {!open && <span className="text-xs text-slate-600">— not a rental property</span>}
+      </label>
+      {open && (
+        <div className="mt-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-400">Monthly rent</label>
+              <div className="mt-1">
+                <NumberInput control={control} name={`properties.${index}.monthly_rental_income`} min={0} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400">Annual rent growth</label>
+              <div className="mt-1">
+                <PercentInput control={control} name={`properties.${index}.rental_growth_rate`} placeholder="e.g. 2" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400">Occupancy rate</label>
+              <div className="mt-1">
+                <PercentInput control={control} name={`properties.${index}.occupancy_rate`} placeholder="e.g. 95" />
+              </div>
+            </div>
+          </div>
+          {annualRent > 0 && (
+            <div className="mt-2 text-xs text-slate-400">
+              Estimated annual rent: <span className="text-emerald-300">£{Math.round(annualRent).toLocaleString()}</span>
+              {" "}({Math.round(propOccupancy * 100)}% of £{(propRent * 12).toLocaleString()})
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -307,19 +411,14 @@ const schema = z.object({
       monthly_rental_income: z.coerce.number().min(0),
       rental_growth_rate: z.coerce.number().min(-1).max(10),
       occupancy_rate: z.coerce.number().min(0).max(1).default(1),
+      mortgage_ltv: z.coerce.number().min(0).max(1).default(0),
+      mortgage_rate: z.coerce.number().min(0).max(1).default(0),
+      mortgage_term_years: z.coerce.number().int().min(0).max(100).default(0),
       annual_maintenance_cost: z.coerce.number().min(0),
       maintenance_is_inflation_linked: z.coerce.boolean().default(true),
       withdrawal_priority: z.coerce.number().int().min(0).max(10000).default(15)
     })
   ),
-  mortgage: z
-    .object({
-      balance: z.coerce.number().min(0),
-      annual_interest_rate: z.coerce.number().min(0).max(1),
-      monthly_payment: z.coerce.number().min(0),
-    })
-    .nullable()
-    .optional(),
   expenses: z.array(
     z.object({
       name: z.string().min(1).max(200),
@@ -411,12 +510,14 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       monthly_rental_income: p.monthly_rental_income,
       rental_growth_rate: p.rental_growth_rate,
       occupancy_rate: p.occupancy_rate,
+      mortgage_ltv: p.mortgage_ltv,
+      mortgage_rate: p.mortgage_rate,
+      mortgage_term_years: p.mortgage_term_years,
       annual_maintenance_cost: p.annual_maintenance_cost,
       maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
       withdrawal_priority: p.withdrawal_priority,
       person_id: p.person_id ?? ""
     })),
-    mortgage: scenario.mortgage ?? null,
     expenses: scenario.expenses.map((e) => ({
       name: e.name,
       monthly_amount: e.monthly_amount,
@@ -477,12 +578,14 @@ function to_scenario_create(values: FormValues, original: ScenarioRead): Scenari
       monthly_rental_income: p.monthly_rental_income,
       rental_growth_rate: p.rental_growth_rate,
       occupancy_rate: p.occupancy_rate,
+      mortgage_ltv: p.mortgage_ltv,
+      mortgage_rate: p.mortgage_rate,
+      mortgage_term_years: p.mortgage_term_years,
       annual_maintenance_cost: p.annual_maintenance_cost,
       maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
       withdrawal_priority: p.withdrawal_priority,
       person_id: normalize_person_id(p.person_id)
     })),
-    mortgage: values.mortgage ?? null,
     expenses: values.expenses.map((e) => ({
       name: e.name,
       monthly_amount: e.monthly_amount,
@@ -542,6 +645,24 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
     return watched_expenses.reduce((sum, exp) => sum + (Number(exp?.monthly_amount) || 0) * 12, 0);
   }, [watched_expenses]);
 
+  const property_mortgage_balance_total = useMemo(() => {
+    if (!watched_properties) return 0;
+    return watched_properties.reduce((sum, property) => sum + property_mortgage_balance({
+      value: Number(property?.value) || 0,
+      mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+    }), 0);
+  }, [watched_properties]);
+
+  const property_mortgage_payment_total = useMemo(() => {
+    if (!watched_properties) return 0;
+    return watched_properties.reduce((sum, property) => sum + property_mortgage_monthly_payment({
+      value: Number(property?.value) || 0,
+      mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+      mortgage_rate: Number(property?.mortgage_rate) || 0,
+      mortgage_term_years: Number(property?.mortgage_term_years) || 0,
+    }), 0);
+  }, [watched_properties]);
+
   const person_label_by_id = useMemo(
     () => new Map((scenario.people ?? []).map((person) => [person.id ?? "", person.label])),
     [scenario.people]
@@ -575,6 +696,10 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
       return left.name.localeCompare(right.name);
     });
   }, [person_label_by_id, watched_assets, watched_properties]);
+
+  const [expandedPropertyIdx, setExpandedPropertyIdx] = useState<number | null>(
+    properties.fields.length > 0 ? 0 : null
+  );
 
   const prev_scenario_id = useRef<string | null>(null);
   useEffect(() => {
@@ -1160,96 +1285,307 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
         )}
 
         {tab === "properties" && (
-          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">Buy-to-Let Properties</div>
-              <div className="text-sm text-slate-300">
-                Total value: <span className="font-semibold text-emerald-400">£{properties_total.toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded border border-emerald-800/50 bg-emerald-950/30 p-3 text-sm text-emerald-100/90">
-              <div className="font-medium text-emerald-100">How Properties Work</div>
-              <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
-                <li><strong>Rental income:</strong> Rent is `monthly rent x 12 x occupancy %` and is taxed like other rental income.</li>
-                <li><strong>Maintenance:</strong> Annual maintenance is deducted from cash and can optionally grow with inflation.</li>
-                <li><strong>Sellable:</strong> Properties can be sold to cover shortfalls using withdrawal priority. Capital gains tax is applied on gains.</li>
-                <li><strong>Appreciation:</strong> Property values change over time using the appreciation mean and volatility you enter here.</li>
-              </ul>
-            </div>
-
-            <div className="mt-3 overflow-auto">
-              <div className="hidden min-w-[1420px] grid-cols-10 gap-3 text-xs text-slate-400 md:grid">
-                <div>Assigned_to</div>
-                <div>Name</div>
-                <div className="flex items-center">
-                  Priority
-                  <InfoTip text="Higher number = sell first when cash is short. Example: set 30 for a property you would liquidate before other holdings, and 10 for one you want to keep longer." />
-                </div>
-                <div>Current_value</div>
-                <div>Appreciation_mean</div>
-                <div>Appreciation_std</div>
-                <div>Monthly_rent</div>
-                <div>Rent_growth</div>
-                <div>Occupancy_%</div>
-                <div>Maintenance</div>
-              </div>
-              <div className="min-w-[1420px] space-y-2">
-                {properties.fields.map((property, idx) => (
-                  <div
-                    key={property.id}
-                    className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-10"
-                  >
-                    <select
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      {...form.register(`properties.${idx}.person_id` as any)}
-                    >
-                      <option value="">Household</option>
-                      {scenario.people.map((p) => (
-                        <option key={p.id} value={p.id ?? ""}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      {...form.register(`properties.${idx}.name`)}
-                    />
-                    <NumberInput control={form.control} name={`properties.${idx}.withdrawal_priority`} min={0} />
-                    <NumberInput control={form.control} name={`properties.${idx}.value`} min={0} />
-                    <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_mean`} placeholder="%" />
-                    <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_std`} placeholder="%" />
-                    <NumberInput control={form.control} name={`properties.${idx}.monthly_rental_income`} min={0} />
-                    <PercentInput control={form.control} name={`properties.${idx}.rental_growth_rate`} placeholder="%" />
-                    <PercentInput control={form.control} name={`properties.${idx}.occupancy_rate`} placeholder="100" />
-                    <div>
-                      <NumberInput control={form.control} name={`properties.${idx}.annual_maintenance_cost`} min={0} />
-                      <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          {...form.register(`properties.${idx}.maintenance_is_inflation_linked`)}
-                        />
-                        Inflation linked
-                      </label>
-                    </div>
-                    <div className="md:col-span-10 flex items-center justify-end">
-                      <button
-                        type="button"
-                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
-                        onClick={() => properties.remove(idx)}
-                      >
-                        Remove
-                      </button>
-                    </div>
+          <div className="space-y-4">
+            {/* Portfolio summary bar */}
+            <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm font-semibold">Property Portfolio</div>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="text-slate-300">
+                    Total value: <span className="font-semibold text-emerald-400">£{properties_total.toLocaleString()}</span>
                   </div>
-                ))}
+                  {property_mortgage_balance_total > 0 && (
+                    <>
+                      <div className="text-slate-300">
+                        Total equity: <span className="font-semibold text-sky-400">£{Math.round(properties_total - property_mortgage_balance_total).toLocaleString()}</span>
+                      </div>
+                      <div className="text-slate-300">
+                        Total debt: <span className="font-semibold text-rose-400">£{Math.round(property_mortgage_balance_total).toLocaleString()}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
+              <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                Each property can generate rental income, appreciates (or depreciates) over time, and can carry a mortgage.
+                Properties can be sold to cover cash shortfalls — set withdrawal priority to control which sell first.
+                Capital gains tax applies on sale.
+              </p>
             </div>
+
+            {/* Property cards */}
+            {properties.fields.map((property, idx) => {
+              const propName = form.watch(`properties.${idx}.name`) || `Property ${idx + 1}`;
+              const propValue = Number(form.watch(`properties.${idx}.value`) ?? 0);
+              const propLtv = Number(form.watch(`properties.${idx}.mortgage_ltv`) ?? 0);
+              const propRate = Number(form.watch(`properties.${idx}.mortgage_rate`) ?? 0);
+              const propTerm = Number(form.watch(`properties.${idx}.mortgage_term_years`) ?? 0);
+              const propRent = Number(form.watch(`properties.${idx}.monthly_rental_income`) ?? 0);
+              const propOccupancy = Number(form.watch(`properties.${idx}.occupancy_rate`) ?? 1);
+              const propMaintenance = Number(form.watch(`properties.${idx}.annual_maintenance_cost`) ?? 0);
+              const isRental = propRent > 0 || propOccupancy < 1 || Number(form.watch(`properties.${idx}.rental_growth_rate`) ?? 0) !== 0;
+
+              const mortBalance = property_mortgage_balance({ value: propValue, mortgage_ltv: propLtv });
+              const mortMonthly = property_mortgage_monthly_payment({
+                value: propValue, mortgage_ltv: propLtv,
+                mortgage_rate: propRate, mortgage_term_years: propTerm,
+              });
+              const mortTotalCost = propTerm > 0 ? mortMonthly * propTerm * 12 : 0;
+              const mortTotalInterest = propTerm > 0 ? mortTotalCost - mortBalance : 0;
+              const equity = propValue - mortBalance;
+
+              const annualRent = propRent * 12 * propOccupancy;
+              const annualMortgage = mortMonthly * 12;
+              const netAnnualCashflow = annualRent - annualMortgage - propMaintenance;
+
+              const isExpanded = expandedPropertyIdx === idx;
+
+              return (
+                <div key={property.id} className="rounded border border-slate-800 bg-slate-900/30">
+                  {/* Collapsed header — always visible */}
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-800/30 transition-colors"
+                    onClick={() => setExpandedPropertyIdx(isExpanded ? null : idx)}
+                  >
+                    <span className={`text-slate-400 transition-transform text-xs ${isExpanded ? "rotate-90" : ""}`}>
+                      &#9654;
+                    </span>
+                    <span className="text-sm font-semibold text-slate-100 min-w-0 truncate">{propName}</span>
+                    <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs shrink-0">
+                      <span className="text-slate-400">
+                        Value <span className="font-medium text-emerald-400">£{propValue.toLocaleString()}</span>
+                      </span>
+                      {mortBalance > 0 && (
+                        <>
+                          <span className="text-slate-400">
+                            Equity <span className="font-medium text-sky-400">£{Math.round(equity).toLocaleString()}</span>
+                          </span>
+                          <span className="text-slate-400">
+                            Debt <span className="font-medium text-rose-400">£{Math.round(mortBalance).toLocaleString()}</span>
+                          </span>
+                        </>
+                      )}
+                      {annualRent > 0 && (
+                        <span className="text-slate-400">
+                          Rent <span className="font-medium text-emerald-300">£{Math.round(annualRent).toLocaleString()}/yr</span>
+                        </span>
+                      )}
+                      {(annualRent > 0 || mortBalance > 0 || propMaintenance > 0) && (
+                        <span className="text-slate-400">
+                          Net{" "}
+                          <span className={`font-medium ${netAnnualCashflow >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                            {netAnnualCashflow >= 0 ? "+" : ""}£{Math.round(netAnnualCashflow).toLocaleString()}/yr
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Expanded body */}
+                  {isExpanded && (
+                    <>
+                      <div className="border-t border-slate-800 p-4">
+                        <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400">Property name</label>
+                            <input
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              {...form.register(`properties.${idx}.name`)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400">Owner</label>
+                            <select
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              {...form.register(`properties.${idx}.person_id` as any)}
+                            >
+                              <option value="">Household</option>
+                              {scenario.people.map((p) => (
+                                <option key={p.id} value={p.id ?? ""}>{p.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="flex items-center text-xs font-medium text-slate-400">
+                              Sell priority
+                              <InfoTip text="Higher number = sell first when cash is short. Set 30 for a property you'd liquidate early, 10 for one you want to keep." />
+                            </label>
+                            <div className="mt-1">
+                              <NumberInput control={form.control} name={`properties.${idx}.withdrawal_priority`} min={0} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-800/60 p-4 space-y-5">
+                        {/* Value & Appreciation */}
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Value &amp; Appreciation</div>
+                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Current value</label>
+                              <div className="mt-1">
+                                <NumberInput control={form.control} name={`properties.${idx}.value`} min={0} />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Annual appreciation (mean)</label>
+                              <div className="mt-1">
+                                <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_mean`} placeholder="e.g. 3" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Appreciation volatility (std)</label>
+                              <div className="mt-1">
+                                <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_std`} placeholder="e.g. 8" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Rental Income */}
+                        <RentalSection
+                          control={form.control}
+                          index={idx}
+                          initialOpen={isRental}
+                          annualRent={annualRent}
+                          propRent={propRent}
+                          propOccupancy={propOccupancy}
+                          setValue={form.setValue}
+                        />
+
+                        {/* Mortgage */}
+                        <div className="border-t border-slate-800/60 pt-4">
+                          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Mortgage</div>
+                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Loan-to-value (LTV)</label>
+                              <div className="mt-1">
+                                <PercentInput control={form.control} name={`properties.${idx}.mortgage_ltv`} placeholder="e.g. 75" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Interest rate</label>
+                              <div className="mt-1">
+                                <PercentInput control={form.control} name={`properties.${idx}.mortgage_rate`} placeholder="e.g. 4.5" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="flex items-center text-xs font-medium text-slate-400">
+                                Term (years)
+                                <InfoTip text="Set to 0 for interest-only. A positive value amortises the mortgage over that many years." />
+                              </label>
+                              <div className="mt-1">
+                                <NumberInput control={form.control} name={`properties.${idx}.mortgage_term_years`} min={0} />
+                              </div>
+                            </div>
+                          </div>
+                          {mortBalance > 0 && (
+                            <div className="mt-3 grid gap-x-6 gap-y-1 rounded border border-slate-800 bg-slate-950/50 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                              <div className="text-slate-400">
+                                Balance: <span className="font-medium text-slate-200">£{Math.round(mortBalance).toLocaleString()}</span>
+                              </div>
+                              <div className="text-slate-400">
+                                Equity: <span className="font-medium text-sky-300">£{Math.round(equity).toLocaleString()}</span>
+                              </div>
+                              <div className="text-slate-400">
+                                Monthly payment: <span className="font-medium text-slate-200">£{Math.round(mortMonthly).toLocaleString()}</span>
+                              </div>
+                              {propTerm > 0 ? (
+                                <div className="text-slate-400">
+                                  Total interest: <span className="font-medium text-amber-300">£{Math.round(mortTotalInterest).toLocaleString()}</span>
+                                  <span className="text-slate-500"> over {propTerm}yr</span>
+                                </div>
+                              ) : (
+                                <div className="text-slate-400">
+                                  Type: <span className="font-medium text-amber-300">Interest-only</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Maintenance & Costs */}
+                        <div className="border-t border-slate-800/60 pt-4">
+                          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Maintenance</div>
+                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400">Annual maintenance cost</label>
+                              <div className="mt-1">
+                                <NumberInput control={form.control} name={`properties.${idx}.annual_maintenance_cost`} min={0} />
+                              </div>
+                            </div>
+                            <div className="flex items-end pb-1">
+                              <label className="flex items-center gap-2 text-xs text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  {...form.register(`properties.${idx}.maintenance_is_inflation_linked`)}
+                                />
+                                Grows with inflation
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Net cashflow summary */}
+                        {(annualRent > 0 || mortBalance > 0 || propMaintenance > 0) && (
+                          <div className="border-t border-slate-800/60 pt-4">
+                            <div className="flex flex-wrap gap-4 rounded border border-slate-800 bg-slate-950/50 p-3 text-xs">
+                              <div className="text-slate-400">
+                                Annual rent: <span className="text-emerald-300">+£{Math.round(annualRent).toLocaleString()}</span>
+                              </div>
+                              {annualMortgage > 0 && (
+                                <div className="text-slate-400">
+                                  Mortgage: <span className="text-rose-300">-£{Math.round(annualMortgage).toLocaleString()}</span>
+                                </div>
+                              )}
+                              {propMaintenance > 0 && (
+                                <div className="text-slate-400">
+                                  Maintenance: <span className="text-rose-300">-£{Math.round(propMaintenance).toLocaleString()}</span>
+                                </div>
+                              )}
+                              <div className="ml-auto font-medium text-slate-300">
+                                Net cashflow:{" "}
+                                <span className={netAnnualCashflow >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                                  {netAnnualCashflow >= 0 ? "+" : ""}£{Math.round(netAnnualCashflow).toLocaleString()}/yr
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Remove button at bottom of expanded card */}
+                      <div className="flex items-center justify-end border-t border-slate-800/60 px-4 py-3">
+                        <button
+                          type="button"
+                          className="rounded bg-slate-800 px-2.5 py-1.5 text-xs hover:bg-slate-700"
+                          onClick={() => {
+                            properties.remove(idx);
+                            setExpandedPropertyIdx(null);
+                          }}
+                        >
+                          Remove property
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {properties.fields.length === 0 && (
+              <div className="rounded border border-dashed border-slate-700 bg-slate-900/20 p-6 text-center text-sm text-slate-400">
+                No properties yet. Add one below to model buy-to-let investments.
+              </div>
+            )}
+
             <button
               type="button"
-              className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
-              onClick={() =>
+              className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              onClick={() => {
                 properties.append({
                   person_id: "",
                   name: "New property",
@@ -1259,11 +1595,15 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                   monthly_rental_income: 0,
                   rental_growth_rate: 0.02,
                   occupancy_rate: 0.95,
+                  mortgage_ltv: 0,
+                  mortgage_rate: 0.04,
+                  mortgage_term_years: 0,
                   annual_maintenance_cost: 0,
                   maintenance_is_inflation_linked: true,
                   withdrawal_priority: 15
-                } as any)
-              }
+                } as any);
+                setExpandedPropertyIdx(properties.fields.length);
+              }}
             >
               Add property
             </button>
@@ -1330,20 +1670,58 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
 
         {tab === "housing" && (
           <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-            <div className="text-sm font-semibold">Mortgage</div>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div>
-                <label className="block text-sm font-medium">Balance</label>
-                <NumberInput control={form.control} name="mortgage.balance" min={0} />
+            <div className="text-sm font-semibold">Property Mortgages</div>
+            <div className="mt-3 rounded border border-slate-800 bg-slate-950/30 p-4 text-sm text-slate-300">
+              Mortgages are configured on each property in the `Properties` tab. Use `Mortgage LTV`, `Mortgage rate`, and `Mortgage term`.
+              A term of `0` keeps the mortgage interest-only, while any positive term amortises it over that many years.
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-300">
+              <div className="rounded border border-slate-800 bg-slate-950/30 px-3 py-2">
+                Total mortgage balance: <span className="font-semibold text-slate-100">£{Math.round(property_mortgage_balance_total).toLocaleString()}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium">Annual interest rate</label>
-                <PercentInput control={form.control} name="mortgage.annual_interest_rate" placeholder="e.g. 4" />
+              <div className="rounded border border-slate-800 bg-slate-950/30 px-3 py-2">
+                Estimated monthly payments: <span className="font-semibold text-slate-100">£{Math.round(property_mortgage_payment_total).toLocaleString()}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium">Monthly payment</label>
-                <NumberInput control={form.control} name="mortgage.monthly_payment" min={0} />
-              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              {(watched_properties ?? []).filter((property) => property_mortgage_balance({
+                value: Number(property?.value) || 0,
+                mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+              }) > 0).length === 0 ? (
+                <div className="rounded border border-slate-800 bg-slate-950/30 p-4 text-sm text-slate-400">
+                  No property mortgages configured yet.
+                </div>
+              ) : (
+                (watched_properties ?? [])
+                  .filter((property) => property_mortgage_balance({
+                    value: Number(property?.value) || 0,
+                    mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+                  }) > 0)
+                  .map((property, idx) => (
+                    <div key={`${property?.name ?? "property"}-${idx}`} className="rounded border border-slate-800 bg-slate-950/30 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-slate-100">{property?.name || `Property ${idx + 1}`}</div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {(Math.round((Number(property?.mortgage_ltv) || 0) * 1000) / 10).toLocaleString()}% LTV, {(Math.round((Number(property?.mortgage_rate) || 0) * 1000) / 10).toLocaleString()}% rate, {(Number(property?.mortgage_term_years) || 0) === 0 ? "interest-only" : `${Number(property?.mortgage_term_years)} years`}
+                          </div>
+                        </div>
+                        <div className="text-right text-sm text-slate-300">
+                          <div>£{Math.round(property_mortgage_balance({
+                            value: Number(property?.value) || 0,
+                            mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+                          })).toLocaleString()}</div>
+                          <div className="text-xs text-slate-400">£{Math.round(property_mortgage_monthly_payment({
+                            value: Number(property?.value) || 0,
+                            mortgage_ltv: Number(property?.mortgage_ltv) || 0,
+                            mortgage_rate: Number(property?.mortgage_rate) || 0,
+                            mortgage_term_years: Number(property?.mortgage_term_years) || 0,
+                          })).toLocaleString()}/mo</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
         )}

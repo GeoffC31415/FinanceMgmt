@@ -3,7 +3,6 @@ from backend.simulation.entities.cash import Cash
 from backend.simulation.entities.expense import ExpenseItem
 from backend.simulation.entities.gift_income import GiftIncome
 from backend.simulation.entities.isa import IsaAccount
-from backend.simulation.entities.mortgage import MortgageAccount
 from backend.simulation.entities.pension import PensionPot
 from backend.simulation.entities.person import PersonEntity
 from backend.simulation.entities.property import PropertyEntity
@@ -19,7 +18,6 @@ __all__ = [
     "FinancialEntity",
     "GiftIncome",
     "IsaAccount",
-    "MortgageAccount",
     "PensionPot",
     "PersonEntity",
     "PropertyEntity",

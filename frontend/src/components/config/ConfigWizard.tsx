@@ -9,7 +9,6 @@ type StepId =
   | "income"
   | "assets"
   | "property"
-  | "mortgage"
   | "expenses"
   | "assumptions"
   | "summary";
@@ -20,7 +19,6 @@ const STEPS: { id: StepId; label: string }[] = [
   { id: "income", label: "Income" },
   { id: "assets", label: "Assets" },
   { id: "property", label: "Property" },
-  { id: "mortgage", label: "Mortgage" },
   { id: "expenses", label: "Expenses" },
   { id: "assumptions", label: "Assumptions" },
   { id: "summary", label: "Summary" }
@@ -87,9 +85,26 @@ function default_draft(): ScenarioCreate {
       { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }
     ],
     properties: [],
-    mortgage: null,
     expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
   };
+}
+
+function property_mortgage_monthly_payment(property: ScenarioCreate["properties"][number]): number {
+  const balance = property.value * property.mortgage_ltv;
+  if (balance <= 0 || property.mortgage_rate < 0) return 0;
+
+  const monthly_rate = property.mortgage_rate / 12;
+  if (property.mortgage_term_years <= 0) return balance * monthly_rate;
+
+  const periods = property.mortgage_term_years * 12;
+  if (monthly_rate === 0) return periods > 0 ? balance / periods : 0;
+
+  const growth = (1 + monthly_rate) ** periods;
+  return (balance * monthly_rate * growth) / (growth - 1);
+}
+
+function property_mortgage_balance(property: ScenarioCreate["properties"][number]): number {
+  return property.value * property.mortgage_ltv;
 }
 
 function to_draft(scenario: ScenarioRead): ScenarioCreate {
@@ -136,12 +151,14 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       monthly_rental_income: p.monthly_rental_income,
       rental_growth_rate: p.rental_growth_rate,
       occupancy_rate: p.occupancy_rate,
+      mortgage_ltv: p.mortgage_ltv,
+      mortgage_rate: p.mortgage_rate,
+      mortgage_term_years: p.mortgage_term_years,
       annual_maintenance_cost: p.annual_maintenance_cost,
       maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
       withdrawal_priority: p.withdrawal_priority,
       person_id: p.person_id ?? null
     })),
-    mortgage: scenario.mortgage ?? null,
     expenses: scenario.expenses.map((e) => ({
       name: e.name,
       monthly_amount: e.monthly_amount,
@@ -266,7 +283,7 @@ export function ConfigWizard() {
                 setError(null);
                 try {
                   // Create the DB row first (basic entry). This returns an id.
-                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {}, people: [], incomes: [], assets: [], properties: [], mortgage: null, expenses: [] });
+                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {}, people: [], incomes: [], assets: [], properties: [], expenses: [] });
                   setScenarioId(created.id);
 
                   // Immediately persist the full draft so step 1 starts from sensible defaults.
@@ -828,7 +845,7 @@ export function ConfigWizard() {
             <div className="space-y-3">
               <div className="text-sm font-semibold">Property</div>
               <StepIntro>
-                Add any properties (e.g. main home, BTL). Properties are sold in order of withdrawal priority when funds run low — after liquidating financial assets first. Higher priority number = sold first.
+                Add any properties (e.g. main home, BTL). Properties are sold in order of withdrawal priority when funds run low — after liquidating financial assets first. Higher priority number = sold first. Mortgages now belong to each property directly.
               </StepIntro>
 
               {draft.properties.map((prop, idx) => (
@@ -979,6 +996,68 @@ export function ConfigWizard() {
                       />
                     </div>
                     <div>
+                      <Label tooltip="Loan-to-value at the start of the simulation">Mortgage LTV</Label>
+                      <div className="relative mt-1">
+                        <input
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={100}
+                          value={Math.round(prop.mortgage_ltv * 10000) / 100}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              properties: d.properties.map((x, i) => (i === idx ? { ...x, mortgage_ltv: Number(e.target.value) / 100 } : x))
+                            }))
+                          }
+                          placeholder="80"
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label tooltip="Annual mortgage interest rate for this property">Mortgage Rate</Label>
+                      <div className="relative mt-1">
+                        <input
+                          className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={100}
+                          value={Math.round(prop.mortgage_rate * 10000) / 100}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              properties: d.properties.map((x, i) => (i === idx ? { ...x, mortgage_rate: Number(e.target.value) / 100 } : x))
+                            }))
+                          }
+                          placeholder="4"
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label tooltip="0 = interest-only, otherwise years to repay">Mortgage Term (Years)</Label>
+                      <input
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        type="number"
+                        min={0}
+                        value={prop.mortgage_term_years}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            properties: d.properties.map((x, i) => (i === idx ? { ...x, mortgage_term_years: Number(e.target.value) } : x))
+                          }))
+                        }
+                        placeholder="25"
+                      />
+                    </div>
+                    <div className="rounded border border-slate-700/50 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
+                      <div>Mortgage balance: £{Math.round(property_mortgage_balance(prop)).toLocaleString()}</div>
+                      <div>Estimated payment: £{Math.round(property_mortgage_monthly_payment(prop)).toLocaleString()}/mo</div>
+                    </div>
+                    <div>
                       <Label tooltip="Annual maintenance cost">Annual Maintenance (£)</Label>
                       <input
                         className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -1027,7 +1106,7 @@ export function ConfigWizard() {
                 </div>
               ))}
               <Hint>
-                Owner-occupied: set rental income to 0 and occupancy to 1. BTL: set rental income and occupancy as appropriate. Properties are liquidated after financial assets when funds run low.
+                Owner-occupied: set rental income to 0 and occupancy to 1. BTL: set rental income and occupancy as appropriate. For a mortgage, set `LTV`, `Rate`, and either `0` for interest-only or a repayment term in years.
               </Hint>
               <button
                 type="button"
@@ -1045,6 +1124,9 @@ export function ConfigWizard() {
                         monthly_rental_income: 0,
                         rental_growth_rate: 0.02,
                         occupancy_rate: 1.0,
+                        mortgage_ltv: 0,
+                        mortgage_rate: 0.04,
+                        mortgage_term_years: 0,
                         annual_maintenance_cost: 1500,
                         maintenance_is_inflation_linked: true,
                         withdrawal_priority: 5,
@@ -1056,84 +1138,6 @@ export function ConfigWizard() {
               >
                 Add property
               </button>
-            </div>
-          )}
-
-          {step === "mortgage" && (
-            <div className="space-y-3">
-              <div className="text-sm font-semibold">Mortgage</div>
-              <StepIntro>
-                If you have a mortgage, it's deducted as a fixed monthly expense. The simulation tracks the declining balance and stops payments when the mortgage is paid off. This is modelled separately from other expenses.
-              </StepIntro>
-              
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={draft.mortgage != null}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      mortgage: e.target.checked ? { balance: 0, annual_interest_rate: 0.04, monthly_payment: 0 } : null
-                    }))
-                  }
-                />
-                I have a mortgage to include
-              </label>
-              {draft.mortgage != null && (
-                <>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div>
-                      <Label tooltip="Current outstanding mortgage balance">Balance (£)</Label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        value={draft.mortgage.balance}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            mortgage: d.mortgage != null ? { ...d.mortgage, balance: Number(e.target.value) } : null
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Label tooltip="Your current mortgage interest rate (e.g. 4 = 4%)">Annual Interest Rate (%)</Label>
-                      <div className="relative mt-1">
-                        <input
-                          className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
-                          type="number"
-                          step="0.1"
-                          value={Math.round(draft.mortgage.annual_interest_rate * 10000) / 100}
-                          onChange={(e) =>
-                            setDraft((d) => ({
-                              ...d,
-                              mortgage: d.mortgage != null ? { ...d.mortgage, annual_interest_rate: Number(e.target.value) / 100 } : null
-                            }))
-                          }
-                        />
-                        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
-                      </div>
-                    </div>
-                    <div>
-                      <Label tooltip="Your current monthly mortgage payment. Stays fixed until paid off.">Monthly Payment (£)</Label>
-                      <input
-                        className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        type="number"
-                        value={draft.mortgage.monthly_payment}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            mortgage: d.mortgage != null ? { ...d.mortgage, monthly_payment: Number(e.target.value) } : null
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <Hint>
-                    The simulation amortises the mortgage and tracks when it's paid off. Once complete, the monthly payment is freed up for other uses.
-                  </Hint>
-                </>
-              )}
             </div>
           )}
 
@@ -1352,7 +1356,14 @@ export function ConfigWizard() {
               adults.length * statePensionAnnual;
 
             const totalExpensesAnnual = draft.expenses.reduce((s, e) => s + e.monthly_amount * 12, 0);
-            const mortgageAnnual = draft.mortgage ? draft.mortgage.monthly_payment * 12 : 0;
+            const totalMortgageBalance = draft.properties.reduce(
+              (sum, property) => sum + property_mortgage_balance(property),
+              0
+            );
+            const mortgageAnnual = draft.properties.reduce(
+              (sum, property) => sum + property_mortgage_monthly_payment(property) * 12,
+              0
+            );
             const grandTotalOutgoings = totalExpensesAnnual + mortgageAnnual;
 
             const personLabel = (id: string | null) =>
@@ -1430,6 +1441,40 @@ export function ConfigWizard() {
                   </section>
 
                   <section className="rounded border border-slate-700/50 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-medium text-slate-300">Property mortgage summary</h3>
+                    {draft.properties.filter((property) => property_mortgage_balance(property) > 0).length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500">No property mortgages configured.</p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm font-semibold text-sky-400">
+                          Total mortgage balance: £{Math.round(totalMortgageBalance).toLocaleString()}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-300">
+                          Total annual mortgage cost: £{Math.round(mortgageAnnual).toLocaleString()}
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {draft.properties
+                            .filter((property) => property_mortgage_balance(property) > 0)
+                            .map((property, index) => (
+                              <div key={`${property.name}-${index}`} className="flex items-center justify-between gap-4 rounded bg-slate-900/50 px-3 py-2 text-sm">
+                                <div>
+                                  <div className="text-slate-200">{property.name}</div>
+                                  <div className="text-xs text-slate-400">
+                                    {Math.round(property.mortgage_ltv * 1000) / 10}% LTV, {Math.round(property.mortgage_rate * 1000) / 10}% rate, {property.mortgage_term_years === 0 ? "interest-only" : `${property.mortgage_term_years} years`}
+                                  </div>
+                                </div>
+                                <div className="text-right text-slate-300">
+                                  <div>£{Math.round(property_mortgage_balance(property)).toLocaleString()}</div>
+                                  <div className="text-xs text-slate-400">£{Math.round(property_mortgage_monthly_payment(property)).toLocaleString()}/mo</div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </>
+                    )}
+                  </section>
+
+                  <section className="rounded border border-slate-700/50 bg-slate-800/20 p-4">
                     <h3 className="text-sm font-medium text-slate-300">Expenditure summary</h3>
                     <p className="mt-1 text-sm font-semibold text-rose-400">
                       Grand total annual: £{grandTotalOutgoings.toLocaleString()}
@@ -1446,18 +1491,23 @@ export function ConfigWizard() {
                           )}
                         </li>
                       ))}
-                      {draft.mortgage && draft.mortgage.monthly_payment > 0 && (
+                      {draft.properties
+                        .filter((property) => property_mortgage_monthly_payment(property) > 0)
+                        .map((property) => {
+                          const monthly_payment = property_mortgage_monthly_payment(property);
+                          return (
                         <li className="flex items-center justify-between gap-4 rounded bg-slate-900/50 px-3 py-2 text-sm">
-                          <span className="text-slate-200">Mortgage</span>
+                          <span className="text-slate-200">{property.name} mortgage</span>
                           <span className="text-slate-300">
-                            £{draft.mortgage.monthly_payment.toLocaleString()}/mo → £{mortgageAnnual.toLocaleString()}/yr
+                            £{Math.round(monthly_payment).toLocaleString()}/mo → £{Math.round(monthly_payment * 12).toLocaleString()}/yr
                           </span>
                         </li>
-                      )}
+                          );
+                        })}
                     </ul>
                     <p className="mt-2 text-xs text-slate-500">
                       Expenses: £{totalExpensesAnnual.toLocaleString()}/yr
-                      {draft.mortgage ? ` + Mortgage: £${mortgageAnnual.toLocaleString()}/yr` : ""}
+                      {mortgageAnnual > 0 ? ` + Mortgage: £${Math.round(mortgageAnnual).toLocaleString()}/yr` : ""}
                     </p>
                   </section>
                 </div>

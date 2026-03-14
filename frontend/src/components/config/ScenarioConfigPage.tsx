@@ -159,7 +159,6 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0 }
   ],
   properties: [],
-  mortgage: { balance: 200000, annual_interest_rate: 0.04, monthly_payment: 1200 },
   expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
 };
 
@@ -315,11 +314,13 @@ export function ScenarioConfigPage() {
                           monthly_rental_income: p.monthly_rental_income,
                           rental_growth_rate: p.rental_growth_rate,
                           occupancy_rate: p.occupancy_rate,
+                          mortgage_ltv: p.mortgage_ltv,
+                          mortgage_rate: p.mortgage_rate,
+                          mortgage_term_years: p.mortgage_term_years,
                           annual_maintenance_cost: p.annual_maintenance_cost,
                           maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
                           withdrawal_priority: p.withdrawal_priority,
                         })),
-                        mortgage: scenario.mortgage ?? null,
                         expenses: scenario.expenses.map((e) => ({
                           name: e.name,
                           monthly_amount: e.monthly_amount,
@@ -454,11 +455,13 @@ export function ScenarioConfigPage() {
                 monthly_rental_income: p.monthly_rental_income,
                 rental_growth_rate: p.rental_growth_rate,
                 occupancy_rate: p.occupancy_rate,
+                mortgage_ltv: p.mortgage_ltv,
+                mortgage_rate: p.mortgage_rate,
+                mortgage_term_years: p.mortgage_term_years,
                 annual_maintenance_cost: p.annual_maintenance_cost,
                 maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
                 withdrawal_priority: p.withdrawal_priority,
               })),
-              mortgage: scenario.mortgage ?? null,
               expenses: scenario.expenses.map((e) => ({
                 name: e.name,
                 monthly_amount: e.monthly_amount,

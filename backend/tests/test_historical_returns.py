@@ -128,7 +128,7 @@ class TestBootstrapReturnGeneration:
             salary_by_person={},
             pension_by_person={"alice": pension},
             assets=[isa, cash],
-            mortgage=None,
+            properties=[],
             expenses=[],
             assumptions=assumptions,
         )
