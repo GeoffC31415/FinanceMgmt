@@ -39,6 +39,7 @@ export function IncomeChart({
   percentile = 50
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
+  const [showInvestmentReturns, setShowInvestmentReturns] = useState(true);
 
   // Clamp values for log scale (must be > 0)
   const LOG_MIN = 10000;
@@ -73,15 +74,26 @@ export function IncomeChart({
             </span>
           )}
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            checked={useLogScale}
-            onChange={(e) => setUseLogScale(e.target.checked)}
-            className="rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-          />
-          Log scale
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={showInvestmentReturns}
+              onChange={(e) => setShowInvestmentReturns(e.target.checked)}
+              className="rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+            />
+            Investment returns
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={useLogScale}
+              onChange={(e) => setUseLogScale(e.target.checked)}
+              className="rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+            />
+            Log scale
+          </label>
+        </div>
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -204,15 +216,17 @@ export function IncomeChart({
               yAxisId="left"
               name="state_pension_income"
             />
-            <Line
-              type="monotone"
-              dataKey="investment_returns"
-              stroke="#60a5fa"
-              strokeWidth={1.5}
-              dot={false}
-              yAxisId="left"
-              name="investment_returns"
-            />
+            {showInvestmentReturns && (
+              <Line
+                type="monotone"
+                dataKey="investment_returns"
+                stroke="#60a5fa"
+                strokeWidth={1.5}
+                dot={false}
+                yAxisId="left"
+                name="investment_returns"
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

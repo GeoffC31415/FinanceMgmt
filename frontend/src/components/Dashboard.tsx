@@ -65,7 +65,7 @@ function adjustForInflation(
  */
 function applyInflationAdjustment(result: SimulationResponse): SimulationResponse {
   const { years, inflation_rate, start_year } = result;
-  const adjust = (arr: number[]) => adjustForInflation(arr, years, inflation_rate, start_year);
+  const adjust = (arr: number[]) => arr?.length ? adjustForInflation(arr, years, inflation_rate, start_year) : (arr ?? []);
   
   return {
     ...result,
@@ -107,6 +107,10 @@ function applyInflationAdjustment(result: SimulationResponse): SimulationRespons
     total_liabilities_median: adjust(result.total_liabilities_median),
     debt_balance_median: adjust(result.debt_balance_median),
     debt_interest_paid_median: adjust(result.debt_interest_paid_median),
+    property_value_median: adjust(result.property_value_median),
+    property_returns_median: adjust(result.property_returns_median),
+    property_rental_income_median: adjust(result.property_rental_income_median),
+    property_maintenance_median: adjust(result.property_maintenance_median),
     // Percentage fields don't get adjusted
   };
 }
@@ -190,6 +194,13 @@ export function Dashboard() {
   const display_result = useMemo(() => {
     if (!result) return null;
     return show_real_values ? applyInflationAdjustment(result) : result;
+  }, [result, show_real_values]);
+
+  // Deflation factor for end-year point values (e.g. p10 net worth in sensitivity chart)
+  const end_year_deflator = useMemo(() => {
+    if (!result || !show_real_values) return 1;
+    const years_elapsed = result.years[result.years.length - 1] - result.start_year;
+    return 1 / Math.pow(1 + result.inflation_rate, years_elapsed);
   }, [result, show_real_values]);
 
   useEffect(() => {
@@ -295,27 +306,27 @@ export function Dashboard() {
 
   // Computed overview metrics for the metric cards
   const overview_metrics = useMemo(() => {
-    if (!result) return null;
-    const last_idx = result.years.length - 1;
+    if (!display_result) return null;
+    const last_idx = display_result.years.length - 1;
     if (last_idx < 0) return null;
 
-    const final_bankruptcy = result.is_bankrupt_median[last_idx] ?? 0;
+    const final_bankruptcy = display_result.is_bankrupt_median[last_idx] ?? 0;
     const success_rate = 100 - final_bankruptcy;
 
     // Peak net worth (median)
     let peak_value = -Infinity;
-    let peak_year = result.years[0];
+    let peak_year = display_result.years[0];
     for (let i = 0; i <= last_idx; i++) {
-      if (result.net_worth_median[i] > peak_value) {
-        peak_value = result.net_worth_median[i];
-        peak_year = result.years[i];
+      if (display_result.net_worth_median[i] > peak_value) {
+        peak_value = display_result.net_worth_median[i];
+        peak_year = display_result.years[i];
       }
     }
 
-    const final_net_worth_median = result.net_worth_median[last_idx];
-    const final_net_worth_p10 = result.net_worth_p10[last_idx];
-    const final_net_worth_p90 = result.net_worth_p90[last_idx];
-    const final_year = result.years[last_idx];
+    const final_net_worth_median = display_result.net_worth_median[last_idx];
+    const final_net_worth_p10 = display_result.net_worth_p10[last_idx];
+    const final_net_worth_p90 = display_result.net_worth_p90[last_idx];
+    const final_year = display_result.years[last_idx];
 
     return {
       success_rate,
@@ -326,7 +337,7 @@ export function Dashboard() {
       final_net_worth_p90,
       final_year,
     };
-  }, [result]);
+  }, [display_result]);
 
   // Initialize cached simulation session when scenario or end_year changes.
   useEffect(() => {
@@ -702,9 +713,9 @@ export function Dashboard() {
                 )}
 
                 {/* Auto-Generated Insights */}
-                {result && selected && (
+                {display_result && selected && (
                   <OverviewInsights
-                    result={result}
+                    result={display_result}
                     safe_withdrawal={safe_withdrawal_result}
                     risk_threshold={risk_threshold}
                     current_fun_fund={annual_spend_target}
@@ -828,6 +839,7 @@ export function Dashboard() {
                       current_fun_fund={annual_spend_target}
                       max_safe_fun_fund={safe_withdrawal_result.max_safe_fun_fund}
                       risk_threshold={risk_threshold}
+                      net_worth_deflator={end_year_deflator}
                     />
                     <RiskTimelineChart
                       years={display_result.years}

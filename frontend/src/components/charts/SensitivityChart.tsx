@@ -17,6 +17,7 @@ type Props = {
   current_fun_fund: number;
   max_safe_fun_fund: number;
   risk_threshold: number;
+  net_worth_deflator?: number;
 };
 
 export function SensitivityChart({
@@ -24,6 +25,7 @@ export function SensitivityChart({
   current_fun_fund,
   max_safe_fun_fund,
   risk_threshold,
+  net_worth_deflator = 1,
 }: Props) {
   if (sensitivity_curve.length === 0) return null;
 
@@ -31,7 +33,7 @@ export function SensitivityChart({
     fun_fund: pt.fun_fund,
     bankruptcy_pct: pt.bankruptcy_pct,
     depletion_pct: pt.depletion_pct,
-    p10_net_worth: pt.p10_final_net_worth,
+    p10_net_worth: pt.p10_final_net_worth * net_worth_deflator,
   }));
 
   return (
