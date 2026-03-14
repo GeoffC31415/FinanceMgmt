@@ -3,6 +3,7 @@ from backend.schemas.expenses import ExpenseCreate, ExpenseRead
 from backend.schemas.income import IncomeCreate, IncomeRead
 from backend.schemas.mortgage import MortgageCreate, MortgageRead
 from backend.schemas.person import PersonCreate, PersonRead
+from backend.schemas.property import PropertyCreate, PropertyRead
 from backend.schemas.scenario import ScenarioCreate, ScenarioRead
 from backend.schemas.simulation import SimulationRequest, SimulationResponse
 
@@ -17,6 +18,8 @@ __all__ = [
     "MortgageRead",
     "PersonCreate",
     "PersonRead",
+    "PropertyCreate",
+    "PropertyRead",
     "ScenarioCreate",
     "ScenarioRead",
     "SimulationRequest",

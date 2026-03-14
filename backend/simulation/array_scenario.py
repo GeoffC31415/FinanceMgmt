@@ -71,6 +71,17 @@ class ArrayScenario:
     asset_contrib_end_retirement: np.ndarray
     asset_names: list[str]
 
+    property_person_idx: np.ndarray
+    property_withdrawal_priority: np.ndarray
+    property_values: np.ndarray
+    property_cost_bases: np.ndarray
+    property_monthly_rental_income: np.ndarray
+    property_rental_growth_rate: np.ndarray
+    property_occupancy_rate: np.ndarray
+    property_annual_maintenance_cost: np.ndarray
+    property_maintenance_is_inflation_linked: np.ndarray
+    property_names: list[str]
+
     pension_person_idx: np.ndarray
     pension_balances: np.ndarray
     pension_keys: list[str]
@@ -203,6 +214,37 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         dtype=np.int8,
     )
 
+    properties = list(scenario.properties)
+    property_names = [p.name for p in properties]
+    property_person_idx = np.array(
+        [person_key_to_idx.get(getattr(p, "person_key", None), 0) if getattr(p, "person_key", None) else 0 for p in properties],
+        dtype=np.int32,
+    ) if properties else np.zeros(0, dtype=np.int32)
+    property_withdrawal_priority = np.array(
+        [int(getattr(p, "withdrawal_priority", 0)) for p in properties], dtype=np.int32
+    )
+    property_values = np.array([float(getattr(p, "value", 0.0)) for p in properties], dtype=np.float64)
+    property_cost_bases = np.array(
+        [float(getattr(p, "cost_basis", getattr(p, "value", 0.0))) for p in properties],
+        dtype=np.float64,
+    )
+    property_monthly_rental_income = np.array(
+        [float(getattr(p, "monthly_rental_income", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_rental_growth_rate = np.array(
+        [float(getattr(p, "rental_growth_rate", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_occupancy_rate = np.array(
+        [float(getattr(p, "occupancy_rate", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_annual_maintenance_cost = np.array(
+        [float(getattr(p, "annual_maintenance_cost", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_maintenance_is_inflation_linked = np.array(
+        [1 if getattr(p, "maintenance_is_inflation_linked", True) else 0 for p in properties],
+        dtype=np.int8,
+    )
+
     pension_keys = list(returns.pension_keys)
     pension_person_idx = np.array(
         [next((i for i, p in enumerate(scenario.people) if p.key == key), -1) for key in pension_keys],
@@ -278,6 +320,16 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         asset_annual_contrib=asset_annual_contrib,
         asset_contrib_end_retirement=asset_contrib_end_retirement,
         asset_names=asset_names,
+        property_person_idx=property_person_idx,
+        property_withdrawal_priority=property_withdrawal_priority,
+        property_values=property_values,
+        property_cost_bases=property_cost_bases,
+        property_monthly_rental_income=property_monthly_rental_income,
+        property_rental_growth_rate=property_rental_growth_rate,
+        property_occupancy_rate=property_occupancy_rate,
+        property_annual_maintenance_cost=property_annual_maintenance_cost,
+        property_maintenance_is_inflation_linked=property_maintenance_is_inflation_linked,
+        property_names=property_names,
         pension_person_idx=pension_person_idx,
         pension_balances=pension_balances,
         pension_keys=pension_keys,

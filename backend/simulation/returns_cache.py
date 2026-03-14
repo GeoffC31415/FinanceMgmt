@@ -28,6 +28,12 @@ class ReturnsMatrix:
     initial_asset_balances: np.ndarray
     initial_asset_cost_bases: np.ndarray
     asset_returns: np.ndarray
+    property_names: list[str]
+    property_person_keys: list[str | None]
+    property_withdrawal_priority: np.ndarray
+    initial_property_values: np.ndarray
+    initial_property_cost_bases: np.ndarray
+    property_returns: np.ndarray
     pension_keys: list[str]
     initial_pension_balances: np.ndarray
     pension_returns: np.ndarray
@@ -218,6 +224,34 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
             size=(iterations, n_years, n_assets),
         ).astype(np.float64)
 
+    properties = list(scenario.properties)
+    property_names = [str(getattr(p, "name", "")) for p in properties]
+    property_person_keys = [getattr(p, "person_key", None) for p in properties]
+    property_withdrawal_priority = np.array(
+        [int(getattr(p, "withdrawal_priority", 0)) for p in properties], dtype=np.int32
+    )
+    initial_property_values = np.array(
+        [float(getattr(p, "value", 0.0)) for p in properties], dtype=np.float64
+    )
+    initial_property_cost_bases = np.array(
+        [float(getattr(p, "cost_basis", getattr(p, "value", 0.0))) for p in properties],
+        dtype=np.float64,
+    )
+    property_means = np.array(
+        [float(getattr(p, "appreciation_rate_mean", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_stds = np.array(
+        [float(getattr(p, "appreciation_rate_std", 0.0)) for p in properties], dtype=np.float64
+    )
+    if len(properties):
+        property_returns = rng.normal(
+            loc=property_means.reshape(1, 1, -1),
+            scale=property_stds.reshape(1, 1, -1),
+            size=(iterations, n_years, len(properties)),
+        ).astype(np.float64)
+    else:
+        property_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
+
     # Pensions: model per-person (keyed) returns using each pension's configured growth rates.
     pension_keys = sorted(list(scenario.pension_by_person.keys()))
     if pension_keys:
@@ -256,6 +290,12 @@ def generate_returns_matrix(*, scenario: SimulationScenario, iterations: int, se
         initial_asset_balances=initial_asset_balances,
         initial_asset_cost_bases=initial_asset_cost_bases,
         asset_returns=asset_returns,
+        property_names=property_names,
+        property_person_keys=property_person_keys,
+        property_withdrawal_priority=property_withdrawal_priority,
+        initial_property_values=initial_property_values,
+        initial_property_cost_bases=initial_property_cost_bases,
+        property_returns=property_returns,
         pension_keys=pension_keys,
         initial_pension_balances=initial_pension_balances,
         pension_returns=pension_returns,
@@ -319,6 +359,34 @@ def generate_returns_matrix_with_bond_override(
                 shared_equity_returns * (1.0 - bond_pct) + shared_bond_returns * bond_pct
             )
 
+    properties = list(scenario.properties)
+    property_names = [str(getattr(p, "name", "")) for p in properties]
+    property_person_keys = [getattr(p, "person_key", None) for p in properties]
+    property_withdrawal_priority = np.array(
+        [int(getattr(p, "withdrawal_priority", 0)) for p in properties], dtype=np.int32
+    )
+    initial_property_values = np.array(
+        [float(getattr(p, "value", 0.0)) for p in properties], dtype=np.float64
+    )
+    initial_property_cost_bases = np.array(
+        [float(getattr(p, "cost_basis", getattr(p, "value", 0.0))) for p in properties],
+        dtype=np.float64,
+    )
+    property_means = np.array(
+        [float(getattr(p, "appreciation_rate_mean", 0.0)) for p in properties], dtype=np.float64
+    )
+    property_stds = np.array(
+        [float(getattr(p, "appreciation_rate_std", 0.0)) for p in properties], dtype=np.float64
+    )
+    if len(properties):
+        property_returns = rng.normal(
+            loc=property_means.reshape(1, 1, -1),
+            scale=property_stds.reshape(1, 1, -1),
+            size=(iterations, n_years, len(properties)),
+        ).astype(np.float64)
+    else:
+        property_returns = np.zeros((iterations, n_years, 0), dtype=np.float64)
+
     pension_keys = sorted(list(scenario.pension_by_person.keys()))
     if pension_keys:
         initial_pension_balances = np.array(
@@ -348,6 +416,12 @@ def generate_returns_matrix_with_bond_override(
         initial_asset_balances=initial_asset_balances,
         initial_asset_cost_bases=initial_asset_cost_bases,
         asset_returns=asset_returns,
+        property_names=property_names,
+        property_person_keys=property_person_keys,
+        property_withdrawal_priority=property_withdrawal_priority,
+        initial_property_values=initial_property_values,
+        initial_property_cost_bases=initial_property_cost_bases,
+        property_returns=property_returns,
         pension_keys=pension_keys,
         initial_pension_balances=initial_pension_balances,
         pension_returns=pension_returns,

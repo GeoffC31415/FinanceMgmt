@@ -58,6 +58,7 @@ class SimulationResponse(BaseModel):
     pension_balance_median: list[float]
     cash_balance_median: list[float]
     gia_balance_median: list[float]
+    property_value_median: list[float]
     total_assets_median: list[float]
 
     # Per-type investment returns
@@ -65,6 +66,7 @@ class SimulationResponse(BaseModel):
     gia_returns_median: list[float]
     cash_returns_median: list[float]
     pension_returns_median: list[float]
+    property_returns_median: list[float]
 
     # Per-type contributions
     isa_contributions_median: list[float]
@@ -74,6 +76,8 @@ class SimulationResponse(BaseModel):
     isa_withdrawals_median: list[float]
     gia_withdrawals_median: list[float]
     pension_withdrawals_median: list[float]
+    property_rental_income_median: list[float]
+    property_maintenance_median: list[float]
     
     # Liabilities
     mortgage_balance_median: list[float]

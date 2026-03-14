@@ -63,13 +63,21 @@ F_PENSION_WITHDRAWALS = 36
 
 # GIA balance (computed server-side)
 F_GIA_BALANCE = 37
+F_PROPERTY_VALUE = 38
+F_PROPERTY_RENTAL_INCOME = 39
+F_PROPERTY_MAINTENANCE = 40
+F_PROPERTY_RETURNS = 41
 
-N_FIELDS = 38
+N_FIELDS = 42
 
 # Asset type codes
 ASSET_CASH = 0
 ASSET_ISA = 1
 ASSET_GIA = 2
+
+WITHDRAW_ASSET = 0
+WITHDRAW_PENSION = 1
+WITHDRAW_PROPERTY = 2
 
 
 def run_simulation(
@@ -96,21 +104,24 @@ def _run_monte_carlo_fast(
     iterations = returns.iterations
     n_years = returns.n_years
     n_assets = len(sc.asset_names)
+    n_properties = len(sc.property_names)
     n_pensions = len(sc.pension_keys)
 
-    # Build withdrawal order: (priority, is_pension, asset_idx)
+    # Build withdrawal order across assets, pensions, and properties.
     # Sort descending by priority, ascending by name (approximated by index)
     withdrawal_items = []
     for i in range(n_assets):
         if sc.asset_types[i] != ASSET_CASH:
-            withdrawal_items.append((sc.asset_withdrawal_priority[i], 0, i))
-    withdrawal_items.append((sc.pension_withdrawal_priority, 1, -1))
+            withdrawal_items.append((sc.asset_withdrawal_priority[i], WITHDRAW_ASSET, i))
+    for i in range(n_properties):
+        withdrawal_items.append((sc.property_withdrawal_priority[i], WITHDRAW_PROPERTY, i))
+    withdrawal_items.append((sc.pension_withdrawal_priority, WITHDRAW_PENSION, -1))
     # Sort: highest priority first, then by asset index
     withdrawal_items.sort(key=lambda x: (-x[0], x[2]))
     
     withdrawal_priority = np.array([w[0] for w in withdrawal_items], dtype=np.int32)
-    withdrawal_is_pension = np.array([w[1] for w in withdrawal_items], dtype=np.int8)
-    withdrawal_asset_idx = np.array([w[2] for w in withdrawal_items], dtype=np.int32)
+    withdrawal_kind = np.array([w[1] for w in withdrawal_items], dtype=np.int8)
+    withdrawal_idx = np.array([w[2] for w in withdrawal_items], dtype=np.int32)
 
     # Find cash asset index
     cash_idx = -1
@@ -161,6 +172,17 @@ def _run_monte_carlo_fast(
         asset_returns=returns.asset_returns,
         cash_idx=cash_idx,
         n_assets=n_assets,
+        # Properties
+        property_person_idx=sc.property_person_idx,
+        property_values=sc.property_values.copy(),
+        property_cost_bases=sc.property_cost_bases.copy(),
+        property_monthly_rental_income=sc.property_monthly_rental_income.copy(),
+        property_rental_growth_rate=sc.property_rental_growth_rate,
+        property_occupancy_rate=sc.property_occupancy_rate,
+        property_annual_maintenance_cost=sc.property_annual_maintenance_cost.copy(),
+        property_maintenance_is_inflation_linked=sc.property_maintenance_is_inflation_linked,
+        property_returns=returns.property_returns,
+        n_properties=n_properties,
         # Pensions
         pension_person_idx=sc.pension_person_idx,
         pension_balances=sc.pension_balances.copy(),
@@ -177,8 +199,8 @@ def _run_monte_carlo_fast(
         # Scenario params
         annual_spend_target=sc.annual_spend_target,
         withdrawal_priority=withdrawal_priority,
-        withdrawal_is_pension=withdrawal_is_pension,
-        withdrawal_asset_idx=withdrawal_asset_idx,
+        withdrawal_kind=withdrawal_kind,
+        withdrawal_idx=withdrawal_idx,
         # Assumptions
         inflation_rate=a.inflation_rate,
         isa_annual_limit=a.isa_annual_limit,
@@ -215,6 +237,7 @@ def _run_monte_carlo_fast(
         "isa_contributions", "gia_contributions", "pension_contributions_total",
         "isa_withdrawals", "gia_withdrawals", "pension_withdrawals",
         "gia_balance",
+        "property_value", "property_rental_income", "property_maintenance", "property_returns",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -337,6 +360,42 @@ def _step_mortgage(
     return balance, payment_total
 
 
+@njit(cache=True)
+def _sell_taxable_holding(
+    balance: float,
+    cost_basis: float,
+    target_net: float,
+    cgt_allowance_remaining: float,
+    cgt_rate: float,
+) -> tuple:
+    """Returns (gross, net, tax, allowance_used, basis_reduction)."""
+    if balance <= 0 or target_net <= 0:
+        return 0.0, 0.0, 0.0, 0.0, 0.0
+
+    total_gains = max(0.0, balance - cost_basis)
+    gains_ratio = total_gains / balance if balance > 0 else 0.0
+
+    if gains_ratio * cgt_rate > 0 and cgt_allowance_remaining <= 0:
+        desired_gross = target_net / (1.0 - gains_ratio * cgt_rate)
+    elif gains_ratio > 0 and cgt_rate > 0:
+        allowance_gross = cgt_allowance_remaining / gains_ratio if gains_ratio > 0 else target_net
+        if target_net <= allowance_gross:
+            desired_gross = target_net
+        else:
+            desired_gross = (target_net - cgt_allowance_remaining * cgt_rate) / (1.0 - gains_ratio * cgt_rate)
+    else:
+        desired_gross = target_net
+
+    gross = min(balance, max(0.0, desired_gross))
+    gains_realized = gross * gains_ratio
+    allowance_used = min(cgt_allowance_remaining, gains_realized)
+    taxable_gains = max(0.0, gains_realized - allowance_used)
+    tax = taxable_gains * cgt_rate
+    net = gross - tax
+    basis_reduction = cost_basis * (gross / balance) if balance > 0 and cost_basis > 0 else 0.0
+    return gross, net, tax, allowance_used, basis_reduction
+
+
 @njit(parallel=True, cache=True)
 def _simulate_all_iterations(
     iterations: int,
@@ -378,6 +437,17 @@ def _simulate_all_iterations(
     asset_returns: np.ndarray,
     cash_idx: int,
     n_assets: int,
+    # Properties
+    property_person_idx: np.ndarray,
+    property_values: np.ndarray,
+    property_cost_bases: np.ndarray,
+    property_monthly_rental_income: np.ndarray,
+    property_rental_growth_rate: np.ndarray,
+    property_occupancy_rate: np.ndarray,
+    property_annual_maintenance_cost: np.ndarray,
+    property_maintenance_is_inflation_linked: np.ndarray,
+    property_returns: np.ndarray,
+    n_properties: int,
     # Pensions
     pension_person_idx: np.ndarray,
     pension_balances: np.ndarray,
@@ -394,8 +464,8 @@ def _simulate_all_iterations(
     # Scenario
     annual_spend_target: float,
     withdrawal_priority: np.ndarray,
-    withdrawal_is_pension: np.ndarray,
-    withdrawal_asset_idx: np.ndarray,
+    withdrawal_kind: np.ndarray,
+    withdrawal_idx: np.ndarray,
     # Assumptions
     inflation_rate: float,
     isa_annual_limit: float,
@@ -433,6 +503,10 @@ def _simulate_all_iterations(
         # Per-iteration state copies
         it_asset_balances = asset_balances.copy()
         it_asset_cost_bases = asset_cost_bases.copy()
+        it_property_values = property_values.copy()
+        it_property_cost_bases = property_cost_bases.copy()
+        it_property_monthly_rents = property_monthly_rental_income.copy()
+        it_property_maintenance_costs = property_annual_maintenance_cost.copy()
         it_pension_balances = pension_balances.copy()
         it_mortgage_balance = mortgage_balance
         it_salary_gross = salary_gross_annual.copy()
@@ -459,13 +533,16 @@ def _simulate_all_iterations(
                 isa_balance = 0.0
                 cash_balance = 0.0
                 total_asset_balance = 0.0
+                property_value_total = 0.0
                 for a_idx in range(n_assets):
                     total_asset_balance += it_asset_balances[a_idx]
                     if asset_types[a_idx] == ASSET_ISA:
                         isa_balance += it_asset_balances[a_idx]
                     elif asset_types[a_idx] == ASSET_CASH:
                         cash_balance += it_asset_balances[a_idx]
-                total_assets = total_asset_balance + pension_balance
+                for prop_idx in range(n_properties):
+                    property_value_total += it_property_values[prop_idx]
+                total_assets = total_asset_balance + property_value_total + pension_balance
                 total_liabilities = it_mortgage_balance + it_debt_balance
                 net_worth = total_assets - total_liabilities
 
@@ -480,6 +557,7 @@ def _simulate_all_iterations(
                 out[it, y_idx, F_IS_BANKRUPT] = 1.0
                 out[it, y_idx, F_DEBT_BALANCE] = it_debt_balance
                 out[it, y_idx, F_DEBT_INTEREST_PAID] = 0.0
+                out[it, y_idx, F_PROPERTY_VALUE] = property_value_total
                 continue
 
             # Check retirement status for each adult person (skip children)
@@ -556,6 +634,21 @@ def _simulate_all_iterations(
                 if 0 <= r_p_idx < n_people:
                     per_person_rental[r_p_idx] += it_rental_gross[r]
                 it_rental_gross[r] *= (1.0 + rental_growth_rate[r])
+
+            property_rental_gross = 0.0
+            property_maintenance_total = 0.0
+            for prop_idx in range(n_properties):
+                property_rent = it_property_monthly_rents[prop_idx] * 12.0 * property_occupancy_rate[prop_idx]
+                property_rental_gross += property_rent
+                owner_idx = property_person_idx[prop_idx] if prop_idx < len(property_person_idx) else 0
+                if 0 <= owner_idx < n_people:
+                    per_person_rental[owner_idx] += property_rent
+                property_maintenance_total += it_property_maintenance_costs[prop_idx]
+                it_property_monthly_rents[prop_idx] *= (1.0 + property_rental_growth_rate[prop_idx])
+                if property_maintenance_is_inflation_linked[prop_idx] == 1:
+                    it_property_maintenance_costs[prop_idx] *= (1.0 + inflation_rate)
+
+            rental_income_gross += property_rental_gross
 
             # Process gift income (tax-free, no per-person tax needed)
             gift_income_total = 0.0
@@ -639,7 +732,7 @@ def _simulate_all_iterations(
 
             # Extra retirement spending
             extra_retirement_spend = it_annual_spend if is_all_retired else 0.0
-            total_outflows = expense_total + mortgage_payment + extra_retirement_spend
+            total_outflows = expense_total + mortgage_payment + property_maintenance_total + extra_retirement_spend
             # Inflate annual spend for next year (after use)
             it_annual_spend *= (1.0 + inflation_rate)
 
@@ -672,7 +765,7 @@ def _simulate_all_iterations(
                     if shortfall <= 0:
                         break
 
-                    if withdrawal_is_pension[w_idx] == 1:
+                    if withdrawal_kind[w_idx] == WITHDRAW_PENSION:
                         # Pension withdrawal
                         # Check eligibility (any person with pension at access age)
                         eligible_pension_balance = 0.0
@@ -711,9 +804,9 @@ def _simulate_all_iterations(
                                         if age >= pension_access_age and it_pension_balances[pen_idx] > 0:
                                             proportion = it_pension_balances[pen_idx] / eligible_pension_balance
                                             it_pension_balances[pen_idx] -= gross * proportion
-                    else:
+                    elif withdrawal_kind[w_idx] == WITHDRAW_ASSET:
                         # Asset withdrawal
-                        a_idx = withdrawal_asset_idx[w_idx]
+                        a_idx = withdrawal_idx[w_idx]
                         if a_idx < 0 or a_idx >= n_assets:
                             continue
                         if it_asset_balances[a_idx] <= 0:
@@ -730,44 +823,14 @@ def _simulate_all_iterations(
                             isa_withdrawals += gross
 
                         elif asset_type == ASSET_GIA:
-                            # GIA: solve for gross that yields shortfall as net after CGT
                             balance = it_asset_balances[a_idx]
                             cost_basis = it_asset_cost_bases[a_idx]
-
-                            total_gains = max(0.0, balance - cost_basis)
-                            gains_ratio = total_gains / balance if balance > 0 else 0.0
-
-                            # Compute gross needed to get shortfall net
-                            if gains_ratio * cgt_rate > 0 and cgt_allowance_remaining <= 0:
-                                # All gains taxed: net = gross * (1 - gains_ratio * cgt_rate)
-                                desired_gross = shortfall / (1.0 - gains_ratio * cgt_rate)
-                            elif gains_ratio > 0 and cgt_rate > 0:
-                                # Some gains may be sheltered by allowance
-                                # First try: gross where gains exceed allowance
-                                allowance_gross = cgt_allowance_remaining / gains_ratio if gains_ratio > 0 else shortfall
-                                if shortfall <= allowance_gross:
-                                    # All gains within allowance, no tax
-                                    desired_gross = shortfall
-                                else:
-                                    # net = gross - (gross * gains_ratio - allowance) * cgt_rate
-                                    # net = gross * (1 - gains_ratio * cgt_rate) + allowance * cgt_rate
-                                    desired_gross = (shortfall - cgt_allowance_remaining * cgt_rate) / (1.0 - gains_ratio * cgt_rate)
-                            else:
-                                desired_gross = shortfall
-
-                            gross = min(balance, max(0.0, desired_gross))
-                            gains_realized = gross * gains_ratio
-
-                            allowance_used = min(cgt_allowance_remaining, gains_realized)
-                            taxable_gains = max(0.0, gains_realized - allowance_used)
-                            tax = taxable_gains * cgt_rate
+                            gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
+                                balance, cost_basis, shortfall, cgt_allowance_remaining, cgt_rate
+                            )
                             cgt_allowance_remaining -= allowance_used
                             cgt_paid += tax
-
-                            net = gross - tax
-                            if balance > 0 and cost_basis > 0:
-                                basis_reduction = cost_basis * (gross / balance)
-                                it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
+                            it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
 
                             it_asset_balances[a_idx] -= gross
                             it_asset_balances[cash_idx] += net
@@ -780,6 +843,24 @@ def _simulate_all_iterations(
                             it_asset_balances[a_idx] -= gross
                             it_asset_balances[cash_idx] += gross
                             shortfall -= gross
+                    else:
+                        prop_idx = withdrawal_idx[w_idx]
+                        if prop_idx < 0 or prop_idx >= n_properties:
+                            continue
+                        if it_property_values[prop_idx] <= 0:
+                            continue
+
+                        balance = it_property_values[prop_idx]
+                        cost_basis = it_property_cost_bases[prop_idx]
+                        gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
+                            balance, cost_basis, shortfall, cgt_allowance_remaining, cgt_rate
+                        )
+                        cgt_allowance_remaining -= allowance_used
+                        cgt_paid += tax
+                        it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        it_property_values[prop_idx] -= gross
+                        it_asset_balances[cash_idx] += net
+                        shortfall -= net
 
                 # Track negative cash as debt (don't clamp to 0)
                 if it_asset_balances[cash_idx] < 0:
@@ -796,7 +877,7 @@ def _simulate_all_iterations(
                     if debt_to_repay <= 0:
                         break
                         
-                    if withdrawal_is_pension[w_idx] == 1:
+                    if withdrawal_kind[w_idx] == WITHDRAW_PENSION:
                         # Pension withdrawal to repay debt
                         eligible_pension_balance = 0.0
                         for pen_idx in range(n_pensions):
@@ -835,9 +916,9 @@ def _simulate_all_iterations(
                                         if age >= pension_access_age and it_pension_balances[pen_idx] > 0:
                                             proportion = it_pension_balances[pen_idx] / eligible_pension_balance
                                             it_pension_balances[pen_idx] -= gross * proportion
-                    else:
+                    elif withdrawal_kind[w_idx] == WITHDRAW_ASSET:
                         # Asset withdrawal to repay debt
-                        a_idx = withdrawal_asset_idx[w_idx]
+                        a_idx = withdrawal_idx[w_idx]
                         if a_idx < 0 or a_idx >= n_assets:
                             continue
                         if it_asset_balances[a_idx] <= 0:
@@ -855,43 +936,39 @@ def _simulate_all_iterations(
                             isa_withdrawals += gross
                             
                         elif asset_type == ASSET_GIA:
-                            # GIA: solve for gross that yields debt_to_repay as net after CGT
                             balance = it_asset_balances[a_idx]
                             cost_basis = it_asset_cost_bases[a_idx]
-
-                            total_gains = max(0.0, balance - cost_basis)
-                            gains_ratio = total_gains / balance if balance > 0 else 0.0
-
-                            if gains_ratio * cgt_rate > 0 and cgt_allowance_remaining <= 0:
-                                desired_gross = debt_to_repay / (1.0 - gains_ratio * cgt_rate)
-                            elif gains_ratio > 0 and cgt_rate > 0:
-                                allowance_gross = cgt_allowance_remaining / gains_ratio if gains_ratio > 0 else debt_to_repay
-                                if debt_to_repay <= allowance_gross:
-                                    desired_gross = debt_to_repay
-                                else:
-                                    desired_gross = (debt_to_repay - cgt_allowance_remaining * cgt_rate) / (1.0 - gains_ratio * cgt_rate)
-                            else:
-                                desired_gross = debt_to_repay
-
-                            gross = min(balance, max(0.0, desired_gross))
-                            gains_realized = gross * gains_ratio
-
-                            allowance_used = min(cgt_allowance_remaining, gains_realized)
-                            taxable_gains = max(0.0, gains_realized - allowance_used)
-                            tax = taxable_gains * cgt_rate
+                            gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
+                                balance, cost_basis, debt_to_repay, cgt_allowance_remaining, cgt_rate
+                            )
                             cgt_allowance_remaining -= allowance_used
                             cgt_paid += tax
-
-                            net = gross - tax
-                            if balance > 0 and cost_basis > 0:
-                                basis_reduction = cost_basis * (gross / balance)
-                                it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
+                            it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
 
                             it_asset_balances[a_idx] -= gross
                             actual_repayment = min(net, it_debt_balance)
                             it_debt_balance -= actual_repayment
                             debt_to_repay -= actual_repayment
                             gia_withdrawals += gross
+                    else:
+                        prop_idx = withdrawal_idx[w_idx]
+                        if prop_idx < 0 or prop_idx >= n_properties:
+                            continue
+                        if it_property_values[prop_idx] <= 0:
+                            continue
+
+                        balance = it_property_values[prop_idx]
+                        cost_basis = it_property_cost_bases[prop_idx]
+                        gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
+                            balance, cost_basis, debt_to_repay, cgt_allowance_remaining, cgt_rate
+                        )
+                        cgt_allowance_remaining -= allowance_used
+                        cgt_paid += tax
+                        it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        it_property_values[prop_idx] -= gross
+                        actual_repayment = min(net, it_debt_balance)
+                        it_debt_balance -= actual_repayment
+                        debt_to_repay -= actual_repayment
 
             # Invest excess cash
             if cash_idx >= 0:
@@ -940,6 +1017,7 @@ def _simulate_all_iterations(
             isa_returns = 0.0
             gia_returns = 0.0
             cash_returns = 0.0
+            property_investment_return = 0.0
             for a_idx in range(n_assets):
                 ret = asset_returns[it, y_idx, a_idx]
                 inv_return = it_asset_balances[a_idx] * ret
@@ -951,6 +1029,13 @@ def _simulate_all_iterations(
                     gia_returns += inv_return
                 elif asset_types[a_idx] == ASSET_CASH:
                     cash_returns += inv_return
+
+            for prop_idx in range(n_properties):
+                ret = property_returns[it, y_idx, prop_idx]
+                inv_return = it_property_values[prop_idx] * ret
+                it_property_values[prop_idx] += inv_return
+                investment_returns += inv_return
+                property_investment_return += inv_return
 
             # Apply pension growth
             pension_investment_return = 0.0
@@ -973,6 +1058,7 @@ def _simulate_all_iterations(
             isa_balance = 0.0
             cash_balance = 0.0
             gia_balance = 0.0
+            property_value_total = 0.0
             total_asset_balance = 0.0
             for a_idx in range(n_assets):
                 total_asset_balance += it_asset_balances[a_idx]
@@ -983,7 +1069,10 @@ def _simulate_all_iterations(
                 elif asset_types[a_idx] == ASSET_GIA:
                     gia_balance += it_asset_balances[a_idx]
 
-            total_assets = total_asset_balance + pension_balance
+            for prop_idx in range(n_properties):
+                property_value_total += it_property_values[prop_idx]
+
+            total_assets = total_asset_balance + property_value_total + pension_balance
             total_liabilities = it_mortgage_balance + it_debt_balance
             net_worth = total_assets - total_liabilities
 
@@ -1038,6 +1127,10 @@ def _simulate_all_iterations(
             out[it, y_idx, F_PENSION_WITHDRAWALS] = pension_withdrawals
 
             out[it, y_idx, F_GIA_BALANCE] = gia_balance
+            out[it, y_idx, F_PROPERTY_VALUE] = property_value_total
+            out[it, y_idx, F_PROPERTY_RENTAL_INCOME] = property_rental_gross
+            out[it, y_idx, F_PROPERTY_MAINTENANCE] = property_maintenance_total
+            out[it, y_idx, F_PROPERTY_RETURNS] = property_investment_return
 
     return out
 

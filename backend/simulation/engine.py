@@ -10,6 +10,7 @@ from backend.simulation.entities import (
     MortgageAccount,
     PensionPot,
     PersonEntity,
+    PropertyEntity,
     RentalIncome,
     SalaryIncome,
 )
@@ -53,6 +54,7 @@ class SimulationScenario:
     assets: list[AssetAccount]
     mortgage: MortgageAccount | None
     expenses: list[ExpenseItem]
+    properties: list[PropertyEntity] = None  # type: ignore[assignment]
 
     # Additional income types (not tied to retirement)
     rental_incomes: list[RentalIncome] = None  # type: ignore[assignment]
@@ -71,6 +73,8 @@ class SimulationScenario:
             object.__setattr__(self, "rental_incomes", [])
         if self.gift_incomes is None:
             object.__setattr__(self, "gift_incomes", [])
+        if self.properties is None:
+            object.__setattr__(self, "properties", [])
         if self.planned_retirement_age_by_person is None:
             object.__setattr__(self, "planned_retirement_age_by_person", {})
 

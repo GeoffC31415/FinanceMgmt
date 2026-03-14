@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db_session
-from backend.models import Asset, Expense, Income, Mortgage, Person, Scenario
+from backend.models import Asset, Expense, Income, Mortgage, Person, Property, Scenario
 from backend.schemas.scenario import ScenarioCreate, ScenarioRead
 
 router = APIRouter()
@@ -46,6 +46,7 @@ def _scenario_query():
         .options(selectinload(Scenario.people))
         .options(selectinload(Scenario.incomes))
         .options(selectinload(Scenario.assets))
+        .options(selectinload(Scenario.properties))
         .options(selectinload(Scenario.mortgage))
         .options(selectinload(Scenario.expenses))
     )
@@ -80,6 +81,9 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
             birth_date=person.birth_date,
             planned_retirement_age=person.planned_retirement_age,
             state_pension_age=person.state_pension_age,
+            is_child=person.is_child,
+            annual_cost=person.annual_cost,
+            leaves_household_age=person.leaves_household_age,
         )
         for person in payload.people
     ]
@@ -120,6 +124,26 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
                 bond_allocation=asset.bond_allocation,
             )
             for asset in payload.assets
+        ]
+    )
+
+    session.add_all(
+        [
+            Property(
+                scenario_id=scenario.id,
+                person_id=property_.person_id or label_to_person_id.get(property_.person_label or ""),
+                name=property_.name,
+                value=property_.value,
+                appreciation_rate_mean=property_.appreciation_rate_mean,
+                appreciation_rate_std=property_.appreciation_rate_std,
+                monthly_rental_income=property_.monthly_rental_income,
+                rental_growth_rate=property_.rental_growth_rate,
+                occupancy_rate=property_.occupancy_rate,
+                annual_maintenance_cost=property_.annual_maintenance_cost,
+                maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
+                withdrawal_priority=property_.withdrawal_priority,
+            )
+            for property_ in payload.properties
         ]
     )
 
@@ -207,6 +231,7 @@ async def update_scenario(
     # Replace remaining nested collections deterministically.
     scenario.incomes.clear()
     scenario.assets.clear()
+    scenario.properties.clear()
     scenario.expenses.clear()
 
     scenario.incomes.extend(
@@ -242,6 +267,26 @@ async def update_scenario(
                 bond_allocation=asset.bond_allocation,
             )
             for asset in payload.assets
+        ]
+    )
+
+    scenario.properties.extend(
+        [
+            Property(
+                scenario_id=scenario.id,
+                person_id=property_.person_id or label_to_person_id.get(property_.person_label or ""),
+                name=property_.name,
+                value=property_.value,
+                appreciation_rate_mean=property_.appreciation_rate_mean,
+                appreciation_rate_std=property_.appreciation_rate_std,
+                monthly_rental_income=property_.monthly_rental_income,
+                rental_growth_rate=property_.rental_growth_rate,
+                occupancy_rate=property_.occupancy_rate,
+                annual_maintenance_cost=property_.annual_maintenance_cost,
+                maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
+                withdrawal_priority=property_.withdrawal_priority,
+            )
+            for property_ in payload.properties
         ]
     )
 

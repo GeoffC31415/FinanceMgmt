@@ -74,6 +74,8 @@ function default_draft(): ScenarioCreate {
       end_year: year + 60,
       annual_spend_target: 30000,
       return_model: "historical_bootstrap",
+      debt_interest_rate: 0.08,
+      bankruptcy_threshold: -100000,
     },
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
     incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
@@ -82,6 +84,7 @@ function default_draft(): ScenarioCreate {
       { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
       { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }
     ],
+    properties: [],
     mortgage: null,
     expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
   };
@@ -95,8 +98,11 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       id: p.id,
       label: p.label,
       birth_date: p.birth_date,
-      planned_retirement_age: p.planned_retirement_age,
-      state_pension_age: p.state_pension_age
+      planned_retirement_age: p.planned_retirement_age ?? null,
+      state_pension_age: p.state_pension_age ?? null,
+      is_child: p.is_child ?? false,
+      annual_cost: p.annual_cost ?? null,
+      leaves_household_age: p.leaves_household_age ?? null,
     })),
     incomes: scenario.incomes.map((i) => ({
       kind: i.kind,
@@ -104,7 +110,9 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       annual_growth_rate: i.annual_growth_rate,
       employee_pension_pct: i.employee_pension_pct,
       employer_pension_pct: i.employer_pension_pct,
-      person_id: i.person_id ?? null
+      person_id: i.person_id ?? null,
+      start_year: i.start_year ?? null,
+      end_year: i.end_year ?? null,
     })),
     assets: scenario.assets.map((a) => ({
       name: a.name,
@@ -118,11 +126,26 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       bond_allocation: (a as any).bond_allocation ?? 0,
       person_id: a.person_id ?? null
     })),
+    properties: (scenario.properties ?? []).map((p) => ({
+      name: p.name,
+      value: p.value,
+      appreciation_rate_mean: p.appreciation_rate_mean,
+      appreciation_rate_std: p.appreciation_rate_std,
+      monthly_rental_income: p.monthly_rental_income,
+      rental_growth_rate: p.rental_growth_rate,
+      occupancy_rate: p.occupancy_rate,
+      annual_maintenance_cost: p.annual_maintenance_cost,
+      maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
+      withdrawal_priority: p.withdrawal_priority,
+      person_id: p.person_id ?? null
+    })),
     mortgage: scenario.mortgage ?? null,
     expenses: scenario.expenses.map((e) => ({
       name: e.name,
       monthly_amount: e.monthly_amount,
-      is_inflation_linked: e.is_inflation_linked
+      is_inflation_linked: e.is_inflation_linked,
+      start_year: e.start_year ?? null,
+      end_year: e.end_year ?? null,
     }))
   };
 }
@@ -241,7 +264,7 @@ export function ConfigWizard() {
                 setError(null);
                 try {
                   // Create the DB row first (basic entry). This returns an id.
-                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {}, people: [], incomes: [], assets: [], mortgage: null, expenses: [] });
+                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {}, people: [], incomes: [], assets: [], properties: [], mortgage: null, expenses: [] });
                   setScenarioId(created.id);
 
                   // Immediately persist the full draft so step 1 starts from sensible defaults.
@@ -271,91 +294,221 @@ export function ConfigWizard() {
             <div className="space-y-3">
               <div className="text-sm font-semibold">People</div>
               <StepIntro>
-                Add everyone whose finances you want to model. The simulation uses each person's age to determine when they retire, when they receive state pension, and when they can access private pensions (age 55+).
+                Add everyone whose finances you want to model. Adults have retirement timelines and pension planning. Children contribute an annual cost until they leave the household.
               </StepIntro>
-              
-              <div className="hidden md:grid md:grid-cols-4 md:gap-3 text-xs text-slate-400">
-                <Label tooltip="A friendly name to identify this person in the scenario">Name</Label>
-                <Label tooltip="Used to calculate current age and project retirement timing">Date of Birth</Label>
-                <Label tooltip="When salary income stops and retirement spending begins. Can be different from state pension age.">Retirement Age</Label>
-                <Label tooltip="When UK state pension payments start (currently 66-67 for most people)">State Pension Age</Label>
-              </div>
-              {draft.people.map((p, idx) => (
-                <div key={idx} className="grid gap-3 md:grid-cols-4">
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={p.label}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        people: d.people.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x))
-                      }))
-                    }
-                    placeholder="e.g. you, partner"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={p.birth_date}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        people: d.people.map((x, i) => (i === idx ? { ...x, birth_date: e.target.value } : x))
-                      }))
-                    }
-                    placeholder="YYYY-MM-DD"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    value={p.planned_retirement_age}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        people: d.people.map((x, i) =>
-                          i === idx ? { ...x, planned_retirement_age: Number(e.target.value) } : x
-                        )
-                      }))
-                    }
-                    placeholder="e.g. 60"
-                  />
-                  <input
-                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    type="number"
-                    value={p.state_pension_age}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        people: d.people.map((x, i) => (i === idx ? { ...x, state_pension_age: Number(e.target.value) } : x))
-                      }))
-                    }
-                    placeholder="e.g. 67"
-                  />
-                </div>
-              ))}
+
+              {draft.people.map((p, idx) => {
+                const isChild = p.is_child === true;
+                return (
+                  <div key={idx} className="rounded border border-slate-700/60 bg-slate-800/20 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-slate-200">
+                          {isChild ? "Child" : "Adult"} {idx + 1}
+                        </span>
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChild}
+                            onChange={(e) =>
+                              setDraft((d) => ({
+                                ...d,
+                                people: d.people.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        is_child: e.target.checked,
+                                        planned_retirement_age: e.target.checked ? null : (x.planned_retirement_age ?? 60),
+                                        state_pension_age: e.target.checked ? null : (x.state_pension_age ?? 67),
+                                        annual_cost: e.target.checked ? (x.annual_cost ?? 10000) : null,
+                                        leaves_household_age: e.target.checked ? (x.leaves_household_age ?? 18) : null,
+                                      }
+                                    : x
+                                )
+                              }))
+                            }
+                          />
+                          Is a child
+                        </label>
+                      </div>
+                      {draft.people.length > 1 && (
+                        <button
+                          type="button"
+                          className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                          onClick={() =>
+                            setDraft((d) => ({ ...d, people: d.people.filter((_, i) => i !== idx) }))
+                          }
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <Label tooltip="A friendly name to identify this person in the scenario">Name</Label>
+                        <input
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                          value={p.label}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              people: d.people.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x))
+                            }))
+                          }
+                          placeholder="e.g. you, partner, child1"
+                        />
+                      </div>
+                      <div>
+                        <Label tooltip="Used to calculate current age and project retirement or cost timing">Date of Birth</Label>
+                        <input
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                          value={p.birth_date}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              people: d.people.map((x, i) => (i === idx ? { ...x, birth_date: e.target.value } : x))
+                            }))
+                          }
+                          placeholder="YYYY-MM-DD"
+                        />
+                      </div>
+
+                      {!isChild && (
+                        <>
+                          <div>
+                            <Label tooltip="When salary income stops and retirement spending begins">Retirement Age</Label>
+                            <input
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              type="number"
+                              value={p.planned_retirement_age ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  people: d.people.map((x, i) =>
+                                    i === idx ? { ...x, planned_retirement_age: Number(e.target.value) } : x
+                                  )
+                                }))
+                              }
+                              placeholder="e.g. 60"
+                            />
+                          </div>
+                          <div>
+                            <Label tooltip="When UK state pension payments start (currently 66–67 for most people)">State Pension Age</Label>
+                            <input
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              type="number"
+                              value={p.state_pension_age ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  people: d.people.map((x, i) =>
+                                    i === idx ? { ...x, state_pension_age: Number(e.target.value) } : x
+                                  )
+                                }))
+                              }
+                              placeholder="e.g. 67"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {isChild && (
+                        <>
+                          <div>
+                            <Label tooltip="Estimated annual cost of raising this child (grows with inflation each year)">Annual Cost (£)</Label>
+                            <input
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              type="number"
+                              value={p.annual_cost ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  people: d.people.map((x, i) =>
+                                    i === idx ? { ...x, annual_cost: Number(e.target.value) } : x
+                                  )
+                                }))
+                              }
+                              placeholder="e.g. 10000"
+                            />
+                          </div>
+                          <div>
+                            <Label tooltip="Costs stop when the child reaches this age">Leaves Household Age</Label>
+                            <input
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                              type="number"
+                              value={p.leaves_household_age ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  people: d.people.map((x, i) =>
+                                    i === idx ? { ...x, leaves_household_age: Number(e.target.value) } : x
+                                  )
+                                }))
+                              }
+                              placeholder="e.g. 18"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
               <Hint>
-                Salary stops at retirement age. Private pension access requires age 55+. State pension begins at state pension age.
+                Salary stops at retirement age. Private pension access requires age 55+. State pension begins at state pension age. Child costs stop when they leave the household.
               </Hint>
-              <button
-                type="button"
-                className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
-                onClick={() =>
-                  setDraft((d) => ({
-                    ...d,
-                    people: [
-                      ...d.people,
-                      {
-                        id: null,
-                        label: `person${d.people.length + 1}`,
-                        birth_date: "1985-01-01",
-                        planned_retirement_age: 60,
-                        state_pension_age: 67
-                      }
-                    ]
-                  }))
-                }
-              >
-                Add person
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      people: [
+                        ...d.people,
+                        {
+                          id: null,
+                          label: `person${d.people.length + 1}`,
+                          birth_date: "1985-01-01",
+                          planned_retirement_age: 60,
+                          state_pension_age: 67,
+                          is_child: false,
+                          annual_cost: null,
+                          leaves_household_age: null,
+                        }
+                      ]
+                    }))
+                  }
+                >
+                  Add adult
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      people: [
+                        ...d.people,
+                        {
+                          id: null,
+                          label: `child${d.people.filter((x) => x.is_child).length + 1}`,
+                          birth_date: new Date().toISOString().split("T")[0],
+                          planned_retirement_age: null,
+                          state_pension_age: null,
+                          is_child: true,
+                          annual_cost: 10000,
+                          leaves_household_age: 18,
+                        }
+                      ]
+                    }))
+                  }
+                >
+                  Add child
+                </button>
+              </div>
             </div>
           )}
 
@@ -399,7 +552,7 @@ export function ConfigWizard() {
                       }
                     >
                       <option value="">Household</option>
-                      {draft.people.map((p) => (
+                      {draft.people.filter((p) => !p.is_child).map((p) => (
                         <option key={p.id ?? p.label} value={p.id ?? ""}>
                           {p.label}
                         </option>
@@ -534,7 +687,7 @@ export function ConfigWizard() {
                     }
                   >
                     <option value="">Household</option>
-                    {draft.people.map((p) => (
+                    {draft.people.filter((p) => !p.is_child).map((p) => (
                       <option key={p.id ?? p.label} value={p.id ?? ""}>
                         {p.label}
                       </option>

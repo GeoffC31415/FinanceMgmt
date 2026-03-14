@@ -9,6 +9,7 @@ from backend.schemas.expenses import ExpenseCreate, ExpenseRead
 from backend.schemas.income import IncomeCreate, IncomeRead
 from backend.schemas.mortgage import MortgageCreate, MortgageRead
 from backend.schemas.person import PersonCreate, PersonRead
+from backend.schemas.property import PropertyCreate, PropertyRead
 
 
 class ScenarioCreate(BaseModel):
@@ -18,6 +19,7 @@ class ScenarioCreate(BaseModel):
     people: list[PersonCreate] = Field(default_factory=list)
     incomes: list[IncomeCreate] = Field(default_factory=list)
     assets: list[AssetCreate] = Field(default_factory=list)
+    properties: list[PropertyCreate] = Field(default_factory=list)
     mortgage: MortgageCreate | None = None
     expenses: list[ExpenseCreate] = Field(default_factory=list)
 
@@ -30,6 +32,7 @@ class ScenarioRead(ScenarioCreate):
     people: list[PersonRead] = Field(default_factory=list)
     incomes: list[IncomeRead] = Field(default_factory=list)
     assets: list[AssetRead] = Field(default_factory=list)
+    properties: list[PropertyRead] = Field(default_factory=list)
     mortgage: MortgageRead | None = None
     expenses: list[ExpenseRead] = Field(default_factory=list)
 

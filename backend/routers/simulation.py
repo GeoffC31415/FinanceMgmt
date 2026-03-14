@@ -34,6 +34,7 @@ from backend.simulation.engine_fast import run_simulation
 from backend.simulation.returns_cache import create_session, get_session, generate_returns_matrix, generate_returns_matrix_with_bond_override
 from backend.simulation.entities import ExpenseItem, GiftIncome, MortgageAccount, PensionPot, PersonEntity, RentalIncome, SalaryIncome
 from backend.simulation.entities.asset import AssetAccount
+from backend.simulation.entities.property import PropertyEntity
 
 router = APIRouter()
 
@@ -76,6 +77,7 @@ def _scenario_query():
         .options(selectinload(Scenario.people))
         .options(selectinload(Scenario.incomes))
         .options(selectinload(Scenario.assets))
+        .options(selectinload(Scenario.properties))
         .options(selectinload(Scenario.mortgage))
         .options(selectinload(Scenario.expenses))
     )
@@ -201,6 +203,7 @@ def _build_simulation_scenario(
 
     pension_by_person: dict[str, PensionPot] = {}
     assets: list[AssetAccount] = []
+    properties: list[PropertyEntity] = []
     pension_withdrawal_priority = 100
 
     for asset in scenario.assets:
@@ -245,6 +248,29 @@ def _build_simulation_scenario(
             )
         )
 
+    for property_ in scenario.properties:
+        if property_.person_id:
+            person_key = next((p.label for p in scenario.people if p.id == property_.person_id), scenario.people[0].label)
+        else:
+            person_key = scenario.people[0].label
+
+        properties.append(
+            PropertyEntity(
+                name=property_.name,
+                person_key=person_key,
+                withdrawal_priority=int(getattr(property_, "withdrawal_priority", 15)),
+                value=property_.value,
+                appreciation_rate_mean=property_.appreciation_rate_mean,
+                appreciation_rate_std=property_.appreciation_rate_std,
+                monthly_rental_income=property_.monthly_rental_income,
+                rental_growth_rate=property_.rental_growth_rate,
+                occupancy_rate=property_.occupancy_rate,
+                annual_maintenance_cost=property_.annual_maintenance_cost,
+                maintenance_is_inflation_linked=property_.maintenance_is_inflation_linked,
+                cost_basis=property_.value,
+            )
+        )
+
     mortgage = None
     if scenario.mortgage is not None:
         mortgage = MortgageAccount(
@@ -269,6 +295,7 @@ def _build_simulation_scenario(
         salary_by_person=salary_by_person,
         pension_by_person=pension_by_person,
         assets=assets,
+        properties=properties,
         mortgage=mortgage,
         expenses=expenses,
         rental_incomes=rental_incomes,
@@ -370,17 +397,21 @@ def _response_from_matrices(
         pension_balance_median=from_iteration("pension_balance"),
         cash_balance_median=from_iteration("cash_balance"),
         gia_balance_median=from_iteration("gia_balance"),
+        property_value_median=from_iteration("property_value"),
         total_assets_median=from_iteration("total_assets"),
         # Asset-type performance and flows (from representative iteration)
         isa_returns_median=from_iteration("isa_returns"),
         gia_returns_median=from_iteration("gia_returns"),
         cash_returns_median=from_iteration("cash_returns"),
         pension_returns_median=from_iteration("pension_returns"),
+        property_returns_median=from_iteration("property_returns"),
         isa_contributions_median=from_iteration("isa_contributions"),
         gia_contributions_median=from_iteration("gia_contributions"),
         isa_withdrawals_median=from_iteration("isa_withdrawals"),
         gia_withdrawals_median=from_iteration("gia_withdrawals"),
         pension_withdrawals_median=from_iteration("pension_withdrawals"),
+        property_rental_income_median=from_iteration("property_rental_income"),
+        property_maintenance_median=from_iteration("property_maintenance"),
         # Liabilities (from representative iteration)
         mortgage_balance_median=from_iteration("mortgage_balance"),
         total_liabilities_median=from_iteration("total_liabilities"),
@@ -490,6 +521,7 @@ def _build_scenario_from_cached(
         salary_by_person=base.salary_by_person,
         pension_by_person=base.pension_by_person,
         assets=base.assets,
+        properties=base.properties,
         mortgage=base.mortgage,
         expenses=base.expenses,
         rental_incomes=base.rental_incomes,

@@ -37,6 +37,20 @@ export type AssetCreate = {
   bond_allocation?: number;
 };
 
+export type PropertyCreate = {
+  person_id?: string | null;
+  name: string;
+  value: number;
+  appreciation_rate_mean: number;
+  appreciation_rate_std: number;
+  monthly_rental_income: number;
+  rental_growth_rate: number;
+  occupancy_rate: number;
+  annual_maintenance_cost: number;
+  maintenance_is_inflation_linked: boolean;
+  withdrawal_priority: number;
+};
+
 export type MortgageCreate = {
   balance: number;
   annual_interest_rate: number;
@@ -75,6 +89,7 @@ export type ScenarioCreate = {
   people: PersonCreate[];
   incomes: IncomeCreate[];
   assets: AssetCreate[];
+  properties: PropertyCreate[];
   mortgage?: MortgageCreate | null;
   expenses: ExpenseCreate[];
 };
@@ -139,6 +154,7 @@ export type SimulationResponse = {
   pension_balance_median: number[];
   cash_balance_median: number[];
   gia_balance_median: number[];
+  property_value_median: number[];
   total_assets_median: number[];
 
   // Per-type investment returns
@@ -146,6 +162,7 @@ export type SimulationResponse = {
   gia_returns_median: number[];
   cash_returns_median: number[];
   pension_returns_median: number[];
+  property_returns_median: number[];
 
   // Per-type contributions
   isa_contributions_median: number[];
@@ -155,6 +172,8 @@ export type SimulationResponse = {
   isa_withdrawals_median: number[];
   gia_withdrawals_median: number[];
   pension_withdrawals_median: number[];
+  property_rental_income_median: number[];
+  property_maintenance_median: number[];
   
   // Liabilities
   mortgage_balance_median: number[];

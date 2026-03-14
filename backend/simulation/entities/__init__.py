@@ -6,6 +6,7 @@ from backend.simulation.entities.isa import IsaAccount
 from backend.simulation.entities.mortgage import MortgageAccount
 from backend.simulation.entities.pension import PensionPot
 from backend.simulation.entities.person import PersonEntity
+from backend.simulation.entities.property import PropertyEntity
 from backend.simulation.entities.rental_income import RentalIncome
 from backend.simulation.entities.salary import SalaryIncome
 from backend.simulation.entities.state_pension import StatePension
@@ -21,6 +22,7 @@ __all__ = [
     "MortgageAccount",
     "PensionPot",
     "PersonEntity",
+    "PropertyEntity",
     "RentalIncome",
     "SalaryIncome",
     "StatePension",

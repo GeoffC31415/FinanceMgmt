@@ -17,6 +17,7 @@ async def run_migrations(*, conn: AsyncConnection) -> None:
     await _migrate_mortgages_table(conn=conn)
     await _migrate_people_table(conn=conn)
     await _migrate_assets_bond_allocation(conn=conn)
+    await _migrate_properties_table(conn=conn)
 
 
 async def _get_table_columns(*, conn: AsyncConnection, table_name: str) -> set[str]:
@@ -152,4 +153,35 @@ async def _migrate_assets_bond_allocation(*, conn: AsyncConnection) -> None:
 
     if "bond_allocation" not in columns:
         await conn.execute(text("ALTER TABLE assets ADD COLUMN bond_allocation FLOAT NOT NULL DEFAULT 0.0"))
+
+
+async def _migrate_properties_table(*, conn: AsyncConnection) -> None:
+    """Create properties table for buy-to-let properties if it does not exist."""
+    result = await conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='properties'"
+    ))
+    if result.first() is not None:
+        return
+
+    await conn.execute(text("""
+        CREATE TABLE properties (
+            id VARCHAR(36) NOT NULL PRIMARY KEY,
+            scenario_id VARCHAR(36) NOT NULL,
+            person_id VARCHAR(36),
+            name VARCHAR(200) NOT NULL,
+            value FLOAT NOT NULL DEFAULT 0.0,
+            appreciation_rate_mean FLOAT NOT NULL DEFAULT 0.0,
+            appreciation_rate_std FLOAT NOT NULL DEFAULT 0.0,
+            monthly_rental_income FLOAT NOT NULL DEFAULT 0.0,
+            rental_growth_rate FLOAT NOT NULL DEFAULT 0.0,
+            occupancy_rate FLOAT NOT NULL DEFAULT 1.0,
+            annual_maintenance_cost FLOAT NOT NULL DEFAULT 0.0,
+            maintenance_is_inflation_linked BOOLEAN NOT NULL DEFAULT 1,
+            withdrawal_priority INTEGER NOT NULL DEFAULT 15,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(scenario_id) REFERENCES scenarios(id) ON DELETE CASCADE,
+            FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL
+        )
+    """))
 

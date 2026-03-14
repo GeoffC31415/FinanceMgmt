@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { UseFormRegister } from "react-hook-form";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,8 +75,8 @@ function AnnualFromMonthlyInput({
   monthly_name: string;
   setValue: (name: any, value: any, options?: any) => void;
 }) {
-  const monthly = useWatch({ control, name: monthly_name as any }) as number | undefined;
-  const annual = Number(monthly ?? 0) * 12;
+  const monthly = Number(useWatch({ control, name: monthly_name as any }) ?? 0);
+  const annual = monthly * 12;
 
   return (
     <input
@@ -133,7 +134,15 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
-function TaxYearSelector({ value, onChange }: { value?: string; onChange: (year: string) => void }) {
+function TaxYearSelector({
+  register,
+  watchValue,
+  disabled
+}: {
+  register: ReturnType<typeof useForm<FormValues>>["register"];
+  watchValue: string | undefined;
+  disabled?: boolean;
+}) {
   const [presets, setPresets] = useState<TaxYearPreset[]>([]);
   const [is_loading, setIsLoading] = useState(true);
 
@@ -144,17 +153,16 @@ function TaxYearSelector({ value, onChange }: { value?: string; onChange: (year:
       .finally(() => setIsLoading(false));
   }, []);
 
-  const selected = presets.find((p) => p.tax_year === value);
+  const selected = presets.find((p) => p.tax_year === watchValue);
 
   return (
     <div className="space-y-2">
       <select
         className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={is_loading}
+        {...register("assumptions.tax_year")}
+        disabled={disabled ?? is_loading}
       >
-        {!value && <option value="">Select tax year...</option>}
+        <option value="">Select tax year...</option>
         {presets.map((p) => (
           <option key={p.tax_year} value={p.tax_year}>
             {p.tax_year}
@@ -289,6 +297,21 @@ const schema = z.object({
       bond_allocation: z.coerce.number().min(0).max(1).default(0)
     })
   ),
+  properties: z.array(
+    z.object({
+      person_id: z.string().nullable().optional(),
+      name: z.string().min(1).max(200),
+      value: z.coerce.number().min(0),
+      appreciation_rate_mean: z.coerce.number(),
+      appreciation_rate_std: z.coerce.number().min(0),
+      monthly_rental_income: z.coerce.number().min(0),
+      rental_growth_rate: z.coerce.number().min(-1).max(10),
+      occupancy_rate: z.coerce.number().min(0).max(1).default(1),
+      annual_maintenance_cost: z.coerce.number().min(0),
+      maintenance_is_inflation_linked: z.coerce.boolean().default(true),
+      withdrawal_priority: z.coerce.number().int().min(0).max(10000).default(15)
+    })
+  ),
   mortgage: z
     .object({
       balance: z.coerce.number().min(0),
@@ -320,7 +343,8 @@ function to_form_values(scenario: ScenarioRead): FormValues {
   const annual_spend_target = (assumptions.annual_spend_target ?? 30000) as number;
   const debt_interest_rate = (assumptions.debt_interest_rate ?? 0.08) as number;
   const bankruptcy_threshold = (assumptions.bankruptcy_threshold ?? -100000) as number;
-  const return_model = (assumptions.return_model ?? "parametric") as ReturnModel;
+  const return_model = (assumptions.return_model ?? "historical_bootstrap") as ReturnModel;
+  const tax_year = (assumptions.tax_year ?? undefined) as string | undefined;
 
   return {
     name: scenario.name,
@@ -335,6 +359,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       debt_interest_rate,
       bankruptcy_threshold,
       return_model,
+      tax_year,
     },
     people: scenario.people.map((p) => ({
       id: p.id,
@@ -378,6 +403,19 @@ function to_form_values(scenario: ScenarioRead): FormValues {
         person_id: a.person_id ?? ""
       };
     }),
+    properties: (scenario.properties ?? []).map((p) => ({
+      name: p.name,
+      value: p.value,
+      appreciation_rate_mean: p.appreciation_rate_mean,
+      appreciation_rate_std: p.appreciation_rate_std,
+      monthly_rental_income: p.monthly_rental_income,
+      rental_growth_rate: p.rental_growth_rate,
+      occupancy_rate: p.occupancy_rate,
+      annual_maintenance_cost: p.annual_maintenance_cost,
+      maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
+      withdrawal_priority: p.withdrawal_priority,
+      person_id: p.person_id ?? ""
+    })),
     mortgage: scenario.mortgage ?? null,
     expenses: scenario.expenses.map((e) => ({
       name: e.name,
@@ -431,6 +469,19 @@ function to_scenario_create(values: FormValues, original: ScenarioRead): Scenari
       bond_allocation: a.bond_allocation ?? 0,
       person_id: normalize_person_id(a.person_id)
     })),
+    properties: values.properties.map((p) => ({
+      name: p.name,
+      value: p.value,
+      appreciation_rate_mean: p.appreciation_rate_mean,
+      appreciation_rate_std: p.appreciation_rate_std,
+      monthly_rental_income: p.monthly_rental_income,
+      rental_growth_rate: p.rental_growth_rate,
+      occupancy_rate: p.occupancy_rate,
+      annual_maintenance_cost: p.annual_maintenance_cost,
+      maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
+      withdrawal_priority: p.withdrawal_priority,
+      person_id: normalize_person_id(p.person_id)
+    })),
     mortgage: values.mortgage ?? null,
     expenses: values.expenses.map((e) => ({
       name: e.name,
@@ -449,7 +500,7 @@ type Props = {
 
 export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props) {
   const default_values = useMemo(() => to_form_values(scenario), [scenario]);
-  const [tab, setTab] = useState<"assumptions" | "people" | "income" | "assets" | "housing" | "expenses">(
+  const [tab, setTab] = useState<"assumptions" | "people" | "income" | "assets" | "properties" | "sell_order" | "housing" | "expenses">(
     "assumptions"
   );
 
@@ -463,10 +514,12 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
   const incomes = useFieldArray({ control: form.control, name: "incomes" });
   const expenses = useFieldArray({ control: form.control, name: "expenses" });
   const assets = useFieldArray({ control: form.control, name: "assets" });
+  const properties = useFieldArray({ control: form.control, name: "properties" });
 
   // Watch values for computing totals
   const watched_incomes = useWatch({ control: form.control, name: "incomes" });
   const watched_assets = useWatch({ control: form.control, name: "assets" });
+  const watched_properties = useWatch({ control: form.control, name: "properties" });
   const watched_expenses = useWatch({ control: form.control, name: "expenses" });
 
   const income_total = useMemo(() => {
@@ -479,14 +532,57 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
     return watched_assets.reduce((sum, asset) => sum + (Number(asset?.balance) || 0), 0);
   }, [watched_assets]);
 
+  const properties_total = useMemo(() => {
+    if (!watched_properties) return 0;
+    return watched_properties.reduce((sum, property) => sum + (Number(property?.value) || 0), 0);
+  }, [watched_properties]);
+
   const expenses_total = useMemo(() => {
     if (!watched_expenses) return 0;
     return watched_expenses.reduce((sum, exp) => sum + (Number(exp?.monthly_amount) || 0) * 12, 0);
   }, [watched_expenses]);
 
+  const person_label_by_id = useMemo(
+    () => new Map((scenario.people ?? []).map((person) => [person.id ?? "", person.label])),
+    [scenario.people]
+  );
+
+  const sell_order_items = useMemo(() => {
+    const asset_items = (watched_assets ?? []).map((asset, index) => ({
+      id: `asset-${index}`,
+      category: "Asset",
+      kind: asset?.asset_type ?? "GIA",
+      name: asset?.name || `Asset ${index + 1}`,
+      owner: person_label_by_id.get(asset?.person_id ?? "") ?? "Household",
+      priority: Number(asset?.withdrawal_priority ?? 0),
+      value: Number(asset?.balance ?? 0),
+      note: asset?.asset_type === "PENSION" ? "Only accessible from pension access age." : "",
+    }));
+
+    const property_items = (watched_properties ?? []).map((property, index) => ({
+      id: `property-${index}`,
+      category: "Property",
+      kind: "PROPERTY",
+      name: property?.name || `Property ${index + 1}`,
+      owner: person_label_by_id.get(property?.person_id ?? "") ?? "Household",
+      priority: Number(property?.withdrawal_priority ?? 0),
+      value: Number(property?.value ?? 0),
+      note: "Sale may trigger capital gains tax on gains.",
+    }));
+
+    return [...asset_items, ...property_items].sort((left, right) => {
+      if (right.priority !== left.priority) return right.priority - left.priority;
+      return left.name.localeCompare(right.name);
+    });
+  }, [person_label_by_id, watched_assets, watched_properties]);
+
+  const prev_scenario_id = useRef<string | null>(null);
   useEffect(() => {
-    form.reset(default_values);
-  }, [default_values, form]);
+    if (prev_scenario_id.current !== scenario.id) {
+      prev_scenario_id.current = scenario.id;
+      form.reset(default_values);
+    }
+  }, [scenario.id, default_values, form]);
 
   return (
     <div className="space-y-4">
@@ -497,12 +593,20 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
           ["income", "Income"],
           ["expenses", "Expenses"],
           ["assets", "Assets"],
-          ["housing", "Housing"]
+          ["properties", "Properties"],
+          ["housing", "Housing"],
+          ["sell_order", "Sell Order"]
         ].map(([key, label]) => (
           <button
             key={key}
             className={`rounded px-3 py-2 text-sm ${
-              tab === key ? "bg-slate-800" : "bg-slate-900/50 hover:bg-slate-900"
+              key === "sell_order"
+                ? tab === key
+                  ? "bg-amber-700 text-amber-50"
+                  : "bg-amber-950/60 text-amber-200 hover:bg-amber-900/70"
+                : tab === key
+                  ? "bg-slate-800"
+                  : "bg-slate-900/50 hover:bg-slate-900"
             }`}
             onClick={() => setTab(key as typeof tab)}
             type="button"
@@ -539,8 +643,8 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               <p className="text-xs text-slate-400 mt-1">Select a UK tax year to use for income tax and NI calculations. Bands are applied throughout the simulation.</p>
               <div className="mt-2">
                 <TaxYearSelector
-                  value={form.getValues("assumptions.tax_year") as string | undefined}
-                  onChange={(year) => form.setValue("assumptions.tax_year", year, { shouldDirty: true })}
+                  register={form.register}
+                  watchValue={form.watch("assumptions.tax_year") ?? undefined}
                 />
               </div>
             </div>
@@ -826,7 +930,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                       >
                         <option value="">Household</option>
                         {scenario.people.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <option key={p.id} value={p.id ?? ""}>
                             {p.label}
                           </option>
                         ))}
@@ -956,7 +1060,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                     >
                       <option value="">Household</option>
                       {scenario.people.map((p) => (
-                        <option key={p.id} value={p.id}>
+                        <option key={p.id} value={p.id ?? ""}>
                           {p.label}
                         </option>
                       ))}
@@ -1052,6 +1156,175 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
             >
               Add asset
             </button>
+          </div>
+        )}
+
+        {tab === "properties" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Buy-to-Let Properties</div>
+              <div className="text-sm text-slate-300">
+                Total value: <span className="font-semibold text-emerald-400">£{properties_total.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded border border-emerald-800/50 bg-emerald-950/30 p-3 text-sm text-emerald-100/90">
+              <div className="font-medium text-emerald-100">How Properties Work</div>
+              <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
+                <li><strong>Rental income:</strong> Rent is `monthly rent x 12 x occupancy %` and is taxed like other rental income.</li>
+                <li><strong>Maintenance:</strong> Annual maintenance is deducted from cash and can optionally grow with inflation.</li>
+                <li><strong>Sellable:</strong> Properties can be sold to cover shortfalls using withdrawal priority. Capital gains tax is applied on gains.</li>
+                <li><strong>Appreciation:</strong> Property values change over time using the appreciation mean and volatility you enter here.</li>
+              </ul>
+            </div>
+
+            <div className="mt-3 overflow-auto">
+              <div className="hidden min-w-[1420px] grid-cols-10 gap-3 text-xs text-slate-400 md:grid">
+                <div>Assigned_to</div>
+                <div>Name</div>
+                <div className="flex items-center">
+                  Priority
+                  <InfoTip text="Higher number = sell first when cash is short. Example: set 30 for a property you would liquidate before other holdings, and 10 for one you want to keep longer." />
+                </div>
+                <div>Current_value</div>
+                <div>Appreciation_mean</div>
+                <div>Appreciation_std</div>
+                <div>Monthly_rent</div>
+                <div>Rent_growth</div>
+                <div>Occupancy_%</div>
+                <div>Maintenance</div>
+              </div>
+              <div className="min-w-[1420px] space-y-2">
+                {properties.fields.map((property, idx) => (
+                  <div
+                    key={property.id}
+                    className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-10"
+                  >
+                    <select
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`properties.${idx}.person_id` as any)}
+                    >
+                      <option value="">Household</option>
+                      {scenario.people.map((p) => (
+                        <option key={p.id} value={p.id ?? ""}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      {...form.register(`properties.${idx}.name`)}
+                    />
+                    <NumberInput control={form.control} name={`properties.${idx}.withdrawal_priority`} min={0} />
+                    <NumberInput control={form.control} name={`properties.${idx}.value`} min={0} />
+                    <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_mean`} placeholder="%" />
+                    <PercentInput control={form.control} name={`properties.${idx}.appreciation_rate_std`} placeholder="%" />
+                    <NumberInput control={form.control} name={`properties.${idx}.monthly_rental_income`} min={0} />
+                    <PercentInput control={form.control} name={`properties.${idx}.rental_growth_rate`} placeholder="%" />
+                    <PercentInput control={form.control} name={`properties.${idx}.occupancy_rate`} placeholder="100" />
+                    <div>
+                      <NumberInput control={form.control} name={`properties.${idx}.annual_maintenance_cost`} min={0} />
+                      <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          {...form.register(`properties.${idx}.maintenance_is_inflation_linked`)}
+                        />
+                        Inflation linked
+                      </label>
+                    </div>
+                    <div className="md:col-span-10 flex items-center justify-end">
+                      <button
+                        type="button"
+                        className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700"
+                        onClick={() => properties.remove(idx)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="mt-4 rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              onClick={() =>
+                properties.append({
+                  person_id: "",
+                  name: "New property",
+                  value: 0,
+                  appreciation_rate_mean: 0.03,
+                  appreciation_rate_std: 0.08,
+                  monthly_rental_income: 0,
+                  rental_growth_rate: 0.02,
+                  occupancy_rate: 0.95,
+                  annual_maintenance_cost: 0,
+                  maintenance_is_inflation_linked: true,
+                  withdrawal_priority: 15
+                } as any)
+              }
+            >
+              Add property
+            </button>
+          </div>
+        )}
+
+        {tab === "sell_order" && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
+            <div className="text-sm font-semibold">Sell Order Summary</div>
+            <div className="mt-2 text-xs text-slate-400">
+              Higher priority numbers are sold first. This combines financial assets and buy-to-let properties into one live withdrawal order.
+            </div>
+
+            <div className="mt-3 rounded border border-amber-800/50 bg-amber-950/30 p-3 text-sm text-amber-200/90">
+              <div className="font-medium text-amber-100">First To Sell to Last To Sell</div>
+              <div className="mt-1 text-xs">
+                Use this tab as a quick check that your configured priorities match the order you want the simulation to use.
+              </div>
+            </div>
+
+            {sell_order_items.length === 0 ? (
+              <div className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4 text-sm text-slate-400">
+                No assets or properties configured yet.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {sell_order_items.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-[80px_120px_minmax(0,1fr)_140px_120px_140px]"
+                  >
+                    <div>
+                      <div className="text-xs text-slate-400">Order</div>
+                      <div className="text-sm font-semibold text-slate-100">{index + 1}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Category</div>
+                      <div className="text-sm text-slate-200">{item.category}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Name</div>
+                      <div className="text-sm font-medium text-slate-100">{item.name}</div>
+                      <div className="mt-1 text-xs text-slate-400">{item.kind}</div>
+                      {item.note && <div className="mt-1 text-xs text-slate-500">{item.note}</div>}
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Owner</div>
+                      <div className="text-sm text-slate-200">{item.owner}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Priority</div>
+                      <div className="text-sm font-semibold text-amber-300">{item.priority}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Current value</div>
+                      <div className="text-sm text-slate-200">£{item.value.toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

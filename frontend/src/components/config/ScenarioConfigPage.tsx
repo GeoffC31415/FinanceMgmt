@@ -158,6 +158,7 @@ const EMPTY_SCENARIO: ScenarioCreate = {
     { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0 },
     { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0 }
   ],
+  properties: [],
   mortgage: { balance: 200000, annual_interest_rate: 0.04, monthly_payment: 1200 },
   expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
 };
@@ -305,6 +306,19 @@ export function ScenarioConfigPage() {
                           contributions_end_at_retirement: a.contributions_end_at_retirement,
                           bond_allocation: (a as any).bond_allocation ?? 0
                         })),
+                        properties: (scenario.properties ?? []).map((p) => ({
+                          person_label: scenario.people.find((person) => person.id === p.person_id)?.label,
+                          name: p.name,
+                          value: p.value,
+                          appreciation_rate_mean: p.appreciation_rate_mean,
+                          appreciation_rate_std: p.appreciation_rate_std,
+                          monthly_rental_income: p.monthly_rental_income,
+                          rental_growth_rate: p.rental_growth_rate,
+                          occupancy_rate: p.occupancy_rate,
+                          annual_maintenance_cost: p.annual_maintenance_cost,
+                          maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
+                          withdrawal_priority: p.withdrawal_priority,
+                        })),
                         mortgage: scenario.mortgage ?? null,
                         expenses: scenario.expenses.map((e) => ({
                           name: e.name,
@@ -430,6 +444,19 @@ export function ScenarioConfigPage() {
                 growth_rate_std: a.growth_rate_std,
                 contributions_end_at_retirement: a.contributions_end_at_retirement,
                 bond_allocation: (a as any).bond_allocation ?? 0
+              })),
+              properties: (scenario.properties ?? []).map((p) => ({
+                person_id: p.person_id,
+                name: p.name,
+                value: p.value,
+                appreciation_rate_mean: p.appreciation_rate_mean,
+                appreciation_rate_std: p.appreciation_rate_std,
+                monthly_rental_income: p.monthly_rental_income,
+                rental_growth_rate: p.rental_growth_rate,
+                occupancy_rate: p.occupancy_rate,
+                annual_maintenance_cost: p.annual_maintenance_cost,
+                maintenance_is_inflation_linked: p.maintenance_is_inflation_linked,
+                withdrawal_priority: p.withdrawal_priority,
               })),
               mortgage: scenario.mortgage ?? null,
               expenses: scenario.expenses.map((e) => ({
