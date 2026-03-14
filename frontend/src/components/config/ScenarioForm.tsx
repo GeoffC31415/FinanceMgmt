@@ -75,6 +75,7 @@ function NumberInput({
   min?: number;
   placeholder?: string;
 }) {
+  const [editing, setEditing] = useState<string | null>(null);
   return (
     <Controller
       control={control}
@@ -84,8 +85,13 @@ function NumberInput({
           className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
           inputMode="decimal"
           placeholder={placeholder}
-          value={format_number_input(Number(field.value ?? 0))}
-          onChange={(e) => field.onChange(parse_number_input(e.target.value))}
+          value={editing !== null ? editing : format_number_input(Number(field.value ?? 0))}
+          onChange={(e) => {
+            setEditing(e.target.value);
+            field.onChange(parse_number_input(e.target.value));
+          }}
+          onFocus={(e) => setEditing(e.target.value)}
+          onBlur={() => { setEditing(null); field.onBlur(); }}
           step={step as any}
           min={min as any}
         />
@@ -128,6 +134,7 @@ function PercentInput({
   name: string;
   placeholder?: string;
 }) {
+  const [editing, setEditing] = useState<string | null>(null);
   return (
     <Controller
       control={control}
@@ -138,8 +145,13 @@ function PercentInput({
             className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
             inputMode="decimal"
             placeholder={placeholder}
-            value={format_percent_input(Number(field.value ?? 0))}
-            onChange={(e) => field.onChange(parse_percent_input(e.target.value))}
+            value={editing !== null ? editing : format_percent_input(Number(field.value ?? 0))}
+            onChange={(e) => {
+              setEditing(e.target.value);
+              field.onChange(parse_percent_input(e.target.value));
+            }}
+            onFocus={(e) => setEditing(e.target.value)}
+            onBlur={() => { setEditing(null); field.onBlur(); }}
           />
           <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">
             %
@@ -725,7 +737,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
           <button
             key={key}
             className={`rounded px-3 py-2 text-sm ${
-              key === "sell_order"
+              key === "sell_order" || key === "housing"
                 ? tab === key
                   ? "bg-amber-700 text-amber-50"
                   : "bg-amber-950/60 text-amber-200 hover:bg-amber-900/70"
