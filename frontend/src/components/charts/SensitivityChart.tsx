@@ -48,11 +48,13 @@ export function SensitivityChart({
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={data}
-            margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
+            margin={{ top: 24, right: 20, bottom: 20, left: 0 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis
               dataKey="fun_fund"
+              type="number"
+              domain={["dataMin", "dataMax"]}
               stroke="#94a3b8"
               tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
               label={{
@@ -105,9 +107,8 @@ export function SensitivityChart({
               }
             />
             <Legend
-              wrapperStyle={{ paddingTop: "10px" }}
+              wrapperStyle={{ paddingTop: "10px", color: "#e2e8f0" }}
               iconType="line"
-              contentStyle={{ color: "#e2e8f0" }}
               formatter={(value) => {
                 if (value === "bankruptcy_pct") return "Bankruptcy risk";
                 if (value === "depletion_pct") return "Asset depletion";
@@ -177,9 +178,10 @@ export function SensitivityChart({
                 name="current_spend"
                 label={{
                   value: `Current: £${Math.round(current_fun_fund / 1000)}k`,
-                  position: "top",
+                  position: "insideTop",
                   fill: "#f59e0b",
                   fontSize: 11,
+                  offset: -24,
                 }}
               />
             )}
