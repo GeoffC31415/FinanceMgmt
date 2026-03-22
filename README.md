@@ -109,47 +109,142 @@ The application is a client-server web app running entirely on your local machin
 
 ## Getting Started
 
+These instructions work from a **fresh clone** on both **Linux** and **Windows**.
+
 ### Prerequisites
+
+Install the following first:
 
 - Python 3.10 or later
 - Node.js 18 or later
 - npm
+- Git
 
-### Backend Setup
+Check your versions:
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
+python --version
+node --version
+npm --version
+```
+
+If `python` is not available on Linux, use `python3` in the commands below.
+On Windows, if `python` is not available, use `py -3` instead.
+
+### 1. Clone the repository
+
+```bash
+git clone <YOUR-REPO-URL>
+cd FinanceMgmt
+```
+
+### 2. Create and activate a Python virtual environment
+
+#### Linux / macOS
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
-pip install -r backend/requirements.txt
-
-# Start the API server
-uvicorn backend.main:app --reload --port 8000
 ```
 
-The backend will be available at `http://localhost:8000`. Verify with:
+#### Windows PowerShell
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, run this once in PowerShell and then activate again:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+#### Windows Command Prompt
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+### 3. Install backend dependencies
+
+With the virtual environment activated:
 
 ```bash
-curl http://localhost:8000/health
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements.txt
 ```
 
-On first startup, the SQLite database is created automatically and migrations are applied.
+### 4. Install frontend dependencies
 
-### Frontend Setup
+In a second terminal, or after backend setup:
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
+cd ..
+```
 
-# Start the dev server
+### 5. Start the backend
+
+#### Linux / macOS
+
+```bash
+source .venv/bin/activate
+./start_backend.sh
+```
+
+#### Windows PowerShell or Command Prompt
+
+```bash
+python -m uvicorn backend.main:app --reload --port 8000
+```
+
+The backend will be available at `http://127.0.0.1:8000`.
+On first startup, the SQLite database is created automatically and migrations are applied.
+
+Verify the backend:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+If `curl` is not available on Windows, open this URL in your browser instead:
+
+- `http://127.0.0.1:8000/health`
+
+You should see:
+
+```json
+{"status":"ok"}
+```
+
+### 6. Start the frontend
+
+Open another terminal in the repo root.
+
+#### Linux / macOS
+
+```bash
+./start_frontend.sh
+```
+
+#### Windows PowerShell or Command Prompt
+
+```bash
+cd frontend
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173`.
+The frontend will be available at `http://127.0.0.1:5173`.
+
+### Local development notes
+
+- Keep the backend running on `127.0.0.1:8000`.
+- Open the frontend at `http://127.0.0.1:5173` or `http://localhost:5173`.
+- The frontend talks to `http://{current-hostname}:8000/api` by default, so using localhost/127.0.0.1 for both is the simplest setup.
+- The helper scripts `start_backend.sh` and `start_frontend.sh` are for Unix-like shells. On Windows, use the explicit commands shown above.
 
 ### Production Build
 

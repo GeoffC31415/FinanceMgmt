@@ -132,7 +132,7 @@ _aligned_bonds: np.ndarray | None = None
 def get_aligned_equity_bond_returns() -> tuple[np.ndarray, np.ndarray]:
     """Return equity and bond return arrays trimmed to their overlapping year range.
 
-    The equity data starts in 1950 while bonds start in the 1960s, so we
+    The equity data starts in 1928 while bonds start in 1960, so we
     restrict both to the years that appear in both datasets. This ensures
     the same index maps to the same calendar year in both arrays, which is
     essential for preserving the equity-bond correlation during sampling.

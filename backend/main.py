@@ -22,13 +22,22 @@ async def lifespan(app: FastAPI):
     # Important: import models so SQLAlchemy registers all tables before create_all.
     import backend.models  # noqa: F401
 
-    await init_db(engine=engine)
+    # Setup logging
+    import logging
+    logger = logging.getLogger(__name__)
 
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
-    yield
 
-    await engine.dispose()
+    try:
+        await init_db(engine=engine)
+        logger.info("Database initialized successfully")
+        yield
+    except Exception:
+        logger.exception("Database initialization failed; aborting startup")
+        raise
+    finally:
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:

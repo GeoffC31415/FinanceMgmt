@@ -25,10 +25,11 @@ if config.config_file_name is not None:
 # Target metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url from environment variable if set
-# (allows using the same DB path as the running app)
-sqlite_path = os.environ.get("FINANCES_SQLITE_PATH", "finances.db")
-config.set_main_option("sqlalchemy.url", f"sqlite:///{sqlite_path}")
+# Override sqlalchemy.url from environment variable only when explicitly set.
+# This preserves URLs injected programmatically by the application/tests.
+sqlite_path = os.environ.get("FINANCES_SQLITE_PATH")
+if sqlite_path:
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{sqlite_path}")
 
 
 def run_migrations_offline() -> None:
