@@ -195,10 +195,16 @@ source .venv/bin/activate
 ./start_backend.sh
 ```
 
-#### Windows PowerShell or Command Prompt
+#### Windows PowerShell
 
-```bash
-python -m uvicorn backend.main:app --reload --port 8000
+```powershell
+.\start_backend.ps1
+```
+
+#### Windows Command Prompt
+
+```bat
+start_backend.bat
 ```
 
 The backend will be available at `http://127.0.0.1:8000`.
@@ -208,17 +214,29 @@ Verify the backend:
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/ready
 ```
 
-If `curl` is not available on Windows, open this URL in your browser instead:
+If `curl` is not available on Windows, open these URLs in your browser instead:
 
 - `http://127.0.0.1:8000/health`
+- `http://127.0.0.1:8000/ready`
 
 You should see:
 
 ```json
 {"status":"ok"}
 ```
+
+for `/health`, and:
+
+```json
+{"status":"ok","database":"ok"}
+```
+
+for `/ready`.
+
+If port `8000` is already in use, `start_backend.sh` prints a clearer message showing the conflict instead of only surfacing raw `Errno 98` output.
 
 ### 6. Start the frontend
 
@@ -230,11 +248,16 @@ Open another terminal in the repo root.
 ./start_frontend.sh
 ```
 
-#### Windows PowerShell or Command Prompt
+#### Windows PowerShell
 
-```bash
-cd frontend
-npm run dev
+```powershell
+.\start_frontend.ps1
+```
+
+#### Windows Command Prompt
+
+```bat
+start_frontend.bat
 ```
 
 The frontend will be available at `http://127.0.0.1:5173`.
@@ -244,7 +267,8 @@ The frontend will be available at `http://127.0.0.1:5173`.
 - Keep the backend running on `127.0.0.1:8000`.
 - Open the frontend at `http://127.0.0.1:5173` or `http://localhost:5173`.
 - The frontend talks to `http://{current-hostname}:8000/api` by default, so using localhost/127.0.0.1 for both is the simplest setup.
-- The helper scripts `start_backend.sh` and `start_frontend.sh` are for Unix-like shells. On Windows, use the explicit commands shown above.
+- Unix-like shells can use `start_backend.sh` and `start_frontend.sh`.
+- Windows can use `start_backend.bat`, `start_frontend.bat`, `start_backend.ps1`, or `start_frontend.ps1`.
 
 ### Production Build
 
@@ -420,7 +444,7 @@ The simulator supports two return models:
 - **Parametric** — Each asset generates returns from a normal distribution with the specified mean and standard deviation. Returns are independent across years.
 - **Historical Bootstrap** — Returns are sampled (with replacement) from actual historical data:
   - **Equities**: S&P 500 total returns (1928–present), stored in `data/historical_returns.tsv`.
-  - **Bonds**: US 10-Year Treasury returns (1928–present), stored in `data/historical_bond_returns.tsv`.
+  - **Bonds**: US 10-Year Treasury returns (1960–present), stored in `data/historical_bond_returns.tsv`.
   - The bond allocation on each asset determines the weighted blend of equity and bond returns. A 30% bond allocation means 70% equity return + 30% bond return for that year.
   - Year sequences are consistent across assets within each iteration, preserving real-world correlations.
 
@@ -444,7 +468,8 @@ Tax year presets are available (e.g. 2024/25 UK rates) or you can manually set a
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Application health check |
+| `GET` | `/health` | Application liveness check |
+| `GET` | `/ready` | Application readiness check including database connectivity |
 
 ### Config — `/api/config`
 

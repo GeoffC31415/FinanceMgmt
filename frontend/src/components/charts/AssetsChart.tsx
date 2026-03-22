@@ -131,7 +131,6 @@ export function AssetsChart({
                 if (value === "gia_balance") return "GIA";
                 return value;
               }}
-              contentStyle={{ color: "#e2e8f0" }}
             />
             {retirement_years.map((year) => (
               <ReferenceLine

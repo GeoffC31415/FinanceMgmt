@@ -169,7 +169,6 @@ export function NetWorthChart({
                 if (value === "bankruptcy") return "First bankruptcy";
                 return value;
               }}
-              contentStyle={{ color: "#e2e8f0" }}
             />
             {adult_decade_years.map(({ year, age, label, adultIndex }) => {
               const FONT_SIZE = 10;

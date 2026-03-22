@@ -122,6 +122,23 @@ async def test_health(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_ready(client: AsyncClient):
+    resp = await client.get("/ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "database": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_ready_returns_503_when_engine_missing():
+    application = create_app()
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        resp = await ac.get("/ready")
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "error", "database": "not_initialized"}
+
+
+@pytest.mark.asyncio
 async def test_config_health(client: AsyncClient):
     resp = await client.get("/api/config/health")
     assert resp.status_code == 200

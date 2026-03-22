@@ -129,7 +129,6 @@ export function IncomeChart({
             <Legend
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
-              contentStyle={{ color: "#e2e8f0" }}
               formatter={(value) => {
                 const labelMap: Record<string, string> = {
                   total_income: "Total income",

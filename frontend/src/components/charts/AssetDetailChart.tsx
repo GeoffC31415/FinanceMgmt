@@ -260,7 +260,6 @@ export function AssetDetailChart({
                   if (value === "debt_interest") return "Debt interest";
                   return String(value);
                 }}
-                contentStyle={{ color: "#e2e8f0" }}
               />
               <Bar dataKey="contributions" stackId="in" fill="#34d399" name="contributions" />
               <Bar dataKey="returns" stackId="in" fill="#60a5fa" name="returns" />

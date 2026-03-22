@@ -174,7 +174,6 @@ export function ExpensesChart({
             <Legend
               wrapperStyle={{ paddingTop: "20px" }}
               iconType="line"
-              contentStyle={{ color: "#e2e8f0" }}
               formatter={(value) => {
                 if (value === "total_outgoings") return "Total outgoings";
                 if (value === "mortgage_payment") return "Mortgage";

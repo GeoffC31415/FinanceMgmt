@@ -76,7 +76,6 @@ export function RiskTimelineChart({
             <Legend
               wrapperStyle={{ paddingTop: "10px" }}
               iconType="line"
-              contentStyle={{ color: "#e2e8f0" }}
               formatter={(value) => {
                 if (value === "bankruptcy_pct") return "Bankruptcy probability";
                 if (value === "depletion_pct")

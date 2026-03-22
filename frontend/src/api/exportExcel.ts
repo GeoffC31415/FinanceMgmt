@@ -292,7 +292,7 @@ export async function exportExcel(
           cell.numFmt = "£#,##0";
           cell.alignment = { horizontal: "right" };
         } else if (col.format === "percent") {
-          cell.numFmt = "0.0"%"";
+          cell.numFmt = "0.0%";
           cell.alignment = { horizontal: "right" };
         } else {
           cell.numFmt = "0";
