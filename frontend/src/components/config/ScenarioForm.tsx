@@ -625,11 +625,11 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
     defaultValues: default_values
   });
 
-  const people = useFieldArray({ control: form.control, name: "people" });
-  const incomes = useFieldArray({ control: form.control, name: "incomes" });
-  const expenses = useFieldArray({ control: form.control, name: "expenses" });
-  const assets = useFieldArray({ control: form.control, name: "assets" });
-  const properties = useFieldArray({ control: form.control, name: "properties" });
+  const people = useFieldArray({ control: form.control, name: "people", keyName: "field_id" });
+  const incomes = useFieldArray({ control: form.control, name: "incomes", keyName: "field_id" });
+  const expenses = useFieldArray({ control: form.control, name: "expenses", keyName: "field_id" });
+  const assets = useFieldArray({ control: form.control, name: "assets", keyName: "field_id" });
+  const properties = useFieldArray({ control: form.control, name: "properties", keyName: "field_id" });
 
   // Watch values for computing totals
   const watched_incomes = useWatch({ control: form.control, name: "incomes" });
@@ -889,7 +889,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
             {people.fields.map((person, idx) => {
               const isChild = form.watch(`people.${idx}.is_child`) === true;
               return (
-                <div key={person.id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
+                <div key={person.field_id} className="mt-4 rounded border border-slate-800 bg-slate-950/30 p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold">
@@ -1060,7 +1060,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                   const incomeKind = form.watch(`incomes.${idx}.kind`);
                   const isSalary = incomeKind === "salary";
                   return (
-                    <div key={income.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
+                    <div key={income.field_id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
                       <select
                         className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                         {...form.register(`incomes.${idx}.person_id` as any)}
@@ -1190,7 +1190,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               </div>
               <div className="min-w-[1420px] space-y-2">
                 {assets.fields.map((asset, idx) => (
-                  <div key={asset.id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-11">
+                  <div key={asset.field_id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-11">
                     <select
                       className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                       {...form.register(`assets.${idx}.person_id`)}
@@ -1353,7 +1353,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               const isExpanded = expandedPropertyIdx === idx;
 
               return (
-                <div key={property.id} className="rounded border border-slate-800 bg-slate-900/30">
+                <div key={property.field_id} className="rounded border border-slate-800 bg-slate-900/30">
                   {/* Collapsed header — always visible */}
                   <button
                     type="button"
@@ -1757,7 +1757,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               <div className="min-w-[980px] space-y-2">
                 {expenses.fields.map((expense, idx) => (
                   <div
-                    key={expense.id}
+                    key={expense.field_id}
                     className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-5"
                   >
                     <input

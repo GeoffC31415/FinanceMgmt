@@ -3,3 +3,5 @@
 frontend/node_modules
 finances.db
 frontend/.vite
+frontend/dist
+frontend/tsconfig.tsbuildinfo
