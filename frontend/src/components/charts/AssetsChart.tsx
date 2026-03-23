@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { formatCompactCurrencyTick, getCurrencyAxisWidth } from "../../utils/chartFormatters";
 
 type Props = {
   years: number[];
@@ -52,7 +53,7 @@ export function AssetsChart({
     const totalAssets = sanitize(total_assets_median[idx]);
     // GIA = total assets - ISA - pension - cash - property
     const gia = totalAssets - isa - pension - cash - property;
-    
+
     return {
       year,
       isa_balance: clampForLog(isa),
@@ -63,6 +64,16 @@ export function AssetsChart({
       total_assets: clampForLog(totalAssets)
     };
   });
+
+  const y_axis_values = data.flatMap((point) => [
+    point.total_assets,
+    point.cash_balance,
+    point.isa_balance,
+    point.pension_balance,
+    point.property_balance,
+    point.gia_balance
+  ]);
+  const y_axis_width = getCurrencyAxisWidth(y_axis_values);
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -87,7 +98,7 @@ export function AssetsChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis
@@ -96,7 +107,8 @@ export function AssetsChart({
               scale={useLogScale ? "log" : "linear"}
               domain={useLogScale ? [LOG_MIN, "auto"] : ["auto", "auto"]}
               allowDataOverflow={useLogScale}
-              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
+              width={y_axis_width}
+              tickFormatter={formatCompactCurrencyTick}
             />
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}

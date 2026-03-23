@@ -1,4 +1,5 @@
 import type {
+  BondOverrideRequest,
   BondSweepRequest,
   BondSweepResponse,
   HistoricalReturnsStats,
@@ -136,6 +137,13 @@ export async function get_historical_returns(): Promise<HistoricalReturnsRespons
 
 export async function bond_sweep(payload: BondSweepRequest): Promise<BondSweepResponse> {
   return await http<BondSweepResponse>("/simulation/bond-sweep", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function bond_override(payload: BondOverrideRequest): Promise<SimulationResponse> {
+  return await http<SimulationResponse>("/simulation/bond-override", {
     method: "POST",
     body: JSON.stringify(payload)
   });

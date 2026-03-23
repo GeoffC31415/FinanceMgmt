@@ -253,3 +253,11 @@ export type BondSweepResponse = {
   target_year: number;
   total_combos_tested: number;
 };
+
+export type BondOverrideRequest = Omit<SimulationRequest, "scenario_id"> & {
+  session_id: string;
+  isa_bond_pct: number;
+  gia_bond_pct: number;
+  pension_bond_pct: number;
+  retirement_age_offset?: number | null;
+};

@@ -11,6 +11,7 @@ from backend.dependencies import get_db_session
 from backend.models import Asset, Expense, Income, Person, Scenario
 from backend.schemas.simulation import (
     BondCombo,
+    BondOverrideRequest,
     BondSweepRequest,
     BondSweepResponse,
     MarginalCurve,
@@ -920,5 +921,49 @@ def bond_sweep(
         marginals=marginals,
         target_year=target_year,
         total_combos_tested=len(results),
+    )
+
+
+@router.post("/bond-override", response_model=SimulationResponse)
+def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
+    """Recalculate simulation with bond allocation overrides for specific asset classes."""
+    cached = get_session(session_id=payload.session_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
+
+    if cached.base_scenario.assumptions.return_model != "historical_bootstrap":
+        raise HTTPException(status_code=400, detail="Bond override requires historical_bootstrap return model")
+
+    base = cached.base_scenario
+    retirement_age_offset = int(payload.retirement_age_offset or 0)
+    annual_spend_target = float(payload.annual_spend_target) if payload.annual_spend_target is not None else base.annual_spend_target
+
+    sim_scenario = _build_scenario_from_cached(
+        base=base,
+        annual_spend_target=annual_spend_target,
+        retirement_age_offset=retirement_age_offset,
+    )
+
+    # Create bond override dictionary
+    bond_override_dict = {
+        "ISA": payload.isa_bond_pct / 100.0,
+        "GIA": payload.gia_bond_pct / 100.0,
+        "PENSION": payload.pension_bond_pct / 100.0,
+    }
+
+    returns = generate_returns_matrix_with_bond_override(
+        scenario=sim_scenario,
+        iterations=cached.returns.iterations,
+        seed=0,
+        bond_pct_by_class=bond_override_dict,
+    )
+    mats = run_simulation(scenario=sim_scenario, returns=returns)
+
+    return _response_from_matrices(
+        years=mats.years,
+        mats=mats.fields,
+        people=sim_scenario.people,
+        inflation_rate=sim_scenario.assumptions.inflation_rate,
+        start_year=sim_scenario.start_year,
     )
 

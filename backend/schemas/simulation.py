@@ -173,3 +173,13 @@ class BondSweepResponse(BaseModel):
     marginals: list[MarginalCurve]
     target_year: int
     total_combos_tested: int
+
+
+class BondOverrideRequest(BaseModel):
+    """Request to apply bond allocation overrides for current simulation."""
+    session_id: str
+    isa_bond_pct: float = Field(default=0.0, ge=0.0, le=100.0)
+    gia_bond_pct: float = Field(default=0.0, ge=0.0, le=100.0)
+    pension_bond_pct: float = Field(default=0.0, ge=0.0, le=100.0)
+    annual_spend_target: float | None = Field(default=None, ge=0.0)
+    retirement_age_offset: int | None = Field(default=0, ge=-30, le=30)

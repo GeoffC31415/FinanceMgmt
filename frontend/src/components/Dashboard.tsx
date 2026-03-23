@@ -9,8 +9,10 @@ import { RiskTimelineChart } from "./charts/RiskTimelineChart";
 import { BondSweepChart } from "./charts/BondSweepChart";
 import { RiskSummaryPanel } from "./RiskSummaryPanel";
 import { OverviewInsights } from "./OverviewInsights";
+import { BondAllocationPanel } from "./charts/BondAllocationPanel";
 // Lazy-load exceljs only when the user clicks Export
 const lazyExportExcel = () => import("../api/exportExcel").then((m) => m.exportExcel);
+import { update_scenario } from "../api/client";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
 import type { SimulationResponse } from "../types";
@@ -24,6 +26,24 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+type BondAllocations = {
+  ISA: number;
+  GIA: number;
+  PENSION: number;
+};
+
+function getScenarioBondAllocations(
+  scenario: { assets?: Array<{ asset_type?: string; bond_allocation?: number }> } | null | undefined
+): BondAllocations {
+  const allocations: BondAllocations = { ISA: 0, GIA: 0, PENSION: 0 };
+  for (const asset of scenario?.assets ?? []) {
+    const asset_type = asset.asset_type?.toUpperCase();
+    if (asset_type === "ISA" || asset_type === "GIA" || asset_type === "PENSION") {
+      allocations[asset_type] = Math.round(((asset.bond_allocation ?? 0) as number) * 100);
+    }
+  }
+  return allocations;
+}
 
 function format_currency_compact(value: number): string {
   if (Math.abs(value) >= 1_000_000) {
@@ -124,7 +144,7 @@ const PERCENTILE_PRESETS = [
 ];
 
 export function Dashboard() {
-  const { scenarios, is_loading, error } = useScenarioList();
+  const { scenarios, is_loading, error, refresh } = useScenarioList();
   const {
     result,
     session_id,
@@ -139,6 +159,7 @@ export function Dashboard() {
     is_loading_bond_sweep,
     sweep_progress,
     fetch_bond_sweep,
+    fetch_bond_override,
   } = useSimulation();
   const [selected_id, setSelectedId] = useState<string | null>(null);
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
@@ -149,8 +170,27 @@ export function Dashboard() {
   const [risk_threshold, setRiskThreshold] = useState<number>(5);
   const [bond_target_year, setBondTargetYear] = useState<number | null>(null);
   const [active_tab, setActiveTab] = useState<TabId>("overview");
+  const [saved_bond_allocations, setSavedBondAllocations] = useState<BondAllocations>({
+    ISA: 0,
+    GIA: 0,
+    PENSION: 0
+  });
+  const [bond_allocations, setBondAllocations] = useState<BondAllocations>({
+    ISA: 0,
+    GIA: 0,
+    PENSION: 0
+  });
+  const [is_saving_bonds, setIsSavingBonds] = useState(false);
+  const [bond_save_error, setBondSaveError] = useState<string | null>(null);
 
   const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
+
+  useEffect(() => {
+    const next = getScenarioBondAllocations(selected);
+    setSavedBondAllocations(next);
+    setBondAllocations(next);
+    setBondSaveError(null);
+  }, [selected]);
 
   // Compute actual retirement ages for display
   const retirement_ages = useMemo(() => {
@@ -391,6 +431,74 @@ export function Dashboard() {
     const scenario_name = selected?.name ?? "scenario";
     const doExport = await lazyExportExcel();
     await doExport(display_result, scenario_name, percentile, show_real_values);
+  }
+
+  async function handleBondAllocationChange(assetType: keyof BondAllocations, value: number) {
+    const updatedAllocations = { ...bond_allocations, [assetType]: value };
+    setBondAllocations(updatedAllocations);
+    setBondSaveError(null);
+
+    if (!session_id || !display_result) return;
+
+    try {
+      await fetch_bond_override({
+        session_id,
+        isa_bond_pct: updatedAllocations.ISA,
+        gia_bond_pct: updatedAllocations.GIA,
+        pension_bond_pct: updatedAllocations.PENSION,
+        annual_spend_target,
+        retirement_age_offset
+      });
+    } catch (e) {
+      console.error("Failed to recalculate with new bond allocation:", e);
+    }
+  }
+
+  async function handleSaveBondAllocations(
+    allocations: Partial<BondAllocations>,
+    assetTypes?: Array<keyof BondAllocations>
+  ) {
+    if (!selected) return;
+
+    const typesToSave = new Set<keyof BondAllocations>(
+      assetTypes ?? (Object.keys(allocations) as Array<keyof BondAllocations>)
+    );
+    if (typesToSave.size === 0) return;
+
+    setIsSavingBonds(true);
+    setBondSaveError(null);
+    try {
+      const { id: _id, ...payload } = selected;
+      const updated = await update_scenario(selected.id, {
+        ...payload,
+        assets: selected.assets.map((asset) => {
+          const assetType = asset.asset_type?.toUpperCase() as keyof BondAllocations | undefined;
+          if (!assetType || !typesToSave.has(assetType)) return asset;
+          return {
+            ...asset,
+            bond_allocation: (allocations[assetType] ?? bond_allocations[assetType] ?? 0) / 100,
+          };
+        })
+      });
+
+      const nextSaved = getScenarioBondAllocations(updated);
+      setSavedBondAllocations(nextSaved);
+      setBondAllocations((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          Array.from(typesToSave).map((assetType) => [
+            assetType,
+            allocations[assetType] ?? current[assetType],
+          ])
+        ) as Partial<BondAllocations>,
+      }));
+      void refresh();
+    } catch (e) {
+      setBondSaveError(e instanceof Error ? e.message : "Failed to save");
+      throw e;
+    } finally {
+      setIsSavingBonds(false);
+    }
   }
 
   // Color helper for success rate
@@ -814,6 +922,13 @@ export function Dashboard() {
                   pension_withdrawals_median={display_result.pension_withdrawals_median}
                   property_rental_income_median={display_result.property_rental_income_median}
                   property_maintenance_median={display_result.property_maintenance_median}
+                  currentBondAllocations={saved_bond_allocations}
+                  onBondAllocationChange={handleBondAllocationChange}
+                  onSaveBondAllocations={async (allocations) => {
+                    await handleSaveBondAllocations(allocations);
+                  }}
+                  isSaving={is_saving_bonds}
+                  canEditBondAllocations={Boolean(session_id)}
                 />
               </>
             )}
@@ -919,6 +1034,17 @@ export function Dashboard() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Bond Allocation Panel */}
+                  {selected && display_result && (
+                    <BondAllocationPanel
+                      currentAllocations={bond_allocations}
+                      onAllocationChange={handleBondAllocationChange}
+                      isSaving={is_saving_bonds}
+                      saveError={bond_save_error}
+                      className="w-full"
+                    />
+                  )}
 
                   {/* Progress bar */}
                   {is_loading_bond_sweep && sweep_progress && (() => {

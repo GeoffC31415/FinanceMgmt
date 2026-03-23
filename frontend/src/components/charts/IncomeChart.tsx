@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { formatCompactCurrencyTick, getCurrencyAxisWidth } from "../../utils/chartFormatters";
 
 type Props = {
   years: number[];
@@ -63,6 +64,18 @@ export function IncomeChart({
     total_income: clampForLog(sanitize(total_income_median[idx]))
   }));
 
+  const y_axis_values = data.flatMap((point) => [
+    point.total_income,
+    point.salary_gross,
+    point.salary_net,
+    point.rental_income,
+    point.gift_income,
+    point.pension_income,
+    point.state_pension_income,
+    point.investment_returns
+  ]);
+  const y_axis_width = getCurrencyAxisWidth(y_axis_values);
+
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -97,7 +110,7 @@ export function IncomeChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis
@@ -106,7 +119,8 @@ export function IncomeChart({
               scale={useLogScale ? "log" : "linear"}
               domain={useLogScale ? [LOG_MIN, "auto"] : ["auto", "auto"]}
               allowDataOverflow={useLogScale}
-              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
+              width={y_axis_width}
+              tickFormatter={formatCompactCurrencyTick}
             />
             <Tooltip
               contentStyle={{ background: "#0b1220", border: "1px solid #1f2937", color: "#e2e8f0" }}

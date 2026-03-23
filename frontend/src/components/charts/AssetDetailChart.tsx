@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -13,6 +13,12 @@ import {
 } from "recharts";
 
 type AssetGroup = "ISA" | "GIA" | "CASH" | "PENSION" | "PROPERTY" | "DEBT";
+
+type BondAllocationChanges = {
+  ISA?: number;
+  GIA?: number;
+  PENSION?: number;
+};
 
 type Props = {
   years: number[];
@@ -45,6 +51,16 @@ type Props = {
   pension_withdrawals_median: number[];
   property_rental_income_median: number[];
   property_maintenance_median: number[];
+
+  // Current bond allocations (from scenario config)
+  currentBondAllocations?: BondAllocationChanges;
+  
+  // Callbacks for bond allocation changes
+  onBondAllocationChange?: (assetType: "ISA" | "GIA" | "PENSION", value: number) => void;
+  onSaveBondAllocations?: (allocations: BondAllocationChanges) => void;
+  onResetBondAllocations?: () => void;
+  isSaving?: boolean;
+  canEditBondAllocations?: boolean;
 };
 
 const sanitize = (v: number | undefined | null): number => {
@@ -77,9 +93,43 @@ export function AssetDetailChart({
   gia_withdrawals_median,
   pension_withdrawals_median,
   property_rental_income_median,
-  property_maintenance_median
+  property_maintenance_median,
+  currentBondAllocations = {},
+  onBondAllocationChange,
+  onSaveBondAllocations,
+  onResetBondAllocations,
+  isSaving = false,
+  canEditBondAllocations = true
 }: Props) {
   const [selected, setSelected] = useState<AssetGroup>("ISA");
+  const [localAllocations, setLocalAllocations] = useState<BondAllocationChanges>(currentBondAllocations);
+
+  useEffect(() => {
+    setLocalAllocations(currentBondAllocations);
+  }, [currentBondAllocations]);
+
+  const selectedBondAssetType =
+    selected === "ISA" || selected === "GIA" || selected === "PENSION" ? selected : null;
+  const savedSelectedAllocation = selectedBondAssetType
+    ? currentBondAllocations[selectedBondAssetType] ?? 0
+    : 0;
+  const localSelectedAllocation = selectedBondAssetType
+    ? localAllocations[selectedBondAssetType] ?? savedSelectedAllocation
+    : 0;
+  const hasChanges = selectedBondAssetType
+    ? localSelectedAllocation !== savedSelectedAllocation
+    : false;
+
+  const handleBondChange = (assetType: "ISA" | "GIA" | "PENSION", value: number) => {
+    setLocalAllocations((prev) => ({
+      ...prev,
+      [assetType]: value,
+    }));
+
+    if (onBondAllocationChange) {
+      onBondAllocationChange(assetType, value);
+    }
+  };
 
   const { balanceLabel, data } = useMemo(() => {
     const balanceByType: Record<AssetGroup, number[]> = {
@@ -172,7 +222,7 @@ export function AssetDetailChart({
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm font-semibold">
           Asset type breakdown
           {percentile !== 50 && (
@@ -195,6 +245,104 @@ export function AssetDetailChart({
           </select>
         </div>
       </div>
+
+      {/* Bond Allocation Controls for investable assets */}
+      {canEditBondAllocations && selected !== "CASH" && selected !== "PROPERTY" && selected !== "DEBT" && (
+        <div className="mb-4 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-indigo-300">Bond Allocation for {selected}</div>
+              <div className="text-xs text-indigo-400/70">
+                Adjust the bond percentage for this asset type. Changes are reflected immediately. Use Save below to make them permanent.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Current:</span>
+              <span className="min-w-[60px] text-right text-sm font-semibold text-indigo-400">
+                {localSelectedAllocation}%
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>100% Equity</span>
+                <span>100% Bonds</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={localSelectedAllocation}
+                onChange={(e) => handleBondChange(selected as "ISA" | "GIA" | "PENSION", parseInt(e.target.value, 10))}
+                className={`h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-700 ${
+                  selected === "ISA"
+                    ? "accent-blue-500"
+                    : selected === "GIA"
+                      ? "accent-green-500"
+                      : "accent-purple-500"
+                }`}
+                disabled={isSaving}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (!selectedBondAssetType) return;
+                  setLocalAllocations((prev) => ({
+                    ...prev,
+                    [selectedBondAssetType]: savedSelectedAllocation,
+                  }));
+                  onResetBondAllocations?.();
+                  onBondAllocationChange?.(selectedBondAssetType, savedSelectedAllocation);
+                }}
+                className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                disabled={isSaving || !hasChanges}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {hasChanges && onSaveBondAllocations && selectedBondAssetType && (
+            <div className="mt-3 flex items-center justify-between border-t border-indigo-900/50 pt-3">
+              <span className="text-xs text-amber-300">
+                ⚠️ Unsaved change to {selected} bond allocation
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setLocalAllocations((prev) => ({
+                      ...prev,
+                      [selectedBondAssetType]: savedSelectedAllocation,
+                    }));
+                    onResetBondAllocations?.();
+                    onBondAllocationChange?.(selectedBondAssetType, savedSelectedAllocation);
+                  }}
+                  className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700"
+                  disabled={isSaving}
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={async () => {
+                    await onSaveBondAllocations({
+                      ...currentBondAllocations,
+                      [selectedBondAssetType]: localSelectedAllocation,
+                    });
+                  }}
+                  className="rounded bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Saving..." : `Save ${selected} to Config`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="h-[360px] rounded border border-slate-800/60 bg-slate-950/20 p-3">

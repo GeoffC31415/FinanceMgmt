@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type {
+  BondOverrideRequest,
   BondSweepRequest,
   BondSweepResponse,
   SafeWithdrawalRequest,
@@ -10,7 +11,15 @@ import type {
   SimulationRequest,
   SimulationResponse
 } from "../types";
-import { bond_sweep, bond_sweep_progress, init_simulation, recalc_simulation, run_simulation, safe_withdrawal } from "../api/client";
+import {
+  bond_override,
+  bond_sweep,
+  bond_sweep_progress,
+  init_simulation,
+  recalc_simulation,
+  run_simulation,
+  safe_withdrawal
+} from "../api/client";
 
 export function useSimulation() {
   const [result, setResult] = useState<SimulationResponse | null>(null);
@@ -117,6 +126,34 @@ export function useSimulation() {
     [session_id]
   );
 
+  const fetch_bond_override = useCallback(
+    async (payload: Omit<BondOverrideRequest, "session_id"> & { session_id?: string | null }) => {
+      const effective_session_id = payload.session_id ?? session_id;
+      if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await bond_override({
+          session_id: effective_session_id,
+          isa_bond_pct: payload.isa_bond_pct,
+          gia_bond_pct: payload.gia_bond_pct,
+          pension_bond_pct: payload.pension_bond_pct,
+          annual_spend_target: payload.annual_spend_target ?? null,
+          retirement_age_offset: payload.retirement_age_offset ?? null,
+        });
+        setResult(res);
+        return res;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Bond override simulation failed");
+        throw e;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [session_id]
+  );
+
   const fetch_bond_sweep = useCallback(
     async (payload: Omit<BondSweepRequest, "session_id"> & { session_id?: string | null }) => {
       const effective_session_id = payload.session_id ?? session_id;
@@ -193,5 +230,6 @@ export function useSimulation() {
     is_loading_bond_sweep,
     sweep_progress,
     fetch_bond_sweep,
+    fetch_bond_override,
   };
 }
