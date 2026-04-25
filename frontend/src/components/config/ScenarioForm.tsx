@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import type { UseFormRegister } from "react-hook-form";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -251,12 +251,10 @@ function InfoTip({ text }: { text: string }) {
 }
 
 function TaxYearSelector({
-  register,
-  watchValue,
+  control,
   disabled
 }: {
-  register: ReturnType<typeof useForm<FormValues>>["register"];
-  watchValue: string | undefined;
+  control: any;
   disabled?: boolean;
 }) {
   const [presets, setPresets] = useState<TaxYearPreset[]>([]);
@@ -269,32 +267,42 @@ function TaxYearSelector({
       .finally(() => setIsLoading(false));
   }, []);
 
-  const selected = presets.find((p) => p.tax_year === watchValue);
-
   return (
     <div className="space-y-2">
-      <select
-        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-        {...register("assumptions.tax_year")}
-        disabled={disabled ?? is_loading}
-      >
-        <option value="">Select tax year...</option>
-        {presets.map((p) => (
-          <option key={p.tax_year} value={p.tax_year}>
-            {p.tax_year}
-          </option>
-        ))}
-      </select>
-      {selected && (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 rounded border border-slate-800 bg-slate-950/50 p-3">
-          <div>Personal allowance: <span className="text-slate-200">£{selected.personal_allowance.toLocaleString()}</span></div>
-          <div>Basic rate ({(selected.basic_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.basic_rate_limit.toLocaleString()}</span></div>
-          <div>Higher rate ({(selected.higher_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.higher_rate_limit.toLocaleString()}</span></div>
-          <div>Additional rate: <span className="text-slate-200">{(selected.additional_rate * 100).toFixed(0)}%</span></div>
-          <div>NI main rate: <span className="text-slate-200">{(selected.ni_main_rate * 100).toFixed(1)}%</span></div>
-          <div>NI upper rate: <span className="text-slate-200">{(selected.ni_upper_rate * 100).toFixed(1)}%</span></div>
-        </div>
-      )}
+      <Controller
+        control={control}
+        name="assumptions.tax_year"
+        render={({ field: { value, onChange } }) => {
+          const selected = presets.find((p) => p.tax_year === value);
+          return (
+            <>
+              <select
+                className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                value={value || ""}
+                onChange={(e) => onChange(e.target.value || undefined)}
+                disabled={disabled ?? is_loading}
+              >
+                <option value="">Select tax year...</option>
+                {presets.map((p) => (
+                  <option key={p.tax_year} value={p.tax_year}>
+                    {p.tax_year}
+                  </option>
+                ))}
+              </select>
+              {selected && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 rounded border border-slate-800 bg-slate-950/50 p-3">
+                  <div>Personal allowance: <span className="text-slate-200">£{selected.personal_allowance.toLocaleString()}</span></div>
+                  <div>Basic rate ({(selected.basic_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.basic_rate_limit.toLocaleString()}</span></div>
+                  <div>Higher rate ({(selected.higher_rate * 100).toFixed(0)}%): up to <span className="text-slate-200">£{selected.higher_rate_limit.toLocaleString()}</span></div>
+                  <div>Additional rate: <span className="text-slate-200">{(selected.additional_rate * 100).toFixed(0)}%</span></div>
+                  <div>NI main rate: <span className="text-slate-200">{(selected.ni_main_rate * 100).toFixed(1)}%</span></div>
+                  <div>NI upper rate: <span className="text-slate-200">{(selected.ni_upper_rate * 100).toFixed(1)}%</span></div>
+                </div>
+              )}
+            </>
+          );
+        }}
+      />
     </div>
   );
 }
@@ -713,12 +721,10 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
     properties.fields.length > 0 ? 0 : null
   );
 
-  const prev_scenario_id = useRef<string | null>(null);
+  // Reset form when scenario data changes (switch scenario or after successful save).
+  // This also clears isDirty so the "unsaved changes" indicator disappears.
   useEffect(() => {
-    if (prev_scenario_id.current !== scenario.id) {
-      prev_scenario_id.current = scenario.id;
-      form.reset(default_values);
-    }
+    form.reset(default_values);
   }, [scenario.id, default_values, form]);
 
   return (
@@ -780,8 +786,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
               <p className="text-xs text-slate-400 mt-1">Select a UK tax year to use for income tax and NI calculations. Bands are applied throughout the simulation.</p>
               <div className="mt-2">
                 <TaxYearSelector
-                  register={form.register}
-                  watchValue={form.watch("assumptions.tax_year") ?? undefined}
+                  control={form.control}
                 />
               </div>
             </div>
@@ -1813,12 +1818,18 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
           <div className="text-xs text-slate-400">
             {form.formState.isValid ? "Valid" : "Fix validation errors before saving"}
           </div>
+          {form.formState.isDirty && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-300">
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              Unsaved changes
+            </div>
+          )}
           <button
             className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
             disabled={!form.formState.isValid || is_saving}
             type="submit"
           >
-            Save
+            {is_saving ? "Saving..." : "Save"}
           </button>
         </div>
       </form>
