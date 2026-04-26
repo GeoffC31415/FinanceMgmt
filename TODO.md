@@ -21,9 +21,10 @@ Recent repo changes that affect this roadmap:
 - Frontend UX/onboarding has moved forward: `/intro`, reusable `Button`/`Card`, starter/sample scenarios, and a refreshed app shell are implemented. Track remaining UX work in `frontend/TODO.md`.
 - Allocation projection now shows selected-percentile peak net worth, final net worth, and bankruptcy risk; bond override now preserves current extra spend, retirement-age offset, and percentile.
 - Risk Analysis safe-withdrawal no longer silently shows `---` on backend failure; frontend surfaces the error and backend `/safe-withdrawal` has the missing `numpy` import fixed.
-- Frontend tests: `npm test` passes with 250 tests across 22 files.
+- Frontend tests: `npm test -- --run` passes with 250 tests across 22 files.
 - Frontend production build is still blocked by known TypeScript issues; see `frontend/TODO.md` item `4a`.
-- Backend tests were not run in this environment because `pytest` is unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`.
+- Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (250 tests / 22 files).
+- P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, and includes it in Excel export.
 
 ---
 
@@ -44,10 +45,10 @@ Verified against current code on 2026-04-26. The repo currently models:
 
 Important current limitations/gaps:
 
-- State pension is added to cash but is not directly taxed each year unless there is pension drawdown in the same year. Frontend copy has been updated, but the backend correctness bug remains open under P0.1.
+- State pension is now taxed per person each year in the fast engine and added to cash net of state-pension tax. Remaining visibility work is frontend chart/export presentation.
 - Pension drawdown tax is calculated against a household/eligible-pension aggregate instead of per individual. Frontend owner warnings have been added, but backend per-owner tax treatment remains open under P0.2.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
-- The simulation output does not separate CGT, pension drawdown tax, rental tax, state pension tax, and salary income tax.
+- The simulation output now separates `state_pension_tax_paid`, but still does not separately expose CGT, pension drawdown tax, rental tax, and salary income tax.
 - Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`.
 - The selected tax year is applied statically across the whole simulation horizon.
 
@@ -57,27 +58,27 @@ Important current limitations/gaps:
 
 ### P0.1 — Tax state pension as income per person
 
-**Problem:** `engine_fast.py` adds state pension income directly to cash and `total_income`, but does not include it in annual per-person income tax calculations unless pension drawdown occurs. The README says state pension is taxable, so current results understate tax for pensioners.
+**Problem:** Historically, `engine_fast.py` added state pension income directly to cash and `total_income`, but did not include it in annual per-person income tax calculations unless pension drawdown occurred. This backend bug is now fixed; keep this section as the regression checklist and frontend follow-up tracker.
 
 **Backend tasks:**
 
-- [ ] Track `per_person_state_pension` during each year.
-- [ ] Include state pension in each person's taxable income calculation even when there is no private pension drawdown.
-- [ ] Ensure state pension uses each person's own personal allowance and marginal bands.
-- [ ] Decide ordering for salary, rental, state pension, and drawdown tax calculation; document it.
-- [ ] Add output field(s): `state_pension_tax_paid`, or at minimum include it in a clearer `income_tax_salary_rental_state_pension` bucket.
-- [ ] Add unit/integration tests for:
-  - [ ] pensioner with only state pension below personal allowance = no tax;
-  - [ ] pensioner with state pension + rental income = tax on excess;
-  - [ ] two-person household where each state pension uses its own allowance;
-  - [ ] state pension + private drawdown marginal tax interaction.
+- [x] Track `per_person_state_pension` during each year.
+- [x] Include state pension in each person's taxable income calculation even when there is no private pension drawdown.
+- [x] Ensure state pension uses each person's own personal allowance and marginal bands.
+- [x] Decide ordering for salary, rental, state pension, and drawdown tax calculation; document it. Current ordering: salary after employee pension contributions, then rental/property income, then state pension, then private pension drawdown.
+- [x] Add output field(s): `state_pension_tax_paid`, or at minimum include it in a clearer `income_tax_salary_rental_state_pension` bucket.
+- [x] Add unit/integration tests for:
+  - [x] pensioner with only state pension below personal allowance = no tax;
+  - [x] pensioner with state pension + rental income = tax on excess;
+  - [x] two-person household where each state pension uses its own allowance;
+  - [x] state pension + private drawdown marginal tax interaction.
 
 **Frontend tasks:**
 
 - [x] Update help text in `PeopleForm`, `AssumptionsForm`, `ConfigWizard`, and `HelpPage` to say state pension is taxable and modelled per person.
-- [ ] Add state-pension tax visibility in tax breakdown UI once backend fields exist.
+- [ ] Add state-pension tax visibility in dashboard tax breakdown UI; backend now exposes `state_pension_tax_paid_median` and Excel export includes a State Pension Tax column.
 
-**Acceptance criteria:** State pension is taxed every year it is received, independently of private pension drawdown.
+**Acceptance criteria:** State pension is taxed every year it is received, independently of private pension drawdown. Backend fast-engine implementation is complete; frontend tax-breakdown visibility remains open.
 
 ---
 
@@ -173,7 +174,7 @@ Important current limitations/gaps:
   - [ ] salary_income_tax_paid;
   - [ ] rental_income_tax_paid;
   - [ ] property_income_tax_paid;
-  - [ ] state_pension_tax_paid;
+  - [x] state_pension_tax_paid;
   - [ ] pension_drawdown_tax_paid;
   - [ ] capital_gains_tax_paid;
   - [ ] national_insurance_paid;
@@ -511,7 +512,8 @@ Important current limitations/gaps:
 ### Backend tests
 
 - [ ] Expand `backend/tests/test_tax.py` with golden examples for:
-  - [ ] state pension taxation;
+  - [x] state pension taxation in engine-level regression tests (`backend/tests/test_engine_equivalence.py`);
+  - [ ] pure tax-module state pension examples if/when source-specific helpers are added;
   - [ ] multi-person household allowances;
   - [ ] pension drawdown ownership;
   - [ ] CGT allowance use across GIA and property disposals;

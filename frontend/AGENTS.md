@@ -161,7 +161,7 @@ Contains arrays indexed by year for:
 - **Net worth**: `net_worth_p10`, `net_worth_median`, `net_worth_p90`
 - **Income**: salary (gross/net), rental, gift, pension, state pension, investment returns, total
 - **Expenses**: total, mortgage, pension contributions, fun fund
-- **Tax**: income tax, NI, total tax
+- **Tax**: income tax, optional state pension tax breakdown (`state_pension_tax_paid_median`, included in inflation adjustment and Excel export), NI, total tax
 - **Asset balances**: ISA, pension, cash, GIA, property, total
 - **Flows**: returns, contributions, withdrawals per asset type
 - **Liabilities**: mortgage balance, debt balance, debt interest
