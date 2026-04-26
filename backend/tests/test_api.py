@@ -328,3 +328,117 @@ async def test_simulation_recalc_expired_session(client: AsyncClient):
         "session_id": "expired-session",
     })
     assert resp.status_code == 404
+
+
+# ────────────────────────── Scenario Clone ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_clone_scenario(client: AsyncClient):
+    create_resp = await client.post("/api/config/scenarios", json=_minimal_scenario_payload("Original"))
+    scenario_id = create_resp.json()["id"]
+
+    clone_resp = await client.post(f"/api/config/scenarios/{scenario_id}/clone", json={
+        "new_name": "Cloned Scenario",
+    })
+    assert clone_resp.status_code == 200
+    data = clone_resp.json()
+    assert data["name"] == "Cloned Scenario"
+    assert data["id"] != scenario_id
+    assert "message" in data
+
+
+@pytest.mark.asyncio
+async def test_clone_scenario_default_name(client: AsyncClient):
+    create_resp = await client.post("/api/config/scenarios", json=_minimal_scenario_payload("Original"))
+    scenario_id = create_resp.json()["id"]
+
+    clone_resp = await client.post(f"/api/config/scenarios/{scenario_id}/clone", json={})
+    assert clone_resp.status_code == 200
+    assert clone_resp.json()["name"] == "Original (copy)"
+
+
+@pytest.mark.asyncio
+async def test_clone_scenario_not_found(client: AsyncClient):
+    resp = await client.post("/api/config/scenarios/nonexistent/clone", json={})
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_clone_scenario_deep_copies_children(client: AsyncClient):
+    create_resp = await client.post("/api/config/scenarios", json=_minimal_scenario_payload("Original"))
+    scenario_id = create_resp.json()["id"]
+
+    clone_resp = await client.post(f"/api/config/scenarios/{scenario_id}/clone", json={
+        "new_name": "Cloned",
+    })
+    assert clone_resp.status_code == 200
+
+    # Verify the clone has the same number of children with matching non-ID fields
+    cloned_id = clone_resp.json()["id"]
+    get_resp = await client.get(f"/api/config/scenarios/{cloned_id}")
+    cloned = get_resp.json()
+    original = create_resp.json()
+
+    assert len(cloned["people"]) == len(original["people"])
+    assert len(cloned["assets"]) == len(original["assets"])
+    assert len(cloned["properties"]) == len(original["properties"])
+    assert len(cloned["expenses"]) == len(original["expenses"])
+
+    # Verify IDs are different (new scenario)
+    assert cloned["people"][0]["id"] != original["people"][0]["id"]
+    assert cloned["people"][0]["scenario_id"] == cloned_id
+
+    # Verify data is copied correctly (non-ID fields match)
+    assert cloned["people"][0]["label"] == original["people"][0]["label"]
+    assert cloned["people"][0]["birth_date"] == original["people"][0]["birth_date"]
+
+
+# ────────────────────────── Simulation Export ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_export_csv(client: AsyncClient):
+    create_resp = await client.post("/api/config/scenarios", json=_minimal_scenario_payload())
+    scenario_id = create_resp.json()["id"]
+
+    init_resp = await client.post("/api/simulation/init", json={
+        "scenario_id": scenario_id,
+        "iterations": 50,
+        "seed": 42,
+    })
+    session_id = init_resp.json()["session_id"]
+
+    export_resp = await client.get(f"/api/simulation/export?session_id={session_id}&format=csv")
+    assert export_resp.status_code == 200
+    assert export_resp.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "simulation_" in export_resp.headers.get("content-disposition", "")
+    # Check CSV structure: first row has "year" + year labels
+    lines = export_resp.text.strip().split("\n")
+    assert lines[0].startswith("year")
+
+
+@pytest.mark.asyncio
+async def test_export_json(client: AsyncClient):
+    create_resp = await client.post("/api/config/scenarios", json=_minimal_scenario_payload())
+    scenario_id = create_resp.json()["id"]
+
+    init_resp = await client.post("/api/simulation/init", json={
+        "scenario_id": scenario_id,
+        "iterations": 50,
+        "seed": 42,
+    })
+    session_id = init_resp.json()["session_id"]
+
+    export_resp = await client.get(f"/api/simulation/export?session_id={session_id}&format=json")
+    assert export_resp.status_code == 200
+    assert export_resp.headers["content-type"] == "application/json"
+    data = export_resp.json()
+    assert "year" in data
+    assert "net_worth" in data
+
+
+@pytest.mark.asyncio
+async def test_export_not_found_session(client: AsyncClient):
+    resp = await client.get("/api/simulation/export?session_id=expired&format=csv")
+    assert resp.status_code == 404
