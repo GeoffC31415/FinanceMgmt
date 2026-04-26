@@ -4,8 +4,9 @@ import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import type { HistoricalReturnsStats, ReturnModel, ScenarioCreate, ScenarioRead } from "../../types";
+import type { Assumptions, HistoricalReturnsStats, ReturnModel, ScenarioCreate, ScenarioRead } from "../../types";
 import { get_historical_returns, list_tax_years, type TaxYearPreset } from "../../api/client";
+import { scenarioSchema, type FormValues } from "./formSchema";
 
 function parse_number_input(raw: string): number {
   const cleaned = raw.replace(/,/g, "").trim();
@@ -70,7 +71,7 @@ function NumberInput({
   placeholder
 }: {
   control: any;
-  name: string;
+  name: string & {};
   step?: number | string;
   min?: number;
   placeholder?: string;
@@ -79,7 +80,7 @@ function NumberInput({
   return (
     <Controller
       control={control}
-      name={name as any}
+      name={name}
       render={({ field }) => (
         <input
           className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -92,8 +93,8 @@ function NumberInput({
           }}
           onFocus={(e) => setEditing(e.target.value)}
           onBlur={() => { setEditing(null); field.onBlur(); }}
-          step={step as any}
-          min={min as any}
+          step={step as number | undefined}
+          min={min as number | undefined}
         />
       )}
     />
@@ -106,10 +107,10 @@ function AnnualFromMonthlyInput({
   setValue
 }: {
   control: any;
-  monthly_name: string;
-  setValue: (name: any, value: any, options?: any) => void;
+  monthly_name: string & {};
+  setValue: any;
 }) {
-  const monthly = Number(useWatch({ control, name: monthly_name as any }) ?? 0);
+  const monthly = Number(useWatch({ control, name: monthly_name as string }) ?? 0);
   const annual = monthly * 12;
 
   return (
@@ -119,7 +120,7 @@ function AnnualFromMonthlyInput({
       value={format_number_input(annual)}
       onChange={(e) => {
         const nextAnnual = parse_number_input(e.target.value);
-        setValue(monthly_name as any, nextAnnual / 12, { shouldDirty: true, shouldValidate: true });
+        setValue(monthly_name as string, nextAnnual / 12, { shouldDirty: true, shouldValidate: true });
       }}
     />
   );
@@ -131,14 +132,14 @@ function PercentInput({
   placeholder
 }: {
   control: any;
-  name: string;
+  name: string & {};
   placeholder?: string;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
     <Controller
       control={control}
-      name={name as any}
+      name={name}
       render={({ field }) => (
         <div className="relative">
           <input
@@ -177,7 +178,7 @@ function RentalSection({
   annualRent: number;
   propRent: number;
   propOccupancy: number;
-  setValue: (name: any, value: any, options?: any) => void;
+  setValue: any;
 }) {
   const [open, setOpen] = useState(initialOpen);
 
@@ -366,104 +367,22 @@ function ReturnModelSelector({ value, onChange }: { value: ReturnModel; onChange
   );
 }
 
-const schema = z.object({
-  name: z.string().min(1).max(200),
-  assumptions: z.object({
-    inflation_rate: z.coerce.number().min(0).max(1),
-    isa_annual_limit: z.coerce.number().min(0),
-    state_pension_annual: z.coerce.number().min(0),
-    pension_access_age: z.coerce.number().int().min(50).max(75),
-    start_year: z.coerce.number().int().min(1900).max(2200),
-    end_year: z.coerce.number().int().min(1900).max(2200),
-    annual_spend_target: z.coerce.number().min(0),
-    debt_interest_rate: z.coerce.number().min(0).max(1),
-    bankruptcy_threshold: z.coerce.number().max(0),
-    tax_year: z.string().optional(),
-    return_model: z.enum(["parametric", "historical_bootstrap"]).default("parametric"),
-  }),
-  people: z
-    .array(
-      z.object({
-        id: z.string().nullable().optional(),
-        label: z.string().min(1).max(100),
-        birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        // Adult fields (nullable for children)
-        planned_retirement_age: z.coerce.number().int().min(0).max(120).nullable().optional(),
-        state_pension_age: z.coerce.number().int().min(0).max(120).nullable().optional(),
-        // Child fields
-        is_child: z.coerce.boolean().default(false),
-        annual_cost: z.coerce.number().min(0).nullable().optional(),
-        leaves_household_age: z.coerce.number().int().min(0).max(50).nullable().optional()
-      })
-    )
-    .min(1),
-  incomes: z.array(
-    z.object({
-      person_id: z.string().nullable().optional(),
-      kind: z.string().min(1).max(50),
-      gross_annual: z.coerce.number().min(0),
-      annual_growth_rate: z.coerce.number().min(-1).max(10),
-      employee_pension_pct: z.coerce.number().min(0).max(1),
-      employer_pension_pct: z.coerce.number().min(0).max(1)
-    })
-  ),
-  assets: z.array(
-    z.object({
-      person_id: z.string().nullable().optional(),
-      name: z.string().min(1).max(200),
-      asset_type: z.enum(["CASH", "ISA", "GIA", "PENSION"]).default("GIA"),
-      withdrawal_priority: z.coerce.number().int().min(0).max(10000).default(100),
-      balance: z.coerce.number().min(0),
-      annual_contribution: z.coerce.number(),
-      growth_rate_mean: z.coerce.number(),
-      growth_rate_std: z.coerce.number().min(0),
-      contributions_end_at_retirement: z.coerce.boolean(),
-      bond_allocation: z.coerce.number().min(0).max(1).default(0)
-    })
-  ),
-  properties: z.array(
-    z.object({
-      person_id: z.string().nullable().optional(),
-      name: z.string().min(1).max(200),
-      value: z.coerce.number().min(0),
-      appreciation_rate_mean: z.coerce.number(),
-      appreciation_rate_std: z.coerce.number().min(0),
-      monthly_rental_income: z.coerce.number().min(0),
-      rental_growth_rate: z.coerce.number().min(-1).max(10),
-      occupancy_rate: z.coerce.number().min(0).max(1).default(1),
-      mortgage_ltv: z.coerce.number().min(0).max(1).default(0),
-      mortgage_rate: z.coerce.number().min(0).max(1).default(0),
-      mortgage_term_years: z.coerce.number().int().min(0).max(100).default(0),
-      annual_maintenance_cost: z.coerce.number().min(0),
-      maintenance_is_inflation_linked: z.coerce.boolean().default(true),
-      withdrawal_priority: z.coerce.number().int().min(0).max(10000).default(15)
-    })
-  ),
-  expenses: z.array(
-    z.object({
-      name: z.string().min(1).max(200),
-      monthly_amount: z.coerce.number().min(0),
-      is_inflation_linked: z.coerce.boolean()
-    })
-  )
-});
-
-type FormValues = z.infer<typeof schema>;
+const schema = scenarioSchema;
 
 function to_form_values(scenario: ScenarioRead): FormValues {
-  const assumptions = scenario.assumptions as Record<string, unknown>;
+  const assumptions = scenario.assumptions;
 
-  const inflation_rate = (assumptions.inflation_rate ?? 0.02) as number;
-  const isa_annual_limit = (assumptions.isa_annual_limit ?? 20000) as number;
-  const state_pension_annual = (assumptions.state_pension_annual ?? 11500) as number;
-  const pension_access_age = (assumptions.pension_access_age ?? 55) as number;
-  const start_year = (assumptions.start_year ?? new Date().getFullYear()) as number;
-  const end_year = (assumptions.end_year ?? new Date().getFullYear() + 60) as number;
-  const annual_spend_target = (assumptions.annual_spend_target ?? 30000) as number;
-  const debt_interest_rate = (assumptions.debt_interest_rate ?? 0.08) as number;
-  const bankruptcy_threshold = (assumptions.bankruptcy_threshold ?? -100000) as number;
-  const return_model = (assumptions.return_model ?? "historical_bootstrap") as ReturnModel;
-  const tax_year = (assumptions.tax_year ?? undefined) as string | undefined;
+  const inflation_rate = assumptions.inflation_rate ?? 0.02;
+  const isa_annual_limit = assumptions.isa_annual_limit ?? 20000;
+  const state_pension_annual = assumptions.state_pension_annual ?? 11500;
+  const pension_access_age = assumptions.pension_access_age ?? 55;
+  const start_year = assumptions.start_year ?? new Date().getFullYear();
+  const end_year = assumptions.end_year ?? new Date().getFullYear() + 60;
+  const annual_spend_target = assumptions.annual_spend_target ?? 30000;
+  const debt_interest_rate = assumptions.debt_interest_rate ?? 0.08;
+  const bankruptcy_threshold = assumptions.bankruptcy_threshold ?? -100000;
+  const return_model = assumptions.return_model ?? "historical_bootstrap" as ReturnModel;
+  const tax_year = assumptions.tax_year;
 
   return {
     name: scenario.name,
@@ -499,7 +418,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       person_id: i.person_id ?? ""
     })),
     assets: scenario.assets.map((a) => {
-      const existingType = (a as any).asset_type as string | undefined;
+      const existingType = a.asset_type;
       const inferred =
         existingType ??
         (a.name.toLowerCase().includes("cash")
@@ -511,14 +430,14 @@ function to_form_values(scenario: ScenarioRead): FormValues {
               : "GIA");
       return {
         name: a.name,
-        asset_type: inferred as any,
-        withdrawal_priority: ((a as any).withdrawal_priority ?? 100) as number,
+        asset_type: inferred as "CASH" | "ISA" | "GIA" | "PENSION",
+        withdrawal_priority: a.withdrawal_priority ?? 100,
         balance: a.balance,
         annual_contribution: a.annual_contribution,
         growth_rate_mean: a.growth_rate_mean,
         growth_rate_std: a.growth_rate_std,
         contributions_end_at_retirement: a.contributions_end_at_retirement,
-        bond_allocation: (a as any).bond_allocation ?? 0,
+        bond_allocation: a.bond_allocation ?? 0,
         person_id: a.person_id ?? ""
       };
     }),
@@ -1120,7 +1039,7 @@ export function ScenarioForm({ scenario, on_save, is_saving, save_error }: Props
                   annual_growth_rate: 0.0,
                   employee_pension_pct: 0.0,
                   employer_pension_pct: 0.0
-                } as any)
+                })
               }
             >
               Add income

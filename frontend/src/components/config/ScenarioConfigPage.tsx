@@ -296,14 +296,14 @@ export function ScenarioConfigPage() {
                         assets: scenario.assets.map((a) => ({
                           person_label: scenario.people.find((p) => p.id === a.person_id)?.label,
                           name: a.name,
-                          asset_type: (a as any).asset_type ?? "GIA",
-                          withdrawal_priority: (a as any).withdrawal_priority ?? 100,
+                          asset_type: a.asset_type ?? "GIA" as const,
+                          withdrawal_priority: a.withdrawal_priority ?? 100,
                           balance: a.balance,
                           annual_contribution: a.annual_contribution,
                           growth_rate_mean: a.growth_rate_mean,
                           growth_rate_std: a.growth_rate_std,
                           contributions_end_at_retirement: a.contributions_end_at_retirement,
-                          bond_allocation: (a as any).bond_allocation ?? 0
+                          bond_allocation: a.bond_allocation ?? 0
                         })),
                         properties: (scenario.properties ?? []).map((p) => ({
                           person_label: scenario.people.find((person) => person.id === p.person_id)?.label,
@@ -437,14 +437,14 @@ export function ScenarioConfigPage() {
               assets: scenario.assets.map((a) => ({
                 person_id: a.person_id,
                 name: a.name,
-                asset_type: (a as any).asset_type ?? "GIA",
-                withdrawal_priority: (a as any).withdrawal_priority ?? 100,
+                asset_type: a.asset_type ?? "GIA" as const,
+                withdrawal_priority: a.withdrawal_priority ?? 100,
                 balance: a.balance,
                 annual_contribution: a.annual_contribution,
                 growth_rate_mean: a.growth_rate_mean,
                 growth_rate_std: a.growth_rate_std,
                 contributions_end_at_retirement: a.contributions_end_at_retirement,
-                bond_allocation: (a as any).bond_allocation ?? 0
+                bond_allocation: a.bond_allocation ?? 0
               })),
               properties: (scenario.properties ?? []).map((p) => ({
                 person_id: p.person_id,

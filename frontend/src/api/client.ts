@@ -22,35 +22,53 @@ const apiHost =
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? `http://${apiHost}:8000/api`;
 
+const RETRY_DELAYS = [250, 500, 1000];
+
 async function http<TResponse>(path: string, options?: RequestInit): Promise<TResponse> {
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(options?.headers ?? {})
-      },
-      ...options
-    });
+  const isIdempotent = !options?.method || options.method === "GET";
+  const maxRetries = isIdempotent ? RETRY_DELAYS.length : 0;
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`HTTP ${response.status}: ${detail || response.statusText}`);
-    }
+  let lastError: Error | null = null;
 
-    // Handle 204 No Content responses (e.g., from DELETE)
-    if (response.status === 204) {
-      return undefined as TResponse;
-    }
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(options?.headers ?? {})
+        },
+        ...options
+      });
 
-    return (await response.json()) as TResponse;
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error(
-        "Network error. Check backend is running and CORS/host settings are correct."
-      );
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`HTTP ${response.status}: ${detail || response.statusText}`);
+      }
+
+      // Handle 204 No Content responses (e.g., from DELETE)
+      if (response.status === 204) {
+        return undefined as TResponse;
+      }
+
+      return (await response.json()) as TResponse;
+    } catch (error) {
+      if (error instanceof TypeError) {
+        // Network errors — retry for idempotent requests
+        lastError = error;
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        throw new Error(
+          "Network error. Check backend is running and CORS/host settings are correct."
+        );
+      }
+      throw error;
     }
-    throw error;
   }
+
+  // Should not reach here, but TypeScript requires it
+  throw lastError ?? new Error("Request failed");
 }
 
 export async function list_scenarios(): Promise<ScenarioRead[]> {

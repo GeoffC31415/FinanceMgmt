@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { ScenarioCreate, ScenarioRead } from "../../types";
+import type { AssetCreate, ScenarioCreate, ScenarioRead } from "../../types";
 import { create_scenario, update_scenario } from "../../api/client";
 
 type StepId =
@@ -131,18 +131,30 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       start_year: i.start_year ?? null,
       end_year: i.end_year ?? null,
     })),
-    assets: scenario.assets.map((a) => ({
-      name: a.name,
-      asset_type: ((a as any).asset_type ?? (a.name.toLowerCase().includes("cash") ? "CASH" : a.name.toLowerCase().includes("isa") ? "ISA" : a.name.toLowerCase().includes("pension") ? "PENSION" : "GIA")) as any,
-      withdrawal_priority: ((a as any).withdrawal_priority ?? 100) as number,
-      balance: a.balance,
-      annual_contribution: a.annual_contribution,
-      growth_rate_mean: a.growth_rate_mean,
-      growth_rate_std: a.growth_rate_std,
-      contributions_end_at_retirement: a.contributions_end_at_retirement,
-      bond_allocation: (a as any).bond_allocation ?? 0,
-      person_id: a.person_id ?? null
-    })),
+    assets: scenario.assets.map((a) => {
+      const existingType = (a as AssetCreate).asset_type;
+      const inferred: AssetCreate["asset_type"] =
+        existingType ??
+        (a.name.toLowerCase().includes("cash")
+          ? "CASH"
+          : a.name.toLowerCase().includes("isa")
+            ? "ISA"
+            : a.name.toLowerCase().includes("pension")
+              ? "PENSION"
+              : "GIA");
+      return {
+        name: a.name,
+        asset_type: inferred,
+        withdrawal_priority: a.withdrawal_priority ?? 100,
+        balance: a.balance,
+        annual_contribution: a.annual_contribution,
+        growth_rate_mean: a.growth_rate_mean,
+        growth_rate_std: a.growth_rate_std,
+        contributions_end_at_retirement: a.contributions_end_at_retirement,
+        bond_allocation: a.bond_allocation ?? 0,
+        person_id: a.person_id ?? null
+      };
+    }),
     properties: (scenario.properties ?? []).map((p) => ({
       name: p.name,
       value: p.value,
@@ -283,7 +295,8 @@ export function ConfigWizard() {
                 setError(null);
                 try {
                   // Create the DB row first (basic entry). This returns an id.
-                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {}, people: [], incomes: [], assets: [], properties: [], expenses: [] });
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {} as any, people: [], incomes: [], assets: [], properties: [], expenses: [] });
                   setScenarioId(created.id);
 
                   // Immediately persist the full draft so step 1 starts from sensible defaults.
@@ -734,11 +747,11 @@ export function ConfigWizard() {
                   />
                   <select
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={(a as any).asset_type ?? "GIA"}
+                    value={(a as AssetCreate).asset_type ?? "GIA"}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assets: d.assets.map((x, i) => (i === idx ? { ...x, asset_type: e.target.value as any } : x))
+                        assets: d.assets.map((x, i) => (i === idx ? { ...x, asset_type: e.target.value as AssetCreate["asset_type"] } : x))
                       }))
                     }
                   >
@@ -750,7 +763,7 @@ export function ConfigWizard() {
                   <input
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     type="number"
-                    value={(a as any).withdrawal_priority ?? 100}
+                    value={(a as AssetCreate).withdrawal_priority ?? 100}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
@@ -1221,11 +1234,11 @@ export function ConfigWizard() {
                       className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-8 text-sm"
                       type="number"
                       step="0.1"
-                      value={((draft.assumptions as any).inflation_rate ?? 0) * 100}
+                      value={(draft.assumptions.inflation_rate ?? 0) * 100}
                       onChange={(e) =>
                         setDraft((d) => ({
                           ...d,
-                          assumptions: { ...(d.assumptions as any), inflation_rate: Number(e.target.value) / 100 }
+                          assumptions: { ...d.assumptions, inflation_rate: Number(e.target.value) / 100 }
                         }))
                       }
                     />
@@ -1238,11 +1251,11 @@ export function ConfigWizard() {
                   <Label tooltip="Maximum annual ISA contribution (currently £20,000 in the UK). Excess cash goes to GIA instead.">ISA Annual Limit (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).isa_annual_limit ?? "")}
+                    value={String(draft.assumptions.isa_annual_limit ?? "")}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), isa_annual_limit: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, isa_annual_limit: Number(e.target.value) }
                       }))
                     }
                   />
@@ -1253,11 +1266,11 @@ export function ConfigWizard() {
                   <Label tooltip="Annual UK state pension amount. Paid to each person once they reach state pension age.">State Pension Annual (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).state_pension_annual ?? "")}
+                    value={String(draft.assumptions.state_pension_annual ?? "")}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), state_pension_annual: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, state_pension_annual: Number(e.target.value) }
                       }))
                     }
                   />
@@ -1269,11 +1282,11 @@ export function ConfigWizard() {
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     type="number"
-                    value={(draft.assumptions as any).pension_access_age ?? 55}
+                    value={draft.assumptions.pension_access_age ?? 55}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), pension_access_age: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, pension_access_age: Number(e.target.value) }
                       }))
                     }
                     min={50}
@@ -1286,11 +1299,11 @@ export function ConfigWizard() {
                   <Label tooltip="First year of the simulation. Usually the current year.">Start Year</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).start_year ?? "")}
+                    value={String(draft.assumptions.start_year ?? "")}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), start_year: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, start_year: Number(e.target.value) }
                       }))
                     }
                   />
@@ -1301,11 +1314,11 @@ export function ConfigWizard() {
                   <Label tooltip="Last year of the simulation. Set this to cover your expected lifespan.">End Year</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).end_year ?? "")}
+                    value={String(draft.assumptions.end_year ?? "")}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), end_year: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, end_year: Number(e.target.value) }
                       }))
                     }
                   />
@@ -1316,11 +1329,11 @@ export function ConfigWizard() {
                   <Label tooltip="Extra spending added on top of your configured expenses each year once everyone is retired. Grows with inflation. This is the same value as the 'Extra spend (retired)' slider on the dashboard.">Extra Retirement Spending (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    value={String((draft.assumptions as any).annual_spend_target ?? "")}
+                    value={String(draft.assumptions.annual_spend_target ?? "")}
                     onChange={(e) =>
                       setDraft((d) => ({
                         ...d,
-                        assumptions: { ...(d.assumptions as any), annual_spend_target: Number(e.target.value) }
+                        assumptions: { ...d.assumptions, annual_spend_target: Number(e.target.value) }
                       }))
                     }
                   />
@@ -1332,16 +1345,16 @@ export function ConfigWizard() {
 
           {step === "summary" && (() => {
             const adults = draft.people.filter((p) => !p.is_child);
-            const statePensionAnnual = (draft.assumptions as any).state_pension_annual ?? 0;
+            const statePensionAnnual = draft.assumptions.state_pension_annual ?? 0;
 
             const sellOrder = [
               ...draft.assets
-                .filter((a) => ((a as any).asset_type ?? "GIA") !== "CASH")
+                .filter((a) => (a as AssetCreate).asset_type !== "CASH")
                 .map((a) => ({
                   name: a.name,
-                  type: (a as any).asset_type ?? "GIA",
+                  type: (a as AssetCreate).asset_type ?? "GIA",
                   balance: a.balance,
-                  priority: ((a as any).withdrawal_priority ?? 100) as number,
+                  priority: (a as AssetCreate).withdrawal_priority ?? 100,
                 })),
               ...draft.properties.map((p) => ({
                 name: p.name,

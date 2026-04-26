@@ -32,9 +32,9 @@ export type AssetCreate = {
   growth_rate_mean: number;
   growth_rate_std: number;
   contributions_end_at_retirement: boolean;
-  asset_type?: "CASH" | "ISA" | "GIA" | "PENSION";
-  withdrawal_priority?: number;
-  bond_allocation?: number;
+  asset_type: "CASH" | "ISA" | "GIA" | "PENSION";
+  withdrawal_priority: number;
+  bond_allocation: number;
 };
 
 export type PropertyCreate = {
@@ -64,8 +64,18 @@ export type ExpenseCreate = {
 
 export type ReturnModel = "parametric" | "historical_bootstrap";
 
-export type Assumptions = Record<string, unknown> & {
-  return_model?: ReturnModel;
+export type Assumptions = {
+  inflation_rate: number;
+  isa_annual_limit: number;
+  state_pension_annual: number;
+  pension_access_age: number;
+  start_year: number;
+  end_year: number;
+  annual_spend_target: number;
+  debt_interest_rate: number;
+  bankruptcy_threshold: number;
+  tax_year?: string;
+  return_model: ReturnModel;
 };
 
 export type HistoricalReturnsStats = {
@@ -88,6 +98,10 @@ export type ScenarioCreate = {
   assets: AssetCreate[];
   properties: PropertyCreate[];
   expenses: ExpenseCreate[];
+};
+
+export type AssetRead = AssetCreate & {
+  person_id?: string | null;
 };
 
 export type ScenarioRead = ScenarioCreate & {

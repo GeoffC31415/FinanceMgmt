@@ -1,21 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { NetWorthChart } from "./charts/NetWorthChart";
-import { ExpensesChart } from "./charts/ExpensesChart";
-import { IncomeChart } from "./charts/IncomeChart";
-import { AssetsChart } from "./charts/AssetsChart";
-import { AssetDetailChart } from "./charts/AssetDetailChart";
-import { SensitivityChart } from "./charts/SensitivityChart";
-import { RiskTimelineChart } from "./charts/RiskTimelineChart";
-import { BondSweepChart } from "./charts/BondSweepChart";
-import { RiskSummaryPanel } from "./RiskSummaryPanel";
-import { OverviewInsights } from "./OverviewInsights";
-import { BondAllocationPanel } from "./charts/BondAllocationPanel";
-// Lazy-load exceljs only when the user clicks Export
-const lazyExportExcel = () => import("../api/exportExcel").then((m) => m.exportExcel);
-import { update_scenario } from "../api/client";
+import { useCallback } from "react";
+import type { ScenarioRead } from "../types";
 import { useScenarioList } from "../hooks/useScenario";
 import { useSimulation } from "../hooks/useSimulation";
-import type { SimulationResponse } from "../types";
+import type { BondSweepResponse } from "../types";
+import { useDashboardState, useDashboardData } from "./Dashboard/index";
+import { OverviewTab } from "./Dashboard/OverviewTab";
+import { IncomeSpendingTab } from "./Dashboard/IncomeSpendingTab";
+import { AssetsTab } from "./Dashboard/AssetsTab";
+import { RiskTab } from "./Dashboard/RiskTab";
+import { AllocationTab } from "./Dashboard/AllocationTab";
+import { getScenarioBondAllocations, format_currency_compact } from "./Dashboard/utils";
+import type { BondAllocations } from "./Dashboard/utils";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -26,31 +21,9 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
-type BondAllocations = {
-  ISA: number;
-  GIA: number;
-  PENSION: number;
-};
 
-function getScenarioBondAllocations(
-  scenario: { assets?: Array<{ asset_type?: string; bond_allocation?: number }> } | null | undefined
-): BondAllocations {
-  const allocations: BondAllocations = { ISA: 0, GIA: 0, PENSION: 0 };
-  for (const asset of scenario?.assets ?? []) {
-    const asset_type = asset.asset_type?.toUpperCase();
-    if (asset_type === "ISA" || asset_type === "GIA" || asset_type === "PENSION") {
-      allocations[asset_type] = Math.round(((asset.bond_allocation ?? 0) as number) * 100);
-    }
-  }
-  return allocations;
-}
-
-function format_currency_compact(value: number): string {
-  if (Math.abs(value) >= 1_000_000) {
-    return `£${(value / 1_000_000).toFixed(1)}m`;
-  }
-  return `£${Math.round(value).toLocaleString()}`;
-}
+// Lazy-load exceljs only when the user clicks Export
+const lazyExportExcel = () => import("../api/exportExcel").then((m) => m.exportExcel);
 
 function format_duration(seconds: number): string {
   const total_seconds = Math.max(0, Math.round(seconds));
@@ -62,448 +35,91 @@ function format_duration(seconds: number): string {
   return `${secs}s`;
 }
 
-/**
- * Adjust an array of nominal values to real (today's purchasing power) values.
- * Formula: real_value = nominal_value / (1 + inflation_rate)^(year - start_year)
- */
-function adjustForInflation(
-  values: number[],
-  years: number[],
-  inflation_rate: number,
-  start_year: number
-): number[] {
-  return values.map((v, idx) => {
-    const year = years[idx];
-    const years_elapsed = year - start_year;
-    const inflation_factor = Math.pow(1 + inflation_rate, years_elapsed);
-    return v / inflation_factor;
-  });
-}
-
-/**
- * Apply inflation adjustment to all monetary fields in the simulation result
- */
-function applyInflationAdjustment(result: SimulationResponse): SimulationResponse {
-  const { years, inflation_rate, start_year } = result;
-  const adjust = (arr: number[]) => arr?.length ? adjustForInflation(arr, years, inflation_rate, start_year) : (arr ?? []);
-  
-  return {
-    ...result,
-    net_worth_p10: adjust(result.net_worth_p10),
-    net_worth_median: adjust(result.net_worth_median),
-    net_worth_p90: adjust(result.net_worth_p90),
-    income_median: adjust(result.income_median),
-    spend_median: adjust(result.spend_median),
-    salary_gross_median: adjust(result.salary_gross_median),
-    salary_net_median: adjust(result.salary_net_median),
-    rental_income_median: adjust(result.rental_income_median),
-    gift_income_median: adjust(result.gift_income_median),
-    pension_income_median: adjust(result.pension_income_median),
-    state_pension_income_median: adjust(result.state_pension_income_median),
-    investment_returns_median: adjust(result.investment_returns_median),
-    total_income_median: adjust(result.total_income_median),
-    total_expenses_median: adjust(result.total_expenses_median),
-    mortgage_payment_median: adjust(result.mortgage_payment_median),
-    pension_contributions_median: adjust(result.pension_contributions_median),
-    fun_fund_median: adjust(result.fun_fund_median),
-    income_tax_paid_median: adjust(result.income_tax_paid_median),
-    ni_paid_median: adjust(result.ni_paid_median),
-    total_tax_median: adjust(result.total_tax_median),
-    isa_balance_median: adjust(result.isa_balance_median),
-    pension_balance_median: adjust(result.pension_balance_median),
-    cash_balance_median: adjust(result.cash_balance_median),
-    gia_balance_median: adjust(result.gia_balance_median),
-    total_assets_median: adjust(result.total_assets_median),
-    isa_returns_median: adjust(result.isa_returns_median),
-    gia_returns_median: adjust(result.gia_returns_median),
-    cash_returns_median: adjust(result.cash_returns_median),
-    pension_returns_median: adjust(result.pension_returns_median),
-    isa_contributions_median: adjust(result.isa_contributions_median),
-    gia_contributions_median: adjust(result.gia_contributions_median),
-    isa_withdrawals_median: adjust(result.isa_withdrawals_median),
-    gia_withdrawals_median: adjust(result.gia_withdrawals_median),
-    pension_withdrawals_median: adjust(result.pension_withdrawals_median),
-    mortgage_balance_median: adjust(result.mortgage_balance_median),
-    total_liabilities_median: adjust(result.total_liabilities_median),
-    debt_balance_median: adjust(result.debt_balance_median),
-    debt_interest_paid_median: adjust(result.debt_interest_paid_median),
-    property_value_median: adjust(result.property_value_median),
-    property_returns_median: adjust(result.property_returns_median),
-    property_rental_income_median: adjust(result.property_rental_income_median),
-    property_maintenance_median: adjust(result.property_maintenance_median),
-    // Percentage fields don't get adjusted
-  };
-}
-
-const PERCENTILE_PRESETS = [
-  { label: "P10", value: 10, desc: "pessimistic" },
-  { label: "P25", value: 25, desc: "cautious" },
-  { label: "P50", value: 50, desc: "median" },
-  { label: "P75", value: 75, desc: "optimistic" },
-  { label: "P90", value: 90, desc: "very optimistic" },
-];
-
 export function Dashboard() {
-  const { scenarios, is_loading, error, refresh } = useScenarioList();
+  const state = useDashboardState();
+  const {
+    scenarios,
+    is_loading_scenarios,
+    scenarios_error,
+    simulation,
+    selected,
+    selected_id,
+    setSelectedId,
+    annual_spend_target,
+    setAnnualSpendTarget,
+    end_year,
+    setEndYear,
+    retirement_age_offset,
+    setRetirementAgeOffset,
+    show_real_values,
+    setShowRealValues,
+    percentile,
+    setPercentile,
+    risk_threshold,
+    setRiskThreshold,
+    bond_target_year,
+    setBondTargetYear,
+    active_tab,
+    setActiveTab,
+    saved_bond_allocations,
+    bond_allocations,
+    setBondAllocations,
+    is_saving_bonds,
+    bond_save_error,
+    PERCENTILE_PRESETS,
+    refresh,
+    handleBondAllocationChange,
+    handleSaveBondAllocations,
+  } = state;
+
   const {
     result,
     session_id,
     is_loading: is_running,
     error: run_error,
-    init,
-    recalc,
     safe_withdrawal_result,
     is_loading_safe_withdrawal,
-    fetch_safe_withdrawal,
     bond_sweep_result,
     is_loading_bond_sweep,
     sweep_progress,
     fetch_bond_sweep,
-    fetch_bond_override,
-  } = useSimulation();
-  const [selected_id, setSelectedId] = useState<string | null>(null);
-  const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
-  const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
-  const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
-  const [show_real_values, setShowRealValues] = useState<boolean>(false);
-  const [percentile, setPercentile] = useState<number>(50);
-  const [risk_threshold, setRiskThreshold] = useState<number>(5);
-  const [bond_target_year, setBondTargetYear] = useState<number | null>(null);
-  const [active_tab, setActiveTab] = useState<TabId>("overview");
-  const [saved_bond_allocations, setSavedBondAllocations] = useState<BondAllocations>({
-    ISA: 0,
-    GIA: 0,
-    PENSION: 0
+  } = simulation;
+
+  // Derived data
+  const data = useDashboardData({
+    result,
+    selected,
+    show_real_values,
+    percentile,
+    retirement_age_offset,
+    safe_withdrawal_result,
+    annual_spend_target,
   });
-  const [bond_allocations, setBondAllocations] = useState<BondAllocations>({
-    ISA: 0,
-    GIA: 0,
-    PENSION: 0
-  });
-  const [is_saving_bonds, setIsSavingBonds] = useState(false);
-  const [bond_save_error, setBondSaveError] = useState<string | null>(null);
 
-  const selected = useMemo(() => scenarios.find((s) => s.id === selected_id) ?? null, [scenarios, selected_id]);
+  const {
+    display_result,
+    end_year_deflator,
+    overview_metrics,
+    retirement_ages,
+    children_leaving,
+    adult_decade_years,
+    mortgage_payoff_year,
+    bankruptcy_info,
+    final_bankruptcy_pct,
+    final_depletion_pct,
+    max_safe,
+    fund_ratio,
+    slider_accent,
+    success_color,
+  } = data;
 
-  useEffect(() => {
-    const next = getScenarioBondAllocations(selected);
-    setSavedBondAllocations(next);
-    setBondAllocations(next);
-    setBondSaveError(null);
-  }, [selected]);
-
-  // Compute actual retirement ages for display
-  const retirement_ages = useMemo(() => {
-    if (!selected) return [];
-    return selected.people
-      .filter((p) => !p.is_child && p.planned_retirement_age != null)
-      .map((p) => ({
-        name: p.label,
-        base_age: p.planned_retirement_age!,
-        effective_age: p.planned_retirement_age! + retirement_age_offset,
-      }));
-  }, [selected, retirement_age_offset]);
-
-  // Fun fund slider color based on safe withdrawal
-  const max_safe = safe_withdrawal_result?.max_safe_fun_fund ?? 0;
-  const fund_ratio = max_safe > 0 ? annual_spend_target / max_safe : 0;
-  const slider_accent =
-    !safe_withdrawal_result
-      ? ""
-      : fund_ratio <= 0.8
-        ? "accent-emerald-500"
-        : fund_ratio <= 1.0
-          ? "accent-amber-500"
-          : "accent-rose-500";
-
-  // Sync end_year and annual_spend_target from scenario assumptions when scenario changes
-  useEffect(() => {
-    if (!selected) return;
-    const assumptions = selected.assumptions as Record<string, unknown> | undefined;
-    if (!assumptions) return;
-    
-    const scenario_end_year = assumptions.end_year as number | undefined;
-    const scenario_start_year = (assumptions.start_year ?? new Date().getFullYear()) as number;
-    setEndYear(scenario_end_year ?? scenario_start_year + 60);
-
-    const scenario_spend_target = assumptions.annual_spend_target as number | undefined;
-    setAnnualSpendTarget(scenario_spend_target ?? 0);
-  }, [selected?.id]);
-  
-  // Apply inflation adjustment when toggle is on
-  const display_result = useMemo(() => {
-    if (!result) return null;
-    return show_real_values ? applyInflationAdjustment(result) : result;
-  }, [result, show_real_values]);
-
-  // Deflation factor for end-year point values (e.g. p10 net worth in sensitivity chart)
-  const end_year_deflator = useMemo(() => {
-    if (!result || !show_real_values) return 1;
-    const years_elapsed = result.years[result.years.length - 1] - result.start_year;
-    return 1 / Math.pow(1 + result.inflation_rate, years_elapsed);
-  }, [result, show_real_values]);
-
-  useEffect(() => {
-    if (!display_result || display_result.years.length === 0) {
-      setBondTargetYear(null);
-      return;
-    }
-    const default_year = display_result.years[display_result.years.length - 1];
-    setBondTargetYear((current) => {
-      if (current != null && display_result.years.includes(current)) return current;
-      return default_year;
-    });
-  }, [display_result]);
-
-  // Calculate when children leave home for the expense chart markers
-  const children_leaving = useMemo(() => {
-    if (!selected) return [];
-    return selected.people
-      .filter((p) => p.is_child === true)
-      .map((child) => {
-        const birth_year = parseInt(child.birth_date.split("-")[0], 10);
-        const leaves_age = child.leaves_household_age ?? 18;
-        return {
-          name: child.label,
-          year: birth_year + leaves_age
-        };
-      })
-      .filter((c) => !isNaN(c.year));
-  }, [selected]);
-
-  // Years when first two adults turn 40, 50, 60, etc. (for decade markers on net worth chart)
-  const adult_decade_years = useMemo(() => {
-    if (!selected || !display_result || display_result.years.length === 0) return [];
-    const adults = selected.people.filter((p) => !p.is_child).slice(0, 2);
-    const minYear = display_result.years[0];
-    const maxYear = display_result.years[display_result.years.length - 1];
-    const markers: { year: number; age: number; label: string; adultIndex: number }[] = [];
-    for (let ai = 0; ai < adults.length; ai++) {
-      const adult = adults[ai];
-      const birth_year = parseInt(adult.birth_date.split("-")[0], 10);
-      if (isNaN(birth_year)) continue;
-      for (let age = 40; age <= 100; age += 10) {
-        const y = birth_year + age;
-        if (y >= minYear && y <= maxYear) markers.push({ year: y, age, label: adult.label, adultIndex: ai });
-      }
-    }
-    return markers;
-  }, [selected, display_result]);
-
-  // Calculate when mortgage is paid off (first year where 50%+ of runs have it paid off)
-  const mortgage_payoff_year = useMemo(() => {
-    if (!display_result) return null;
-    const { years, mortgage_paid_off_median } = display_result;
-    if (!mortgage_paid_off_median || mortgage_paid_off_median.length === 0) return null;
-    
-    for (let i = 0; i < years.length; i++) {
-      if (mortgage_paid_off_median[i] >= 50) {
-        return years[i];
-      }
-    }
-    return null;
-  }, [display_result]);
-
-  // Calculate bankruptcy info
-  const bankruptcy_info = useMemo(() => {
-    if (!display_result) return null;
-    const { years, is_bankrupt_median } = display_result;
-    if (!is_bankrupt_median || is_bankrupt_median.length === 0) return null;
-    
-    let first_year_any: number | null = null;
-    for (let i = 0; i < years.length; i++) {
-      if (is_bankrupt_median[i] > 0) {
-        first_year_any = years[i];
-        break;
-      }
-    }
-    
-    let first_year_at_percentile: number | null = null;
-    for (let i = 0; i < years.length; i++) {
-      if (is_bankrupt_median[i] >= percentile) {
-        first_year_at_percentile = years[i];
-        break;
-      }
-    }
-    
-    const lastIdx = years.length - 1;
-    const final_pct = lastIdx >= 0 ? is_bankrupt_median[lastIdx] : 0;
-    
-    return {
-      first_year_any,
-      first_year_at_percentile,
-      final_pct
-    };
-  }, [display_result, percentile]);
-
-  // Final-year risk metrics for the summary panel
-  const final_bankruptcy_pct = bankruptcy_info?.final_pct ?? 0;
-  const final_depletion_pct = useMemo(() => {
-    if (!result) return 0;
-    const lastIdx = result.years.length - 1;
-    return lastIdx >= 0 ? result.is_depleted_median[lastIdx] : 0;
-  }, [result]);
-
-  // Computed overview metrics for the metric cards
-  const overview_metrics = useMemo(() => {
-    if (!display_result) return null;
-    const last_idx = display_result.years.length - 1;
-    if (last_idx < 0) return null;
-
-    const final_bankruptcy = display_result.is_bankrupt_median[last_idx] ?? 0;
-    const success_rate = 100 - final_bankruptcy;
-
-    // Peak net worth (median)
-    let peak_value = -Infinity;
-    let peak_year = display_result.years[0];
-    for (let i = 0; i <= last_idx; i++) {
-      if (display_result.net_worth_median[i] > peak_value) {
-        peak_value = display_result.net_worth_median[i];
-        peak_year = display_result.years[i];
-      }
-    }
-
-    const final_net_worth_median = display_result.net_worth_median[last_idx];
-    const final_net_worth_p10 = display_result.net_worth_p10[last_idx];
-    const final_net_worth_p90 = display_result.net_worth_p90[last_idx];
-    const final_year = display_result.years[last_idx];
-
-    return {
-      success_rate,
-      peak_value,
-      peak_year,
-      final_net_worth_median,
-      final_net_worth_p10,
-      final_net_worth_p90,
-      final_year,
-    };
-  }, [display_result]);
-
-  // Initialize cached simulation session when scenario or end_year changes.
-  useEffect(() => {
-    if (!selected) return;
-    init({
-      scenario_id: selected.id,
-      iterations: 2000,
-      seed: 0,
-      annual_spend_target,
-      end_year
-    }).catch(() => {
-      // error is handled in hook state
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, end_year]);
-
-  // Debounced recalc for spend + retirement age offset + percentile.
-  useEffect(() => {
-    if (!selected || !session_id) return;
-    const t = window.setTimeout(() => { 
-      recalc({
-        annual_spend_target,
-        retirement_age_offset,
-        percentile
-      }).catch(() => {
-        // error is handled in hook state
-      });
-    }, 100);
-    return () => window.clearTimeout(t);
-  }, [selected, session_id, annual_spend_target, retirement_age_offset, percentile, recalc]);
-
-  // Fetch safe withdrawal data when session or retirement offset or risk threshold changes.
-  // Debounced with longer delay since this is a heavier computation.
-  useEffect(() => {
-    if (!session_id) return;
-    const t = window.setTimeout(() => {
-      fetch_safe_withdrawal({
-        retirement_age_offset,
-        risk_threshold,
-        max_spend: 200_000,
-        steps: 25,
-      }).catch(() => {
-        // non-critical, logged in hook
-      });
-    }, 300);
-    return () => window.clearTimeout(t);
-  }, [session_id, retirement_age_offset, risk_threshold, fetch_safe_withdrawal]);
-
-  async function handle_export() {
+  // Export handler
+  const handle_export = useCallback(async () => {
     if (!display_result) return;
     const scenario_name = selected?.name ?? "scenario";
     const doExport = await lazyExportExcel();
     await doExport(display_result, scenario_name, percentile, show_real_values);
-  }
-
-  async function handleBondAllocationChange(assetType: keyof BondAllocations, value: number) {
-    const updatedAllocations = { ...bond_allocations, [assetType]: value };
-    setBondAllocations(updatedAllocations);
-    setBondSaveError(null);
-
-    if (!session_id || !display_result) return;
-
-    try {
-      await fetch_bond_override({
-        session_id,
-        isa_bond_pct: updatedAllocations.ISA,
-        gia_bond_pct: updatedAllocations.GIA,
-        pension_bond_pct: updatedAllocations.PENSION,
-        annual_spend_target,
-        retirement_age_offset
-      });
-    } catch (e) {
-      console.error("Failed to recalculate with new bond allocation:", e);
-    }
-  }
-
-  async function handleSaveBondAllocations(
-    allocations: Partial<BondAllocations>,
-    assetTypes?: Array<keyof BondAllocations>
-  ) {
-    if (!selected) return;
-
-    const typesToSave = new Set<keyof BondAllocations>(
-      assetTypes ?? (Object.keys(allocations) as Array<keyof BondAllocations>)
-    );
-    if (typesToSave.size === 0) return;
-
-    setIsSavingBonds(true);
-    setBondSaveError(null);
-    try {
-      const { id: _id, ...payload } = selected;
-      const updated = await update_scenario(selected.id, {
-        ...payload,
-        assets: selected.assets.map((asset) => {
-          const assetType = asset.asset_type?.toUpperCase() as keyof BondAllocations | undefined;
-          if (!assetType || !typesToSave.has(assetType)) return asset;
-          return {
-            ...asset,
-            bond_allocation: (allocations[assetType] ?? bond_allocations[assetType] ?? 0) / 100,
-          };
-        })
-      });
-
-      const nextSaved = getScenarioBondAllocations(updated);
-      setSavedBondAllocations(nextSaved);
-      setBondAllocations((current) => ({
-        ...current,
-        ...Object.fromEntries(
-          Array.from(typesToSave).map((assetType) => [
-            assetType,
-            allocations[assetType] ?? current[assetType],
-          ])
-        ) as Partial<BondAllocations>,
-      }));
-      void refresh();
-    } catch (e) {
-      setBondSaveError(e instanceof Error ? e.message : "Failed to save");
-      throw e;
-    } finally {
-      setIsSavingBonds(false);
-    }
-  }
-
-  // Color helper for success rate
-  const success_color = (rate: number) =>
-    rate >= 95 ? "text-emerald-400" : rate >= 90 ? "text-amber-400" : "text-rose-400";
+  }, [display_result, selected, percentile, show_real_values]);
 
   return (
     <div className="space-y-6">
@@ -512,9 +128,9 @@ export function Dashboard() {
         <p className="text-slate-300">Run Monte Carlo simulations with randomised investment returns to explore the range of possible financial outcomes.</p>
       </div>
 
-      {(error || run_error) && (
+      {(scenarios_error || run_error) && (
         <div className="rounded border border-rose-800 bg-rose-950 px-4 py-3 text-sm text-rose-200">
-          {error || run_error}
+          {scenarios_error || run_error}
         </div>
       )}
 
@@ -527,7 +143,7 @@ export function Dashboard() {
             <label className="block text-sm font-medium">Scenario</label>
             <select
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              disabled={is_loading}
+              disabled={is_loading_scenarios}
               value={selected_id ?? ""}
               onChange={(e) => setSelectedId(e.target.value || null)}
             >
@@ -656,7 +272,7 @@ export function Dashboard() {
             className={`flex items-center gap-2 text-xs transition-colors ${
               show_real_values ? "text-cyan-400" : "text-slate-500"
             } hover:text-slate-300`}
-            onClick={() => setShowRealValues((prev) => !prev)}
+            onClick={() => setShowRealValues((prev: boolean) => !prev)}
             title={show_real_values 
               ? "Showing values in today's purchasing power. Click to show nominal values." 
               : "Showing nominal (future) values. Click to adjust for inflation."}
@@ -740,7 +356,7 @@ export function Dashboard() {
                     ? "text-indigo-400"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(tab.id as TabId)}
               >
                 {tab.label}
                 {active_tab === tab.id && (
@@ -752,424 +368,88 @@ export function Dashboard() {
 
           {/* ===== TAB CONTENT ===== */}
           <div className="space-y-6">
-            {/* ===== OVERVIEW TAB ===== */}
             {active_tab === "overview" && (
-              <>
-                {/* Key Metric Cards */}
-                {overview_metrics && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                    {/* Success Rate */}
-                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
-                      <div className="text-xs font-medium text-slate-400 mb-1">Success Rate</div>
-                      <div className={`text-3xl font-bold ${success_color(overview_metrics.success_rate)}`}>
-                        {overview_metrics.success_rate.toFixed(1)}%
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        of simulations avoid bankruptcy
-                      </div>
-                    </div>
-
-                    {/* Max Safe Fun Fund */}
-                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
-                      <div className="text-xs font-medium text-slate-400 mb-1">
-                        Max Safe Fun Fund
-                        <span className="ml-1 text-slate-500">({risk_threshold}% risk)</span>
-                      </div>
-                      <div className={`text-3xl font-bold ${
-                        safe_withdrawal_result
-                          ? annual_spend_target <= max_safe ? "text-emerald-400" : "text-rose-400"
-                          : "text-slate-500"
-                      }`}>
-                        {safe_withdrawal_result
-                          ? `${format_currency_compact(max_safe)}`
-                          : "---"}
-                        <span className="text-sm font-normal text-slate-500">/yr</span>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        max extra retirement spend at {risk_threshold}% risk
-                      </div>
-                    </div>
-
-                    {/* Peak Net Worth */}
-                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
-                      <div className="text-xs font-medium text-slate-400 mb-1">Peak Net Worth</div>
-                      <div className="text-3xl font-bold text-cyan-400">
-                        {format_currency_compact(overview_metrics.peak_value)}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        in {overview_metrics.peak_year} (median)
-                      </div>
-                    </div>
-
-                    {/* Final Net Worth */}
-                    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
-                      <div className="text-xs font-medium text-slate-400 mb-1">
-                        Final Net Worth ({overview_metrics.final_year})
-                      </div>
-                      <div className={`text-3xl font-bold ${
-                        overview_metrics.final_net_worth_median >= 0 ? "text-slate-100" : "text-rose-400"
-                      }`}>
-                        {format_currency_compact(overview_metrics.final_net_worth_median)}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        P10: {format_currency_compact(overview_metrics.final_net_worth_p10)}
-                        {" / "}
-                        P90: {format_currency_compact(overview_metrics.final_net_worth_p90)}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Auto-Generated Insights */}
-                {display_result && selected && (
-                  <OverviewInsights
-                    result={display_result}
-                    safe_withdrawal={safe_withdrawal_result}
-                    risk_threshold={risk_threshold}
-                    current_fun_fund={annual_spend_target}
-                    scenario={selected}
-                    mortgage_payoff_year={mortgage_payoff_year}
-                    children_leaving={children_leaving}
-                  />
-                )}
-
-                {/* Net Worth Chart -- the single overview chart */}
-                <NetWorthChart
-                  years={display_result.years}
-                  net_worth_p10={display_result.net_worth_p10}
-                  net_worth_median={display_result.net_worth_median}
-                  net_worth_p90={display_result.net_worth_p90}
-                  retirement_years={display_result.retirement_years}
-                  adult_decade_years={adult_decade_years}
-                  isa_balance_median={display_result.isa_balance_median}
-                  pension_balance_median={display_result.pension_balance_median}
-                  cash_balance_median={display_result.cash_balance_median}
-                  property_value_median={display_result.property_value_median}
-                  total_assets_median={display_result.total_assets_median}
-                  percentile={percentile}
-                  bankruptcy_year={bankruptcy_info?.first_year_at_percentile}
-                  debt_balance_median={display_result.debt_balance_median}
-                />
-              </>
+              <OverviewTab
+                display_result={display_result}
+                safe_withdrawal_result={safe_withdrawal_result}
+                risk_threshold={risk_threshold}
+                setRiskThreshold={setRiskThreshold}
+                annual_spend_target={annual_spend_target}
+                setAnnualSpendTarget={setAnnualSpendTarget}
+                selected={selected}
+                overview_metrics={overview_metrics}
+                success_color={success_color}
+                mortgage_payoff_year={mortgage_payoff_year}
+                children_leaving={children_leaving}
+                adult_decade_years={adult_decade_years}
+                bankruptcy_info={bankruptcy_info}
+                percentile={percentile}
+                setPercentile={setPercentile}
+                handle_export={handle_export}
+                show_real_values={show_real_values}
+                setShowRealValues={setShowRealValues}
+                max_safe={max_safe}
+                slider_accent={slider_accent}
+              />
             )}
 
-            {/* ===== INCOME & SPENDING TAB ===== */}
             {active_tab === "income-spending" && (
-              <>
-                <IncomeChart
-                  years={display_result.years}
-                  salary_gross_median={display_result.salary_gross_median}
-                  salary_net_median={display_result.salary_net_median}
-                  rental_income_median={display_result.rental_income_median}
-                  gift_income_median={display_result.gift_income_median}
-                  pension_income_median={display_result.pension_income_median}
-                  state_pension_income_median={display_result.state_pension_income_median}
-                  investment_returns_median={display_result.investment_returns_median}
-                  total_income_median={display_result.total_income_median}
-                  retirement_years={display_result.retirement_years}
-                  percentile={percentile}
-                />
-                <ExpensesChart
-                  years={display_result.years}
-                  total_expenses_median={display_result.total_expenses_median}
-                  mortgage_payment_median={display_result.mortgage_payment_median}
-                  pension_contributions_median={display_result.pension_contributions_median}
-                  total_tax_median={display_result.total_tax_median}
-                  fun_fund_median={display_result.fun_fund_median}
-                  property_maintenance_median={display_result.property_maintenance_median}
-                  retirement_years={display_result.retirement_years}
-                  children_leaving={children_leaving}
-                  mortgage_payoff_year={mortgage_payoff_year}
-                  percentile={percentile}
-                />
-              </>
+              <IncomeSpendingTab
+                display_result={display_result}
+                children_leaving={children_leaving}
+                mortgage_payoff_year={mortgage_payoff_year}
+                percentile={percentile}
+              />
             )}
 
-            {/* ===== ASSETS TAB ===== */}
             {active_tab === "assets" && (
-              <>
-                <AssetsChart
-                  years={display_result.years}
-                  isa_balance_median={display_result.isa_balance_median}
-                  pension_balance_median={display_result.pension_balance_median}
-                  cash_balance_median={display_result.cash_balance_median}
-                  property_value_median={display_result.property_value_median}
-                  total_assets_median={display_result.total_assets_median}
-                  retirement_years={display_result.retirement_years}
-                  percentile={percentile}
-                />
-                <AssetDetailChart
-                  years={display_result.years}
-                  retirement_years={display_result.retirement_years}
-                  percentile={percentile}
-                  isa_balance_median={display_result.isa_balance_median}
-                  gia_balance_median={display_result.gia_balance_median}
-                  cash_balance_median={display_result.cash_balance_median}
-                  pension_balance_median={display_result.pension_balance_median}
-                  property_value_median={display_result.property_value_median}
-                  debt_balance_median={display_result.debt_balance_median}
-                  pension_contributions_median={display_result.pension_contributions_median}
-                  debt_interest_paid_median={display_result.debt_interest_paid_median}
-                  isa_returns_median={display_result.isa_returns_median}
-                  gia_returns_median={display_result.gia_returns_median}
-                  cash_returns_median={display_result.cash_returns_median}
-                  pension_returns_median={display_result.pension_returns_median}
-                  property_returns_median={display_result.property_returns_median}
-                  isa_contributions_median={display_result.isa_contributions_median}
-                  gia_contributions_median={display_result.gia_contributions_median}
-                  isa_withdrawals_median={display_result.isa_withdrawals_median}
-                  gia_withdrawals_median={display_result.gia_withdrawals_median}
-                  pension_withdrawals_median={display_result.pension_withdrawals_median}
-                  property_rental_income_median={display_result.property_rental_income_median}
-                  property_maintenance_median={display_result.property_maintenance_median}
-                  currentBondAllocations={saved_bond_allocations}
-                  onBondAllocationChange={handleBondAllocationChange}
-                  onSaveBondAllocations={async (allocations) => {
-                    await handleSaveBondAllocations(allocations);
-                  }}
-                  isSaving={is_saving_bonds}
-                  canEditBondAllocations={Boolean(session_id)}
-                />
-              </>
+              <AssetsTab
+                display_result={display_result}
+                percentile={percentile}
+                saved_bond_allocations={saved_bond_allocations}
+                bond_allocations={bond_allocations}
+                is_saving_bonds={is_saving_bonds}
+                bond_save_error={bond_save_error}
+                onBondAllocationChange={handleBondAllocationChange}
+                onSaveBondAllocations={handleSaveBondAllocations}
+              />
             )}
 
-            {/* ===== RISK ANALYSIS TAB ===== */}
             {active_tab === "risk" && (
-              <>
-                <RiskSummaryPanel
-                  safe_withdrawal={safe_withdrawal_result}
-                  is_loading={is_loading_safe_withdrawal}
-                  current_fun_fund={annual_spend_target}
-                  bankruptcy_pct={final_bankruptcy_pct}
-                  depletion_pct={final_depletion_pct}
-                  risk_threshold={risk_threshold}
-                  on_risk_threshold_change={setRiskThreshold}
-                  on_set_fun_fund={setAnnualSpendTarget}
-                />
-
-                {safe_withdrawal_result && safe_withdrawal_result.sensitivity_curve.length > 0 && (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <SensitivityChart
-                      sensitivity_curve={safe_withdrawal_result.sensitivity_curve}
-                      current_fun_fund={annual_spend_target}
-                      max_safe_fun_fund={safe_withdrawal_result.max_safe_fun_fund}
-                      risk_threshold={risk_threshold}
-                      net_worth_deflator={end_year_deflator}
-                    />
-                    <RiskTimelineChart
-                      years={display_result.years}
-                      is_depleted_median={display_result.is_depleted_median}
-                      is_bankrupt_median={display_result.is_bankrupt_median}
-                      retirement_years={display_result.retirement_years}
-                    />
-                  </div>
-                )}
-
-                {!safe_withdrawal_result && (
-                  <RiskTimelineChart
-                    years={display_result.years}
-                    is_depleted_median={display_result.is_depleted_median}
-                    is_bankrupt_median={display_result.is_bankrupt_median}
-                    retirement_years={display_result.retirement_years}
-                  />
-                )}
-              </>
+              <RiskTab
+                display_result={display_result}
+                safe_withdrawal_result={safe_withdrawal_result}
+                is_loading_safe_withdrawal={is_loading_safe_withdrawal}
+                annual_spend_target={annual_spend_target}
+                final_bankruptcy_pct={final_bankruptcy_pct}
+                final_depletion_pct={final_depletion_pct}
+                risk_threshold={risk_threshold}
+                setRiskThreshold={setRiskThreshold}
+                setAnnualSpendTarget={setAnnualSpendTarget}
+                end_year_deflator={end_year_deflator}
+              />
             )}
 
-            {/* ===== ALLOCATION TAB ===== */}
             {active_tab === "allocation" && (
-              <>
-                <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">Bond Allocation Optimiser</div>
-                      <div className="text-xs text-slate-400 mt-1">
-                        Tests every combination of ISA/GIA/Pension bond % in 10% increments to find the optimal blend.
-                        Uses historical S&amp;P 500 and US 10-Year Treasury total returns.
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-[10px] text-slate-500">Max bankruptcy</div>
-                        <select
-                          className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                          value={risk_threshold}
-                          onChange={(e) => setRiskThreshold(Number(e.target.value))}
-                        >
-                          <option value={1}>1%</option>
-                          <option value={2}>2%</option>
-                          <option value={5}>5%</option>
-                          <option value={10}>10%</option>
-                        </select>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[10px] text-slate-500" title="The year at which the bankruptcy rate is evaluated to determine the safe allocation">Risk horizon</div>
-                        <select
-                          className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
-                          value={bond_target_year ?? ""}
-                          onChange={(e) => setBondTargetYear(Number(e.target.value))}
-                          disabled={!display_result || display_result.years.length === 0}
-                        >
-                          {(display_result?.years ?? []).map((year) => (
-                            <option key={year} value={year}>{year}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                        disabled={is_loading_bond_sweep || !session_id}
-                        onClick={() => {
-                          if (session_id) {
-                            fetch_bond_sweep({
-                              session_id,
-                              retirement_age_offset,
-                              risk_threshold,
-                              target_year: bond_target_year,
-                              max_spend: Math.max(200_000, annual_spend_target * 2),
-                            }).catch(() => {});
-                          }
-                        }}
-                      >
-                        {is_loading_bond_sweep ? "Running..." : "Run Bond Sweep"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Bond Allocation Panel */}
-                  {selected && display_result && (
-                    <BondAllocationPanel
-                      currentAllocations={bond_allocations}
-                      onAllocationChange={handleBondAllocationChange}
-                      isSaving={is_saving_bonds}
-                      saveError={bond_save_error}
-                      className="w-full"
-                    />
-                  )}
-
-                  {/* Progress bar */}
-                  {is_loading_bond_sweep && sweep_progress && (() => {
-                    const pct = sweep_progress.total > 0 ? Math.round((sweep_progress.completed / sweep_progress.total) * 100) : 0;
-                    const has_eta = sweep_progress.eta_seconds != null && sweep_progress.total > sweep_progress.completed;
-                    const eta_label = has_eta ? format_duration(sweep_progress.eta_seconds ?? 0) : "";
-                    return (
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                          <span>{sweep_progress.phase || "Starting..."}</span>
-                          {sweep_progress.total > 0 && (
-                            <span>
-                              {sweep_progress.completed.toLocaleString()} / {sweep_progress.total.toLocaleString()}
-                              {has_eta ? ` - ~${eta_label} left` : ""}
-                            </span>
-                          )}
-                        </div>
-                        <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
-                          {sweep_progress.total > 0 ? (
-                            <div
-                              className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                              style={{ width: `${pct}%` }}
-                            />
-                          ) : (
-                            <div className="h-full w-full animate-pulse bg-indigo-500/30 rounded-full" />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Optimal combination hero card */}
-                  {bond_sweep_result && (() => {
-                    const opt = bond_sweep_result.optimal;
-                    const cls_colors: Record<string, { text: string; bar: string }> = {
-                      ISA: { text: "text-green-400", bar: "#22c55e" },
-                      GIA: { text: "text-blue-400", bar: "#3b82f6" },
-                      PENSION: { text: "text-yellow-400", bar: "#eab308" },
-                    };
-                    const pct_field: Record<string, number> = {
-                      ISA: opt.isa_bond_pct,
-                      GIA: opt.gia_bond_pct,
-                      PENSION: opt.pension_bond_pct,
-                    };
-                    const cls_label: Record<string, string> = { ISA: "ISA", GIA: "GIA", PENSION: "Pension" };
-                    return (
-                      <div className="mt-4">
-                        <div className="text-xs text-slate-400 mb-2">
-                          Optimal allocation ({bond_sweep_result.total_combos_tested.toLocaleString()} simulation runs)
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {/* Per-class bars */}
-                          <div className="space-y-3">
-                            {bond_sweep_result.asset_classes.map((cls) => (
-                              <div key={cls} className="flex items-center gap-3">
-                                <div className={`w-16 text-xs font-semibold ${cls_colors[cls]?.text ?? "text-slate-300"}`}>
-                                  {cls_label[cls] ?? cls}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="relative h-5 rounded bg-slate-700 overflow-hidden">
-                                    {/* Equity portion */}
-                                    <div className="absolute inset-y-0 left-0 bg-indigo-600/40 flex items-center justify-center text-[10px] text-slate-200"
-                                      style={{ width: `${100 - pct_field[cls]}%` }}>
-                                      {100 - pct_field[cls] > 15 ? `${100 - pct_field[cls]}% equity` : ""}
-                                    </div>
-                                    {/* Bond portion */}
-                                    <div className="absolute inset-y-0 right-0 flex items-center justify-center text-[10px] text-slate-200"
-                                      style={{ width: `${pct_field[cls]}%`, background: cls_colors[cls]?.bar ?? "#94a3b8", opacity: 0.7 }}>
-                                      {pct_field[cls] > 15 ? `${pct_field[cls]}% bonds` : ""}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="w-10 text-right text-xs font-mono text-slate-300">{pct_field[cls]}%</div>
-                              </div>
-                            ))}
-                          </div>
-                          {/* Outcome metrics */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">Max Safe Fun Fund</div>
-                              <div className="text-lg font-bold text-blue-400">
-                                {Math.abs(opt.max_safe_fun_fund) >= 1_000_000
-                                  ? `\u00A3${(opt.max_safe_fun_fund / 1_000_000).toFixed(1)}m`
-                                  : `\u00A3${Math.round(opt.max_safe_fun_fund).toLocaleString()}`}
-                              </div>
-                            </div>
-                            <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">Risk horizon</div>
-                              <div className="text-lg font-bold text-slate-300">
-                                {bond_sweep_result.target_year} @ {risk_threshold}% risk
-                              </div>
-                            </div>
-                            <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">Bankruptcy Risk</div>
-                              <div className={`text-lg font-bold ${opt.bankruptcy_pct <= 5 ? "text-green-400" : opt.bankruptcy_pct <= 10 ? "text-amber-400" : "text-red-400"}`}>
-                                {opt.bankruptcy_pct.toFixed(1)}%
-                              </div>
-                            </div>
-                            <div className="rounded bg-slate-800/50 p-3">
-                              <div className="text-xs text-slate-400">Depletion Risk</div>
-                              <div className={`text-lg font-bold ${opt.depletion_pct <= 10 ? "text-green-400" : opt.depletion_pct <= 25 ? "text-amber-400" : "text-red-400"}`}>
-                                {opt.depletion_pct.toFixed(1)}%
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {bond_sweep_result && (
-                  <BondSweepChart data={bond_sweep_result} />
-                )}
-
-                {!bond_sweep_result && !is_loading_bond_sweep && (
-                  <div className="rounded border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-400">
-                    Click "Run Bond Sweep" to analyse the optimal equity/bond blend for your scenario.
-                    <br />
-                    <span className="text-xs">
-                      This requires the historical bootstrap return model.
-                    </span>
-                  </div>
-                )}
-              </>
+              <AllocationTab
+                display_result={display_result}
+                bond_sweep_result={bond_sweep_result}
+                is_loading_bond_sweep={is_loading_bond_sweep}
+                sweep_progress={sweep_progress}
+                risk_threshold={risk_threshold}
+                setRiskThreshold={setRiskThreshold}
+                bond_target_year={bond_target_year}
+                setBondTargetYear={setBondTargetYear}
+                bond_allocations={bond_allocations}
+                annual_spend_target={annual_spend_target}
+                retirement_age_offset={retirement_age_offset}
+                session_id={session_id}
+                fetch_bond_sweep={fetch_bond_sweep}
+                onBondAllocationChange={handleBondAllocationChange}
+                onSaveBondAllocations={handleSaveBondAllocations}
+                isSaving={is_saving_bonds}
+                saveError={bond_save_error}
+              />
             )}
           </div>
         </>

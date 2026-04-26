@@ -42,6 +42,7 @@ export function useSimulation() {
   } | null>(null);
   const sweep_poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
   const sweep_started_at_ms_ref = useRef<number | null>(null);
+  const sweep_cancelled_ref = useRef(false);
 
   const run = useCallback(async (payload: SimulationRequest) => {
     setIsLoading(true);
@@ -164,10 +165,13 @@ export function useSimulation() {
       setSweepProgress({ completed: 0, total: 0, phase: "Starting...", eta_seconds: null });
 
       // Start polling progress
+      sweep_cancelled_ref.current = false;
       if (sweep_poll_ref.current) clearInterval(sweep_poll_ref.current);
       sweep_poll_ref.current = setInterval(async () => {
+        if (sweep_cancelled_ref.current) return;
         try {
           const prog = await bond_sweep_progress(effective_session_id);
+          if (sweep_cancelled_ref.current) return;
           const started_at_ms = sweep_started_at_ms_ref.current ?? Date.now();
           const elapsed_seconds = (Date.now() - started_at_ms) / 1000;
           const has_progress = prog.completed > 0 && prog.total > prog.completed;
@@ -203,6 +207,7 @@ export function useSimulation() {
         console.error("Bond sweep calculation failed:", e);
         throw e;
       } finally {
+        sweep_cancelled_ref.current = true;
         if (sweep_poll_ref.current) {
           clearInterval(sweep_poll_ref.current);
           sweep_poll_ref.current = null;
