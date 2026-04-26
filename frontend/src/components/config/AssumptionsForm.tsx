@@ -140,7 +140,7 @@ function ReturnModelSelector({
  * Manages global simulation parameters: tax year, return model, inflation,
  * limits, and bankruptcy thresholds.
  */
-export function AssumptionsForm({ control, disabled }: Props) {
+export function AssumptionsForm({ control, setValue, disabled }: Props) {
   const returnModel = control._getWatch("assumptions.return_model") ?? "parametric";
 
   return (
