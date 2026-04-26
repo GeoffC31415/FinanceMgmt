@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db_session
 from backend.models import Asset, Expense, Income, Person, Property, Scenario
-from backend.schemas.scenario import ScenarioCreate, ScenarioRead
+from backend.schemas.scenario import ScenarioCloneRequest, ScenarioCloneResponse, ScenarioCreate, ScenarioRead
 
 router = APIRouter()
 
@@ -302,6 +302,126 @@ async def update_scenario(
     await session.commit()
     result = await session.execute(_scenario_query().where(Scenario.id == scenario.id))
     return result.scalars().unique().one()
+
+
+@router.post("/scenarios/{scenario_id}/clone", response_model=ScenarioCloneResponse)
+async def clone_scenario(
+    scenario_id: str,
+    payload: ScenarioCloneRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> ScenarioCloneResponse:
+    """Clone a scenario with all its children, generating new IDs."""
+    result = await session.execute(_scenario_query().where(Scenario.id == scenario_id))
+    source = result.scalars().unique().first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+
+    new_name = payload.new_name or f"{source.name} (copy)"
+    new_scenario = Scenario(name=new_name, assumptions=dict(source.assumptions))
+    session.add(new_scenario)
+    await session.flush()
+
+    # Deep-copy all children with new IDs
+    people = [
+        Person(
+            scenario_id=new_scenario.id,
+            label=person.label,
+            birth_date=person.birth_date,
+            planned_retirement_age=person.planned_retirement_age,
+            state_pension_age=person.state_pension_age,
+            is_child=person.is_child,
+            annual_cost=person.annual_cost,
+            leaves_household_age=person.leaves_household_age,
+        )
+        for person in source.people
+    ]
+    session.add_all(people)
+    await session.flush()
+
+    # Map old person IDs to new ones for child references
+    old_to_new_person: dict[str, str] = {}
+    for old_p, new_p in zip(source.people, people):
+        old_to_new_person[old_p.id] = new_p.id
+
+    session.add_all(
+        [
+            Income(
+                scenario_id=new_scenario.id,
+                person_id=old_to_new_person.get(income.person_id),
+                kind=income.kind,
+                gross_annual=income.gross_annual,
+                annual_growth_rate=income.annual_growth_rate,
+                employee_pension_pct=income.employee_pension_pct,
+                employer_pension_pct=income.employer_pension_pct,
+                start_year=income.start_year,
+                end_year=income.end_year,
+            )
+            for income in source.incomes
+        ]
+    )
+
+    session.add_all(
+        [
+            Asset(
+                scenario_id=new_scenario.id,
+                person_id=old_to_new_person.get(asset.person_id),
+                name=asset.name,
+                balance=asset.balance,
+                annual_contribution=asset.annual_contribution,
+                growth_rate_mean=asset.growth_rate_mean,
+                growth_rate_std=asset.growth_rate_std,
+                contributions_end_at_retirement=asset.contributions_end_at_retirement,
+                asset_type=asset.asset_type,
+                withdrawal_priority=asset.withdrawal_priority,
+                bond_allocation=asset.bond_allocation,
+            )
+            for asset in source.assets
+        ]
+    )
+
+    session.add_all(
+        [
+            Property(
+                scenario_id=new_scenario.id,
+                person_id=old_to_new_person.get(prop.person_id),
+                name=prop.name,
+                value=prop.value,
+                appreciation_rate_mean=prop.appreciation_rate_mean,
+                appreciation_rate_std=prop.appreciation_rate_std,
+                monthly_rental_income=prop.monthly_rental_income,
+                rental_growth_rate=prop.rental_growth_rate,
+                occupancy_rate=prop.occupancy_rate,
+                mortgage_ltv=prop.mortgage_ltv,
+                mortgage_rate=prop.mortgage_rate,
+                mortgage_term_years=prop.mortgage_term_years,
+                annual_maintenance_cost=prop.annual_maintenance_cost,
+                maintenance_is_inflation_linked=prop.maintenance_is_inflation_linked,
+                withdrawal_priority=prop.withdrawal_priority,
+            )
+            for prop in source.properties
+        ]
+    )
+
+    session.add_all(
+        [
+            Expense(
+                scenario_id=new_scenario.id,
+                name=expense.name,
+                monthly_amount=expense.monthly_amount,
+                start_year=expense.start_year,
+                end_year=expense.end_year,
+                is_inflation_linked=expense.is_inflation_linked,
+            )
+            for expense in source.expenses
+        ]
+    )
+
+    await session.commit()
+    return ScenarioCloneResponse(
+        id=new_scenario.id,
+        name=new_name,
+        message=f"Scenario cloned as '{new_name}'",
+    )
 
 
 @router.delete("/scenarios/{scenario_id}", status_code=204, response_class=Response)
