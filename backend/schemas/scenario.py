@@ -33,3 +33,15 @@ class ScenarioRead(ScenarioCreate):
     properties: list[PropertyRead] = Field(default_factory=list)
     expenses: list[ExpenseRead] = Field(default_factory=list)
 
+
+class ScenarioCloneRequest(BaseModel):
+    """Request body for cloning a scenario."""
+    new_name: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class ScenarioCloneResponse(BaseModel):
+    """Response after cloning a scenario."""
+    id: str
+    name: str
+    message: str
+
