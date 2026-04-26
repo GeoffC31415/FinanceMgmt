@@ -14,13 +14,9 @@ import type {
   SimulationResponse
 } from "../types";
 
-const apiHost =
-  typeof window !== "undefined" && window.location?.hostname
-    ? window.location.hostname
-    : "localhost";
-
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? `http://${apiHost}:8000/api`;
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? "http://localhost:5173/api" : "http://localhost:8000/api");
 
 const RETRY_DELAYS = [250, 500, 1000];
 
