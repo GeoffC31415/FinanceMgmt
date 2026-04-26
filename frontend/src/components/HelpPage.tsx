@@ -13,9 +13,10 @@ export function HelpPage() {
         <div className="text-sm font-semibold">High-level yearly sequence</div>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-200">
           <li>Salary income is applied for each person who is not retired (can be limited by income start/end year).</li>
+          <li>State pension is applied per person once they reach their configured state pension age.</li>
           <li>Rental income is applied (subject to Income Tax, no NI). Can continue into retirement.</li>
           <li>Gift income is applied (tax-free). Can continue into retirement.</li>
-          <li>Tax is calculated: salary has Income Tax + NI; rental has Income Tax only; gifts are untaxed.</li>
+          <li>Tax is calculated: salary has Income Tax + NI; state pension and rental income have Income Tax only; gifts are untaxed.</li>
           <li>Mortgage and expenses are stepped (expenses may inflate each year if inflation-linked).</li>
           <li>Cash pays outflows (expenses + mortgage + any extra retirement spend needed to reach the target).</li>
           <li>
@@ -48,6 +49,10 @@ export function HelpPage() {
             <span className="font-semibold">Gift:</span> Tax-free income representing regular gifts from family, expected inheritance,
             or other non-taxable income. No Income Tax or National Insurance applies. Can be one-off (set start and end year to the same value)
             or recurring. Pension contributions do not apply.
+          </li>
+          <li>
+            <span className="font-semibold">State pension:</span> Paid to each adult from their configured state pension age. It is modelled
+            as taxable income for that person, so it can use up personal allowance and interact with rental income or pension drawdown.
           </li>
         </ul>
       </div>
@@ -118,8 +123,9 @@ export function HelpPage() {
       <div className="rounded border border-slate-800 bg-slate-900/30 p-4 space-y-3">
         <div className="text-sm font-semibold">Notes / simplifications</div>
         <ul className="list-disc space-y-2 pl-5 text-sm text-slate-200">
-          <li>UK tax is simplified: salary uses income tax + NI; pension drawdown uses income tax; GIA uses a simplified CGT model.</li>
-          <li>Real-world details like dividend tax, full CGT rules, tapered personal allowance, etc. are not modeled.</li>
+          <li>UK tax is simplified: salary uses income tax + NI; state pension and pension drawdown use income tax; GIA uses a simplified CGT model.</li>
+          <li>Private pension withdrawals are modelled as 25% tax-free and 75% taxable income. Lifetime PCLS / Lump Sum Allowance limits are not modelled yet.</li>
+          <li>Real-world details like dividend tax, full CGT rules, regional income tax differences, etc. are not modelled.</li>
         </ul>
       </div>
     </div>

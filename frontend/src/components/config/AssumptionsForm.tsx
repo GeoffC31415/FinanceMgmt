@@ -175,7 +175,8 @@ export function AssumptionsForm({ control, setValue, disabled }: Props) {
       </div>
       <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
         <label className="block text-sm font-medium">State pension annual</label>
-        <div className="mt-1">
+        <p className="text-xs text-slate-400 mt-1">Annual amount paid to each adult from their state pension age. It is taxable income and uses that person's allowance/bands.</p>
+        <div className="mt-2">
           <NumberInput control={control} name="assumptions.state_pension_annual" placeholder="e.g. 11,500" />
         </div>
       </div>

@@ -59,19 +59,22 @@ export function AssetsForm({ form, assets, scenario, assets_total }: Props) {
         <ul className="mt-2 ml-4 list-disc space-y-1 text-xs">
           <li><strong>Age restriction:</strong> You cannot access your pension until age 55 (57 from 2028). 
               Even with a high priority, the simulation won't withdraw from pensions before this age.</li>
-          <li><strong>Taxed as income:</strong> Pension withdrawals are treated as taxable income, reducing 
-              the net amount you receive. 25% can usually be taken tax-free (not yet modelled here).</li>
+          <li><strong>Taxed as income:</strong> Pension withdrawals are modelled as 25% tax-free and 75% taxable income, subject to simplifications.</li>
+          <li><strong>Owner matters:</strong> Pension withdrawals are taxed against the pension owner's personal allowance and income-tax bands. Assign each pension to the correct person where possible.</li>
           <li><strong>Priority still matters:</strong> Once accessible, pension priority determines whether 
               it's used before or after ISAs/GIAs.</li>
         </ul>
         <p className="mt-2 text-xs italic opacity-80">
-          Contributions come from salary pension percentages set in the Income tab.
+          Contributions come from salary pension percentages set in the Income tab. Lifetime PCLS / Lump Sum Allowance limits are not modelled yet.
         </p>
       </div>
 
       <div className="mt-3 overflow-auto">
         <div className="hidden min-w-[1420px] grid-cols-11 gap-3 text-xs text-slate-400 md:grid">
-          <div>Assigned_to</div>
+          <div className="flex items-center">
+            Owner
+            <InfoTip text="Especially important for pensions: owner affects pension access age and tax treatment." />
+          </div>
           <div>Name</div>
           <div>Type</div>
           <div className="flex items-center">
@@ -93,7 +96,11 @@ export function AssetsForm({ form, assets, scenario, assets_total }: Props) {
           <div></div>
         </div>
         <div className="min-w-[1420px] space-y-2">
-          {assets.fields.map((asset, idx) => (
+          {assets.fields.map((asset, idx) => {
+            const assetType = form.watch<AssetCreate["asset_type"]>(`assets.${idx}.asset_type`);
+            const ownerId = form.watch<string | null | undefined>(`assets.${idx}.person_id`);
+            const isPensionWithoutOwner = assetType === "PENSION" && !ownerId;
+            return (
             <div key={asset.field_id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-11">
               <select
                 className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -106,6 +113,11 @@ export function AssetsForm({ form, assets, scenario, assets_total }: Props) {
                   </option>
                 ))}
               </select>
+              {isPensionWithoutOwner && (
+                <div className="md:col-span-11 -mt-1 rounded border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                  Warning: pension assets should have an owner. Household pensions may default unpredictably and pension ownership affects tax.
+                </div>
+              )}
               <input
                 className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                 {...form.register(`assets.${idx}.name`)}
@@ -174,7 +186,8 @@ export function AssetsForm({ form, assets, scenario, assets_total }: Props) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       <button

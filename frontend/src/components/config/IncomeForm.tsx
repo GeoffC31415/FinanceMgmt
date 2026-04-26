@@ -2,7 +2,7 @@ import type { Control, UseFormRegister } from "react-hook-form";
 import type { FieldArrayWithId } from "react-hook-form";
 import type { ScenarioRead } from "../../types";
 import { NumberInput, PercentInput, InfoTip } from "./inputs";
-import type { IncomeCreate } from "../../types";
+import type { AssetCreate, IncomeCreate } from "../../types";
 
 type IncomeField = FieldArrayWithId<IncomeCreate, "incomes", "field_id">;
 
@@ -68,7 +68,18 @@ export function IncomeForm({ form, incomes, scenario, income_total }: Props) {
         <div className="min-w-[980px] space-y-2">
           {incomes.fields.map((income, idx) => {
             const incomeKind = form.watch(`incomes.${idx}.kind`);
+            const personId = form.watch<string | null | undefined>(`incomes.${idx}.person_id`);
+            const employeePensionPct = form.watch<number | undefined>(`incomes.${idx}.employee_pension_pct`) ?? 0;
+            const employerPensionPct = form.watch<number | undefined>(`incomes.${idx}.employer_pension_pct`) ?? 0;
+            const assetsInForm = form.watch<AssetCreate[] | undefined>("assets") ?? scenario.assets;
             const isSalary = incomeKind === "salary";
+            const hasPensionContribution = employeePensionPct > 0 || employerPensionPct > 0;
+            const hasMatchingPensionAsset = assetsInForm.some((asset) => {
+              if (asset.asset_type !== "PENSION") return false;
+              if (!personId) return true;
+              return asset.person_id === personId || !asset.person_id;
+            });
+            const shouldWarnMissingPension = isSalary && hasPensionContribution && !hasMatchingPensionAsset;
             return (
               <div key={income.field_id} className="grid grid-cols-1 gap-3 rounded border border-slate-800 bg-slate-950/30 p-3 md:grid-cols-7">
                 <select
@@ -109,6 +120,11 @@ export function IncomeForm({ form, incomes, scenario, income_total }: Props) {
                     </button>
                   )}
                 </div>
+                {shouldWarnMissingPension && (
+                  <div className="md:col-span-7 rounded border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                    Warning: pension contributions are set, but this person has no matching pension asset. Add a pension in the Assets tab so contributions do not disappear from the plan.
+                  </div>
+                )}
               </div>
             );
           })}

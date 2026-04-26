@@ -101,10 +101,12 @@ describe("AssetsForm", () => {
     expect(screen.getByText(/Pension \(10\)/)).toBeInTheDocument();
   });
 
-  it("shows the pension note", () => {
+  it("shows accurate pension withdrawal tax copy", () => {
     render(<TestWrapper />);
     expect(screen.getByText("About Pensions")).toBeInTheDocument();
     expect(screen.getByText(/Age restriction/)).toBeInTheDocument();
+    expect(screen.getByText(/25% tax-free and 75% taxable income/)).toBeInTheDocument();
+    expect(screen.queryByText(/not yet modelled here/)).not.toBeInTheDocument();
   });
 
   it("renders asset rows with person dropdown", () => {
@@ -166,6 +168,31 @@ describe("AssetsForm", () => {
   it("shows add asset button", () => {
     render(<TestWrapper />);
     expect(screen.getByText("Add asset")).toBeInTheDocument();
+  });
+
+  it("warns when a pension asset has no owner", () => {
+    function PensionWithoutOwner() {
+      const scenario = createMockScenario();
+      const form = useForm<any>({
+        defaultValues: {
+          assets: [
+            { person_id: "", name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 100000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.1, contributions_end_at_retirement: false, bond_allocation: 0 },
+          ],
+          assumptions: { return_model: "parametric" },
+        },
+      });
+      return (
+        <AssetsForm
+          form={form}
+          assets={{ fields: form.getValues("assets"), append: vi.fn(), remove: vi.fn() }}
+          scenario={scenario}
+          assets_total={100000}
+        />
+      );
+    }
+
+    render(<PensionWithoutOwner />);
+    expect(screen.getByText(/pension assets should have an owner/i)).toBeInTheDocument();
   });
 
   it("shows bond allocation for non-cash assets with parametric model", () => {

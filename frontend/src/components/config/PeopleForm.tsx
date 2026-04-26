@@ -90,6 +90,9 @@ export function PeopleForm({ form, people }: Props) {
                       className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                       {...form.register(`people.${idx}.state_pension_age`)}
                     />
+                    <div className="mt-1 text-xs text-slate-400">
+                      State pension starts at this age and is modelled as taxable income for this person.
+                    </div>
                   </div>
                 </>
               )}

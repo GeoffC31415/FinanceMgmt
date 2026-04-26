@@ -54,6 +54,7 @@ function TestWrapper() {
           employer_pension_pct: 0.03,
         },
       ],
+      assets: [],
     },
   });
 
@@ -153,6 +154,39 @@ describe("IncomeForm", () => {
   it("shows add income button", () => {
     render(<TestWrapper />);
     expect(screen.getByText("Add income")).toBeInTheDocument();
+  });
+
+  it("warns when pension contributions have no matching pension asset", () => {
+    render(<TestWrapper />);
+    expect(screen.getByText(/pension contributions are set/i)).toBeInTheDocument();
+    expect(screen.getByText(/Add a pension in the Assets tab/i)).toBeInTheDocument();
+  });
+
+  it("does not warn when a matching pension asset exists", () => {
+    function WithPensionAsset() {
+      const scenario = createMockScenario();
+      const form = useForm<any>({
+        defaultValues: {
+          incomes: [
+            { person_id: "p1", kind: "salary", gross_annual: 50000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.03 },
+          ],
+          assets: [
+            { person_id: "p1", name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 100000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.1, contributions_end_at_retirement: false, bond_allocation: 0 },
+          ],
+        },
+      });
+      return (
+        <IncomeForm
+          form={form}
+          incomes={{ fields: form.getValues("incomes"), append: vi.fn(), remove: vi.fn() }}
+          scenario={scenario}
+          income_total={50000}
+        />
+      );
+    }
+
+    render(<WithPensionAsset />);
+    expect(screen.queryByText(/pension contributions are set/i)).not.toBeInTheDocument();
   });
 
   it("shows pension fields for salary, hides for rental/gift", () => {

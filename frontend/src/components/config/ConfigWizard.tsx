@@ -668,6 +668,28 @@ export function ConfigWizard() {
                   </div>
                 );
               })}
+              {draft.incomes.some((inc) => inc.kind === "salary" && (inc.employee_pension_pct > 0 || inc.employer_pension_pct > 0)) &&
+                !draft.assets.some((asset) => asset.asset_type === "PENSION") && (
+                  <div className="rounded border border-amber-800/50 bg-amber-950/30 p-3 text-xs text-amber-200">
+                    <div className="font-medium text-amber-100">Pension contributions need a pension account</div>
+                    <p className="mt-1">You have entered pension contributions, but there is no pension asset for them to be invested into.</p>
+                    <button
+                      type="button"
+                      className="mt-2 rounded bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          assets: [
+                            ...d.assets,
+                            { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 0, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null }
+                          ]
+                        }))
+                      }
+                    >
+                      Add pension account
+                    </button>
+                  </div>
+                )}
               <Hint>
                 Salary income stops when the assigned person retires. Rental and gift income can continue — use the full config editor to set start/end years.
               </Hint>
@@ -836,7 +858,7 @@ export function ConfigWizard() {
                 </div>
               ))}
               <Hint>
-                Typical growth: Cash 0%, Bonds 2-3%, Stocks 5-7%. Typical std: Bonds 0.03-0.05, Stocks 0.10-0.15. Pensions are drawn at age 55+ and taxed as income.
+                Typical growth: Cash 0%, Bonds 2-3%, Stocks 5-7%. Typical std: Bonds 0.03-0.05, Stocks 0.10-0.15. Pension withdrawals are modelled as 25% tax-free and 75% taxable income.
               </Hint>
               <button
                 type="button"
@@ -1262,7 +1284,7 @@ export function ConfigWizard() {
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Annual UK state pension amount. Paid to each person once they reach state pension age.">State Pension Annual (£)</Label>
+                  <Label tooltip="Annual UK state pension amount. Paid to each person once they reach state pension age and modelled as taxable income for that person.">State Pension Annual (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     value={String(draft.assumptions.state_pension_annual ?? "")}
@@ -1273,7 +1295,7 @@ export function ConfigWizard() {
                       }))
                     }
                   />
-                  <Hint>Full new state pension (2024): ~£11,500. Check gov.uk for your forecast.</Hint>
+                  <Hint>Full new state pension (2024): ~£11,500. It is taxable income and can use up personal allowance. Check gov.uk for your forecast.</Hint>
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
