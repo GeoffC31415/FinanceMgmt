@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Area,
   CartesianGrid,
@@ -30,11 +31,13 @@ export function RiskTimelineChart({
 
   if (!has_any_risk) return null;
 
-  const data = years.map((year, idx) => ({
+  const data = useMemo(() => {
+    return years.map((year, idx) => ({
     year,
     depletion_pct: is_depleted_median[idx] ?? 0,
     bankruptcy_pct: is_bankrupt_median[idx] ?? 0,
   }));
+  }, [years, is_depleted_median, is_bankrupt_median]);
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -47,6 +50,7 @@ export function RiskTimelineChart({
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
+            isAnimationActive={false}
             data={data}
             margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
           >

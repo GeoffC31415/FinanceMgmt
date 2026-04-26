@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Area,
   CartesianGrid,
@@ -57,7 +57,8 @@ export function NetWorthChart({
     return isNaN(num) || !isFinite(num) ? 0 : num;
   };
 
-  const data = years.map((year, idx) => {
+  const data = useMemo(() => {
+    return years.map((year, idx) => {
     const p10 = sanitize(net_worth_p10[idx]);
     const p90 = sanitize(net_worth_p90[idx]);
     const isa = sanitize(isa_balance_median[idx]);
@@ -83,6 +84,7 @@ export function NetWorthChart({
       debt_balance: debt > 0 ? clampForLog(debt) : null
     };
   });
+  }, [years, net_worth_p10, net_worth_median, net_worth_p90, isa_balance_median, pension_balance_median, cash_balance_median, property_value_median, total_assets_median, debt_balance_median, useLogScale]);
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -107,7 +109,7 @@ export function NetWorthChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 28, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart isAnimationActive={false} data={data} margin={{ top: 28, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

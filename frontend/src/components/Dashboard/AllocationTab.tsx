@@ -154,7 +154,15 @@ export function AllocationTab({
                 </span>
               )}
             </div>
-            <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
+            <div
+              className="h-2 rounded-full bg-slate-700 overflow-hidden"
+              role="progressbar"
+              aria-valuenow={sweep_progress.total > 0 ? pct : undefined}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Bond sweep progress"
+              aria-live="polite"
+            >
               {sweep_progress.total > 0 ? (
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all duration-300"

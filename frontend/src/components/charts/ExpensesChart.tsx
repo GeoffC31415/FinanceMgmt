@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -31,16 +31,30 @@ type Props = {
   percentile?: number;
 };
 
+// SVG icons for chart markers
+export const GraduationCapIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+    <path d="M6 12v5c3 3 9 3 12 0v-5" />
+  </svg>
+);
+
+export const HouseIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 10l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
+
 // Custom label component for child leaving markers
 function ChildLeavingLabel({ viewBox, name }: { viewBox?: { x?: number; y?: number }; name: string }) {
   const x = viewBox?.x ?? 0;
   const y = 25;
   return (
     <g>
-      {/* Graduation cap icon */}
-      <text x={x} y={y} textAnchor="middle" fontSize={16} fill="#38bdf8">
-        🎓
-      </text>
+      <g transform={`translate(${x - 8}, ${y - 8})`}>
+        <GraduationCapIcon size={16} />
+      </g>
       <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill="#38bdf8" fontWeight="500">
         {name}
       </text>
@@ -54,10 +68,9 @@ function MortgagePayoffLabel({ viewBox }: { viewBox?: { x?: number; y?: number }
   const y = 25;
   return (
     <g>
-      {/* House icon */}
-      <text x={x} y={y} textAnchor="middle" fontSize={16} fill="#22c55e">
-        🏠
-      </text>
+      <g transform={`translate(${x - 8}, ${y - 8})`}>
+        <HouseIcon size={16} />
+      </g>
       <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill="#22c55e" fontWeight="500">
         Paid off
       </text>
@@ -90,13 +103,15 @@ export function ExpensesChart({
     return isNaN(num) || !isFinite(num) ? 0 : num;
   };
 
-  const data = years.map((year, idx) => {
+  const data = useMemo(() => {
+    if (!years?.length) return [];
+    return years.map((year, idx) => {
     // Backend total_expenses = expenses + mortgage + fun_fund
-    const total_expenses = sanitize(total_expenses_median[idx]);
-    const mortgage_payment = sanitize(mortgage_payment_median[idx]);
-    const total_tax = sanitize(total_tax_median[idx]);
-    const fun_fund = sanitize(fun_fund_median[idx]);
-    const property_maintenance = sanitize(property_maintenance_median[idx]);
+    const total_expenses = sanitize(total_expenses_median?.[idx]);
+    const mortgage_payment = sanitize(mortgage_payment_median?.[idx]);
+    const total_tax = sanitize(total_tax_median?.[idx]);
+    const fun_fund = sanitize(fun_fund_median?.[idx]);
+    const property_maintenance = sanitize(property_maintenance_median?.[idx]);
     
     // Living expenses = total_expenses - mortgage - fun_fund - property_maintenance
     const living_expenses = Math.max(0, total_expenses - mortgage_payment - fun_fund - property_maintenance);
@@ -115,6 +130,7 @@ export function ExpensesChart({
       property_maintenance: clampForLog(property_maintenance)
     };
   });
+  }, [years, total_expenses_median, mortgage_payment_median, total_tax_median, fun_fund_median, property_maintenance_median, useLogScale]);
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -139,7 +155,7 @@ export function ExpensesChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart isAnimationActive={false} data={data} margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

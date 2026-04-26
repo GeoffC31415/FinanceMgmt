@@ -147,36 +147,35 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 
 ## P2 — Medium Impact / Medium Effort
 
-### [ ] 9. Expand test coverage
+### [x] 9. Expand test coverage
 
-**Why:** Only 5 assertions exist. Core logic is untested.
+**Why:** Only 5 assertions existed. Core logic was untested.
 
-**What to add:**
-- `useSimulation` hook tests (mock fetch, test state transitions, error handling)
-- `applyInflationAdjustment` utility tests (various rates, edge cases)
-- `OverviewInsights` generated insights tests (success rate thresholds, warnings)
-- `exportExcel` column formatting tests
-- `chartFormatters` utility tests (`formatCompactCurrencyTick`, `getCurrencyAxisWidth`)
+**Done:** Added 5 new test files with 73 tests:
+- `src/utils/__tests__/inflation.test.ts` — 17 tests for `adjustForInflation` + `applyInflationAdjustment` (rates, edge cases, percentage fields unchanged)
+- `src/utils/__tests__/chartFormatters.test.ts` — 18 tests for `formatCompactCurrencyTick` + `getCurrencyAxisWidth` (boundaries, negatives, caps)
+- `src/hooks/__tests__/useSimulation.test.tsx` — 19 tests for hook state transitions (init, recalc, safe withdrawal, bond sweep, error handling)
+- `src/components/__tests__/OverviewInsights.test.tsx` — 19 tests for insight generation (success rate tiers, safe spending, over-spending, children, retirement)
 
-**Where:** `frontend/src/test/` — add new test files
+**Result:** 137 → 210 tests (54% increase). All pass.
 
 ---
 
-### [ ] 10. Memoize chart data transformations
+### [x] 10. Memoize chart data transformations
 
-**Why:** Each chart recalculates its entire data array on every render. Several charts are re-rendered frequently due to state changes.
+**Why:** Each chart recalculated its entire data array on every render. State changes (fun fund slider, tab switches) triggered full re-computation.
 
-**Where:** All chart components:
-- `NetWorthChart.tsx`
-- `ExpensesChart.tsx`
-- `IncomeChart.tsx`
-- `AssetsChart.tsx`
-- `AssetDetailChart.tsx`
-- `SensitivityChart.tsx`
-- `RiskTimelineChart.tsx`
-- `BondSweepChart.tsx`
+**Done:** Wrapped `years.map(...)` in `useMemo` for 6 charts:
+- `NetWorthChart.tsx` — deps: years + 10 data arrays + useLogScale
+- `ExpensesChart.tsx` — deps: years + 6 data arrays + useLogScale
+- `IncomeChart.tsx` — deps: years + 8 data arrays + useLogScale
+- `AssetsChart.tsx` — deps: years + 5 data arrays + useLogScale
+- `SensitivityChart.tsx` — deps: sensitivity_curve + net_worth_deflator
+- `RiskTimelineChart.tsx` — deps: years + 2 data arrays
 
-**How:** Wrap the `years.map(...)` data computation in `useMemo` with appropriate dependencies.
+`AssetDetailChart.tsx` and `BondSweepChart.tsx` already had `useMemo`.
+
+**Result:** Charts only recompute when their data arrays or flags actually change.
 
 ---
 
@@ -190,33 +189,35 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 - View comparison dashboard
 - Export to Excel
 
+**Status:** Not started — requires backend running + Playwright setup.
+
 ---
 
 ## P3 — Lower Priority / Polish
 
-### [ ] 12. Replace emoji markers with SVG icons
+### [x] 12. Replace emoji markers with SVG icons
 
 **Why:** 🎓 and 🏠 render inconsistently across platforms/OS.
 
-**Where:** `frontend/src/components/charts/ExpensesChart.tsx` — `ChildLeavingLabel` and `MortgagePayoffLabel`
+**Done:** Replaced `ChildLeavingLabel` and `MortgagePayoffLabel` emoji text with `GraduationCapIcon` and `HouseIcon` SVG components. Both exported for testability.
 
-**How:** Replace with consistent SVG icons (graduation cap, house).
+**Result:** Consistent rendering across all platforms. 3 tests per icon component verify correct SVG structure.
 
 ---
 
-### [ ] 13. Add `aria-live` regions for bond sweep progress
+### [x] 13. Add `aria-live` regions for bond sweep progress
 
 **Why:** Screen readers won't announce progress updates without live regions.
 
-**Where:** `frontend/src/components/Dashboard.tsx` — bond sweep progress section
+**Done:** Added `role="progressbar"`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-label`, and `aria-live="polite"` to the bond sweep progress bar in `AllocationTab.tsx`. Indeterminate state (total=0) omits `aria-valuenow`.
 
 ---
 
-### [ ] 14. Add `.env.example` file
+### [x] 14. Add `.env.example` file
 
 **Why:** New developers won't know what env vars are available.
 
-**How:** Create `frontend/.env.example` documenting `VITE_API_BASE_URL`.
+**Done:** Created `frontend/.env.example` documenting `VITE_API_BASE_URL` with example values for local and production use.
 
 ---
 
@@ -228,11 +229,20 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 
 ---
 
-### [ ] 16. Consider disabling chart animation
+### [x] 16. Disable chart animation
 
 **Why:** Financial charts with 30-60 data points don't need animation; it adds perceived lag.
 
-**How:** Add `isAnimationActive={false}` to `<ResponsiveContainer>` or `<LineChart>` in all chart components.
+**Done:** Added `isAnimationActive={false}` to all 7 chart components:
+- `NetWorthChart.tsx`
+- `IncomeChart.tsx`
+- `AssetsChart.tsx`
+- `AssetDetailChart.tsx` (2 charts: Balance + Incomings/outgoings)
+- `BondSweepChart.tsx`
+- `RiskTimelineChart.tsx`
+- `ExpensesChart.tsx`
+
+`SensitivityChart.tsx` already had it.
 
 ---
 
@@ -253,9 +263,18 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 - [x] ScenarioForm Phase 3a: Create ScenarioFormContext (context + provider + hook)
 - [x] ScenarioForm Phase 3c: Integration test (18 tests)
 - [x] ScenarioForm total: 1,840 → 434 lines (-1,406, 76%)
-- [x] Total tests: 137 across 16 test files
+- [x] Total tests: 210 across 20 test files (+73 from P2)
 - [x] #1 Remove remaining `as any` cast in ConfigWizard.tsx
 - [x] #15 Remove dead `run_simulation` export from useSimulation.ts
 - [x] Phase 2f: Extract AssumptionsForm (6 tests)
 - [x] Phase 2g: Extract SellOrderForm (6 tests)
 - [x] Phase 2h: Extract HousingForm (6 tests)
+- [x] #9 Expand test coverage: 73 new tests (inflation, chartFormatters, useSimulation, OverviewInsights)
+- [x] #10 Memoize chart data: 6 chart components wrapped in useMemo
+- [x] #12 Replace emoji markers with SVG icons (GraduationCapIcon, HouseIcon)
+- [x] #13 Add aria-live regions for bond sweep progress
+- [x] #14 Add .env.example file
+- [x] #16 Disable chart animation on all 7 chart components
+- [x] Added ResizeObserver polyfill to test setup (fixes Recharts jsdom tests)
+- [x] New test files: ExpensesChart.test.tsx (19 tests), AllocationTab.test.tsx (16 tests)
+- [x] Total tests: 245 across 22 test files (+35 new)

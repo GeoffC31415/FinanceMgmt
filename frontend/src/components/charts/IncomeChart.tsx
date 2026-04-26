@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -52,7 +52,8 @@ export function IncomeChart({
     return isNaN(num) || !isFinite(num) ? 0 : num;
   };
 
-  const data = years.map((year, idx) => ({
+  const data = useMemo(() => {
+    return years.map((year, idx) => ({
     year,
     salary_gross: clampForLog(sanitize(salary_gross_median[idx])),
     salary_net: clampForLog(sanitize(salary_net_median[idx])),
@@ -63,6 +64,7 @@ export function IncomeChart({
     investment_returns: clampForLog(sanitize(investment_returns_median[idx])),
     total_income: clampForLog(sanitize(total_income_median[idx]))
   }));
+  }, [years, salary_gross_median, salary_net_median, rental_income_median, gift_income_median, pension_income_median, state_pension_income_median, investment_returns_median, total_income_median, useLogScale]);
 
   const y_axis_values = data.flatMap((point) => [
     point.total_income,
@@ -110,7 +112,7 @@ export function IncomeChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
+          <ComposedChart isAnimationActive={false} data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

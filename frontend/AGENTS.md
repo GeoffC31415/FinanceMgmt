@@ -75,6 +75,15 @@ frontend/
 │   ├── test/
 │   │   ├── Dashboard.test.tsx  # Dashboard rendering (5 assertions)
 │   │   └── setup.ts
+│   ├── utils/__tests__/
+│   │   ├── inflation.test.ts   # adjustForInflation + applyInflationAdjustment (17 tests)
+│   │   └── chartFormatters.test.ts  # formatCompactCurrencyTick + getCurrencyAxisWidth (18 tests)
+│   ├── hooks/__tests__/
+│   │   ├── bondSweepRaceCondition.test.ts
+│   │   └── useSimulation.test.tsx  # hook state transitions (19 tests)
+│   ├── components/__tests__/
+│   │   ├── bondAllocations.test.ts
+│   │   └── OverviewInsights.test.tsx  # insight generation (19 tests)
 │   ├── App.tsx                 # Router + navigation
 │   ├── main.tsx                # Entry point
 │   └── index.css               # Tailwind imports
@@ -388,17 +397,18 @@ Used via `useFieldArray` from react-hook-form:
 
 | Issue | Location | Status | Impact |
 |-------|----------|--------|--------|
-| `run_simulation` exported but never called | `useSimulation.ts` | Open | Dead code |
+| `run_simulation` exported but never called | `useSimulation.ts` | **Fixed** | Dead code |
 | `Assumptions` type is `Record<string, unknown>` | `types/index.ts` | Fixed | No type safety for assumptions |
 | `as any` casts across config components | `ConfigWizard` (1 remaining) | Open | Type safety loss |
 | Fixed `w-[70%] min-w-[800px]` layout | `App.tsx` | Open | Not responsive |
 | No retry on API failures | `api/client.ts` | Open | Fragile UX |
-| Bond sweep polling race condition | `useSimulation.ts` | Fixed | Stale ETA |
-| Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | Open | Inconsistent rendering |
-| Only 5 test assertions | `Dashboard.test.tsx` | Open | Low confidence |
+| Bond sweep polling race condition | `useSimulation.ts` | **Fixed** | Stale ETA |
+| Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | **Fixed** | Replaced with SVG icons (GraduationCapIcon, HouseIcon) |
+| Only 5 test assertions | `Dashboard.test.tsx` | **Fixed** (245 tests) | Low confidence |
+| Chart data not memoized | 6 chart components | **Fixed** | Unnecessary re-renders |
 | `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | **Partially fixed** (434 lines) | Hard to maintain |
 | `Dashboard.tsx` is 1,180 lines | `components/Dashboard.tsx` | **Fixed** (459 lines) | Hard to maintain |
-| No `.env.example` | root | Open | Developer onboarding gap |
+| No `.env.example` | root | **Fixed** | Created `.env.example` with `VITE_API_BASE_URL` |
 
 ---
 
@@ -421,6 +431,7 @@ Used via `useFieldArray` from react-hook-form:
 | `types/index.ts` | ~200 | |
 | `exportExcel.ts` | ~250 | |
 | **Total source** | **~5,500+** | |
+| **Total tests** | **245** | (22 test files)
 
 ---
 

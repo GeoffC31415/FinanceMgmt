@@ -109,7 +109,7 @@ function ClassPanel({ curve, optimal_pct }: { curve: MarginalCurve; optimal_pct:
       {/* Dual-axis chart: risk + safe fun fund */}
       <div className="h-[180px] mt-2">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={segments} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+          <ComposedChart isAnimationActive={false} data={segments} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="bond_pct" type="number" domain={[0, 100]} stroke="#64748b"
               tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`}

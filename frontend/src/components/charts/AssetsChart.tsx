@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -45,7 +45,8 @@ export function AssetsChart({
     return isNaN(num) || !isFinite(num) ? 0 : num;
   };
 
-  const data = years.map((year, idx) => {
+  const data = useMemo(() => {
+    return years.map((year, idx) => {
     const isa = sanitize(isa_balance_median[idx]);
     const pension = sanitize(pension_balance_median[idx]);
     const cash = sanitize(cash_balance_median[idx]);
@@ -64,6 +65,7 @@ export function AssetsChart({
       total_assets: clampForLog(totalAssets)
     };
   });
+  }, [years, isa_balance_median, pension_balance_median, cash_balance_median, property_value_median, total_assets_median, useLogScale]);
 
   const y_axis_values = data.flatMap((point) => [
     point.total_assets,
@@ -98,7 +100,7 @@ export function AssetsChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
+          <ComposedChart isAnimationActive={false} data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

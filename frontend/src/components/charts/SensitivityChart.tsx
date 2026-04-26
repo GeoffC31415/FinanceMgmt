@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Area,
   CartesianGrid,
@@ -29,12 +30,12 @@ export function SensitivityChart({
 }: Props) {
   if (sensitivity_curve.length === 0) return null;
 
-  const data = sensitivity_curve.map((pt) => ({
+  const data = useMemo(() => sensitivity_curve.map((pt) => ({
     fun_fund: pt.fun_fund,
     bankruptcy_pct: pt.bankruptcy_pct,
     depletion_pct: pt.depletion_pct,
     p10_net_worth: pt.p10_final_net_worth * net_worth_deflator,
-  }));
+  })), [sensitivity_curve, net_worth_deflator]);
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
