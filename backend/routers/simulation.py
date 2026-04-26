@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -34,10 +36,33 @@ from backend.simulation.engine import (
 from backend.simulation.engine_fast import run_simulation
 from backend.simulation.returns_cache import create_session, get_session, generate_returns_matrix, generate_returns_matrix_with_bond_override
 from backend.simulation.entities import ExpenseItem, GiftIncome, PensionPot, PersonEntity, RentalIncome, SalaryIncome
+from backend.simulation.validator import validate_scenario
 from backend.simulation.entities.asset import AssetAccount
 from backend.simulation.entities.property import PropertyEntity
 
 router = APIRouter()
+
+
+def _validate_simulation_scenario(
+    sim_scenario: SimulationScenario,
+) -> None:
+    """Validate a simulation scenario and raise HTTPException if errors found."""
+    report = validate_scenario(sim_scenario)
+    if report.error_count > 0:
+        errors = [
+            f"{issue.field}: {issue.message}"
+            for issue in report.issues
+            if issue.severity == "error"
+        ]
+        warnings = [
+            f"{issue.field}: {issue.message}"
+            for issue in report.issues
+            if issue.severity == "warning"
+        ]
+        detail = {"errors": errors}
+        if warnings:
+            detail["warnings"] = warnings
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.get("/health")
@@ -434,6 +459,8 @@ async def run_simulation_endpoint(payload: SimulationRequest, session: AsyncSess
         end_year_override=payload.end_year,
     )
 
+    _validate_simulation_scenario(sim_scenario)
+
     returns = generate_returns_matrix(scenario=sim_scenario, iterations=payload.iterations, seed=payload.seed)
     mats = run_simulation(scenario=sim_scenario, returns=returns)
 
@@ -462,6 +489,8 @@ async def init_simulation(
         annual_spend_target_override=payload.annual_spend_target,
         end_year_override=payload.end_year,
     )
+
+    _validate_simulation_scenario(sim_scenario)
 
     session_id = create_session(
         scenario_id=scenario.id,
@@ -966,4 +995,78 @@ def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
         inflation_rate=sim_scenario.assumptions.inflation_rate,
         start_year=sim_scenario.start_year,
     )
+
+
+# Column headers for CSV export in the same order as the 42 engine fields
+_CSV_COLUMNS = [
+    "net_worth", "salary_gross", "salary_net", "rental_income", "gift_income",
+    "pension_income", "state_pension_income", "investment_returns", "total_income",
+    "total_expenses", "mortgage_payment", "pension_contributions", "fun_fund",
+    "income_tax_paid", "ni_paid", "total_tax", "isa_balance", "pension_balance",
+    "cash_balance", "total_assets", "mortgage_balance", "total_liabilities",
+    "mortgage_paid_off", "is_depleted", "is_bankrupt", "debt_balance",
+    "debt_interest_paid", "isa_returns", "gia_returns", "cash_returns",
+    "pension_returns", "isa_contributions", "gia_contributions",
+    "pension_contributions_total", "isa_withdrawals", "gia_withdrawals",
+    "pension_withdrawals", "gia_balance", "property_value",
+    "property_rental_income", "property_maintenance", "property_returns",
+]
+
+
+@router.get("/export")
+async def export_simulation(
+    session_id: str,
+    format: str = Query(default="csv", pattern="^(csv|json)$"),
+) -> Response:
+    """Export simulation results as CSV or JSON.
+
+    Uses the representative iteration (closest to the median) for all
+    field values. Includes all 42 engine output fields.
+    """
+    cached = get_session(session_id=session_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
+
+    mats = cached.returns
+    # We need to run the simulation to get the output matrices
+    sim_scenario = cached.base_scenario
+    run_mats = run_simulation(scenario=sim_scenario, returns=cached.returns)
+
+    years = run_mats.years
+    fields = run_mats.fields
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        # Header row with year labels
+        writer.writerow(["year"] + [str(y) for y in years])
+        # One row per field
+        for col_name in _CSV_COLUMNS:
+            values = fields.get(col_name)
+            if values is not None and values.size > 0:
+                flat = [float(x) for x in values.flatten()]
+                writer.writerow([col_name] + [f"{v:.2f}" for v in flat])
+            else:
+                writer.writerow([col_name] + ["0.00"] * len(years))
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=simulation_{session_id[:8]}.csv"},
+        )
+    else:  # json
+        data: dict = {"year": [int(y) for y in years]}
+        for col_name in _CSV_COLUMNS:
+            values = fields.get(col_name)
+            if values is not None and values.size > 0:
+                flat = [float(x) for x in values.flatten()]
+                data[col_name] = [round(v, 2) for v in flat]
+            else:
+                data[col_name] = [0.0] * len(years)
+        import json
+        return Response(
+            content=json.dumps(data),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=simulation_{session_id[:8]}.json"},
+        )
 
