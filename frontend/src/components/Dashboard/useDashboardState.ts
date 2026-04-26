@@ -59,7 +59,7 @@ export function useDashboardState(): UseDashboardStateReturn {
   const [annual_spend_target, setAnnualSpendTarget] = useState<number>(0);
   const [end_year, setEndYear] = useState<number>(new Date().getFullYear() + 60);
   const [retirement_age_offset, setRetirementAgeOffset] = useState<number>(0);
-  const [show_real_values, setShowRealValues] = useState<boolean>(false);
+  const [show_real_values, setShowRealValues] = useState<boolean>(true);
   const [percentile, setPercentile] = useState<number>(50);
   const [risk_threshold, setRiskThreshold] = useState<number>(5);
   const [bond_target_year, setBondTargetYear] = useState<number | null>(null);
