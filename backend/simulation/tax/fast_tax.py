@@ -16,10 +16,22 @@ def calculate_income_tax_fast(
     if taxable_income <= 0:
         return 0.0
 
+    # Personal allowance tapering: reduced by £1 for every £2 above £100k.
+    # This mirrors backend.simulation.tax.income_tax.calculate_income_tax and
+    # backend.simulation.engine_fast._calculate_income_tax.
+    effective_allowance = personal_allowance
+    if taxable_income > 100_000.0:
+        reduction = (taxable_income - 100_000.0) / 2.0
+        if reduction > personal_allowance:
+            reduction = personal_allowance
+        effective_allowance = personal_allowance - reduction
+        if effective_allowance < 0.0:
+            effective_allowance = 0.0
+
     remaining = taxable_income
     tax = 0.0
 
-    allowance = personal_allowance if remaining > personal_allowance else remaining
+    allowance = effective_allowance if remaining > effective_allowance else remaining
     remaining -= allowance
     if remaining <= 0:
         return 0.0
@@ -61,30 +73,15 @@ def calculate_pension_drawdown_fast(
     if target_net_income <= 0 or pension_balance <= 0:
         return 0.0, 0.0, 0.0
 
-    taxable_needed = _solve_taxable_amount_fast(
-        target_net_income=target_net_income,
-        other_taxable_income=other_taxable_income,
-        personal_allowance=personal_allowance,
-        basic_rate_limit=basic_rate_limit,
-        higher_rate_limit=higher_rate_limit,
-        basic_rate=basic_rate,
-        higher_rate=higher_rate,
-        additional_rate=additional_rate,
-    )
-    gross = taxable_needed / 0.75 if taxable_needed > 0 else 0.0
-    if gross > pension_balance:
-        gross = pension_balance
+    low = 0.0
+    high = pension_balance
+    target_cap = target_net_income * 2.0
+    if target_cap < high:
+        high = target_cap
 
-    taxable_amount = gross * 0.75
-    total_tax = calculate_income_tax_fast(
-        taxable_income=other_taxable_income + taxable_amount,
-        personal_allowance=personal_allowance,
-        basic_rate_limit=basic_rate_limit,
-        higher_rate_limit=higher_rate_limit,
-        basic_rate=basic_rate,
-        higher_rate=higher_rate,
-        additional_rate=additional_rate,
-    )
+    gross = 0.0
+    pension_tax = 0.0
+    net_income = 0.0
     tax_on_other = calculate_income_tax_fast(
         taxable_income=other_taxable_income,
         personal_allowance=personal_allowance,
@@ -94,60 +91,40 @@ def calculate_pension_drawdown_fast(
         higher_rate=higher_rate,
         additional_rate=additional_rate,
     )
-    pension_tax = total_tax - tax_on_other
-    net_income = gross - pension_tax
+
+    for _ in range(20):
+        gross = (low + high) / 2.0
+        taxable_amount = gross * 0.75
+        total_tax = calculate_income_tax_fast(
+            taxable_income=other_taxable_income + taxable_amount,
+            personal_allowance=personal_allowance,
+            basic_rate_limit=basic_rate_limit,
+            higher_rate_limit=higher_rate_limit,
+            basic_rate=basic_rate,
+            higher_rate=higher_rate,
+            additional_rate=additional_rate,
+        )
+        pension_tax = total_tax - tax_on_other
+        net_income = gross - pension_tax
+
+        if net_income < target_net_income:
+            low = gross
+        else:
+            high = gross
+
+    if gross > pension_balance:
+        gross = pension_balance
+        taxable_amount = gross * 0.75
+        total_tax = calculate_income_tax_fast(
+            taxable_income=other_taxable_income + taxable_amount,
+            personal_allowance=personal_allowance,
+            basic_rate_limit=basic_rate_limit,
+            higher_rate_limit=higher_rate_limit,
+            basic_rate=basic_rate,
+            higher_rate=higher_rate,
+            additional_rate=additional_rate,
+        )
+        pension_tax = total_tax - tax_on_other
+        net_income = gross - pension_tax
+
     return gross, pension_tax, net_income
-
-
-@njit(cache=True)
-def _solve_taxable_amount_fast(
-    target_net_income: float,
-    other_taxable_income: float,
-    personal_allowance: float,
-    basic_rate_limit: float,
-    higher_rate_limit: float,
-    basic_rate: float,
-    higher_rate: float,
-    additional_rate: float,
-) -> float:
-    if target_net_income <= 0:
-        return 0.0
-
-    base_income = other_taxable_income if other_taxable_income > 0 else 0.0
-    remaining_net = target_net_income
-    taxable_needed = 0.0
-
-    limits = (personal_allowance, basic_rate_limit, higher_rate_limit)
-    rates = (0.0, basic_rate, higher_rate)
-
-    previous_limit = 0.0
-    current_income = base_income
-
-    for idx in range(3):
-        band_end = limits[idx]
-        rate = rates[idx]
-        band_start = previous_limit
-        previous_limit = band_end
-
-        if current_income >= band_end:
-            continue
-
-        available = band_end - (current_income if current_income > band_start else band_start)
-        if available <= 0:
-            continue
-
-        net_per_taxable = (4.0 / 3.0) - rate
-        net_available = available * net_per_taxable
-        if remaining_net <= net_available:
-            taxable_needed += remaining_net / net_per_taxable
-            return taxable_needed
-
-        taxable_needed += available
-        remaining_net -= net_available
-        current_income = band_end
-
-    net_per_taxable = (4.0 / 3.0) - additional_rate
-    if net_per_taxable <= 0:
-        return taxable_needed
-    taxable_needed += remaining_net / net_per_taxable
-    return taxable_needed

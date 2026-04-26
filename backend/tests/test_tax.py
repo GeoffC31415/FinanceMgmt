@@ -24,6 +24,7 @@ from backend.simulation.tax.withdrawals import (
     WithdrawalResult,
     GiaWithdrawalResult,
 )
+from backend.simulation.tax.fast_tax import calculate_income_tax_fast, calculate_pension_drawdown_fast
 
 
 # ────────────────────────────── Income Tax ──────────────────────────────
@@ -131,6 +132,36 @@ class TestIncomeTax:
         expected = 30_000 * 0.25 + 20_000 * 0.50
         tax = calculate_income_tax(taxable_income=60_000.0, bands=custom_bands)
         assert tax == pytest.approx(expected, abs=1.0)
+
+    @pytest.mark.parametrize(
+        "income",
+        [
+            0.0,
+            12_570.0,
+            12_571.0,
+            50_270.0,
+            50_271.0,
+            99_999.0,
+            100_000.0,
+            110_000.0,
+            125_140.0,
+            125_141.0,
+            200_000.0,
+        ],
+    )
+    def test_fast_income_tax_matches_python(self, income: float):
+        """Standalone fast tax function must match canonical Python tax logic."""
+        python_tax = calculate_income_tax(taxable_income=income, bands=self.bands)
+        fast_tax = calculate_income_tax_fast(
+            income,
+            self.bands.personal_allowance,
+            self.bands.basic_rate_limit,
+            self.bands.higher_rate_limit,
+            self.bands.basic_rate,
+            self.bands.higher_rate,
+            self.bands.additional_rate,
+        )
+        assert fast_tax == pytest.approx(python_tax, abs=0.01)
 
 
 # ────────────────────────────── National Insurance ──────────────────────────────
@@ -330,6 +361,42 @@ class TestPensionDrawdown:
         )
         assert result.gross_withdrawal <= 50_000.0
         assert result.net_income <= 50_000.0
+
+    @pytest.mark.parametrize(
+        ("target_net", "other_taxable", "balance"),
+        [
+            (0.0, 0.0, 100_000.0),
+            (10_000.0, 0.0, 500_000.0),
+            (20_000.0, 30_000.0, 500_000.0),
+            (30_000.0, 100_000.0, 500_000.0),
+            (50_000.0, 110_000.0, 500_000.0),
+            (1_000_000.0, 0.0, 50_000.0),
+        ],
+    )
+    def test_fast_pension_drawdown_matches_python(self, target_net: float, other_taxable: float, balance: float):
+        """Standalone fast pension drawdown must match canonical Python logic."""
+        bands = IncomeTaxBands()
+        python_result = calculate_pension_drawdown(
+            target_net_income=target_net,
+            other_taxable_income=other_taxable,
+            pension_balance=balance,
+            bands=bands,
+        )
+        gross, tax, net = calculate_pension_drawdown_fast(
+            target_net,
+            other_taxable,
+            balance,
+            bands.personal_allowance,
+            bands.basic_rate_limit,
+            bands.higher_rate_limit,
+            bands.basic_rate,
+            bands.higher_rate,
+            bands.additional_rate,
+        )
+
+        assert gross == pytest.approx(python_result.gross_withdrawal, abs=0.25)
+        assert tax == pytest.approx(python_result.tax_paid, abs=0.25)
+        assert net == pytest.approx(python_result.net_income, abs=0.25)
 
 
 # ────────────────────────────── Withdrawals ──────────────────────────────

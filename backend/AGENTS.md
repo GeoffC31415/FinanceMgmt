@@ -97,7 +97,7 @@ backend/
 │       ├── withdrawals.py   # GIA withdrawal with CGT, tax-free withdrawal
 │       ├── pension_relief.py
 │       ├── calculator.py    # TaxCalculator (combines income tax + NI)
-│       └── fast_tax.py      # Standalone Numba tax functions
+│       └── fast_tax.py      # Standalone Numba tax functions; parity-tested with Python tax modules
 │
 ├── alembic/
 │   ├── env.py               # Async migration runner

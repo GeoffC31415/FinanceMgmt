@@ -51,7 +51,7 @@ Important current limitations/gaps:
 - Private pension drawdown tax now processes eligible pots per owner in `engine_fast.py`, using each owner's own salary/rental/state-pension income and prior taxable pension drawdown in the year. Broader source-specific pension-tax reporting remains open under P1.1/P3.3.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
 - The simulation output now separates `state_pension_tax_paid`, but still does not separately expose CGT, pension drawdown tax, rental tax, and salary income tax.
-- Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`.
+- Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`. `fast_tax.py` now mirrors personal-allowance tapering and has parity tests for income tax and pension drawdown, but broader consolidation remains open.
 - The selected tax year is applied statically across the whole simulation horizon.
 
 ---
@@ -142,9 +142,9 @@ Important current limitations/gaps:
 
 - [ ] Define one canonical tax specification with examples in tests.
 - [ ] Decide whether `fast_tax.py` is used. If unused, remove it or mark it clearly as deprecated.
-- [ ] If retained, make `fast_tax.py` match pure-Python calculations exactly, including personal allowance tapering.
-- [ ] Add property-based or parametrized parity tests comparing pure-Python functions to JIT-compatible helpers across income ranges.
-- [ ] Add tests around boundary values: £12,570, £50,270, £100,000, £125,140, and additional-rate thresholds.
+- [x] If retained, make `fast_tax.py` match pure-Python calculations exactly, including personal allowance tapering.
+- [x] Add property-based or parametrized parity tests comparing pure-Python functions to JIT-compatible helpers across income ranges. Current coverage: `calculate_income_tax_fast` and `calculate_pension_drawdown_fast` vs pure-Python tax modules.
+- [x] Add tests around boundary values: £12,570, £50,270, £100,000, £125,140, and additional-rate thresholds.
 
 **Acceptance criteria:** All tax calculation paths return equivalent values for the same inputs.
 
