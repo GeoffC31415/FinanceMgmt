@@ -2,7 +2,9 @@
 
 > Priority: **P0** (critical) → **P1** (high) → **P2** (medium) → **P3** (nice-to-have)
 
-**Tests**: 134 passing ✓
+**Tests**: Backend test suite not run in this environment (`pytest` command unavailable). Historical note said 134 passing; current repo contains 35 backend test functions plus parametrized cases.
+
+_Last updated: 2026-04-26._
 
 ## Completed
 
@@ -22,6 +24,7 @@
 | ✅ | Q10: Slow request logging | `log_slow_requests` middleware in `main.py` |
 | ✅ | Perf: Speed up tests with `max_combos` cap | Bond sweep tests use `max_combos=20` — reduced from 9.5s → 3.1s (3x). Added `max_combos` field to `BondSweepRequest` schema. |
 | ✅ | 1.3: Add Simulation Cancellation / Timeout | Async sweep, cancel endpoint, timeout middleware |
+| ✅ | Risk analysis safe-withdrawal bug | Fixed `/api/simulation/safe-withdrawal` by importing `numpy` in `routers/simulation.py`; frontend now surfaces safe-withdrawal errors instead of silently showing `---`. |
 
 ---
 
@@ -74,7 +77,7 @@
 
 **Done**:
 - `BondSweepService.run_async()` — async sweep with per-combo cancellation checks
-- `POST /bond-sweep/{session_id}/cancel` endpoint — cancels running sweeps
+- `POST /bond-sweep/cancel?session_id=...` endpoint — cancels running sweeps
 - `REQUEST_TIMEOUT` middleware (3600s default) — safety net for all requests
 - `GET /bond-sweep/{session_id}/progress` — async-safe progress polling with `_SWEEP_LOCK`
 - `_SWEEP_TASKS` dict — tracks running tasks for cancellation
@@ -84,7 +87,7 @@
 
 **Tasks**:
 - [x] Add `asyncio.create_task()` for long-running sweeps
-- [x] Add `/bond-sweep/{session_id}/cancel` endpoint
+- [x] Add `/bond-sweep/cancel?session_id=...` endpoint
 - [x] Add request timeout middleware (3600s configurable)
 - [x] Return progress polling via `/bond-sweep/progress` (async-safe)
 

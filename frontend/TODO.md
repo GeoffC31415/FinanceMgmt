@@ -2,6 +2,8 @@
 
 > Prioritized list of improvements for the FinanceMgmt frontend.
 > This file is a living document — check it before starting work and update status as items are done.
+>
+> Last updated: 2026-04-26. Current frontend test suite: `npm test` passes with 249 tests across 22 files. `npm run build` is still blocked by known TypeScript issues (Recharts `isAnimationActive` props, field-array generic types, and a few test type mismatches).
 
 ---
 
@@ -68,6 +70,22 @@ Then replace the inline `adjustForInflation` + the big spread in `Dashboard.tsx`
 
 **How:** Add a retry wrapper for GET/idempotent requests with exponential backoff (e.g., 3 retries, 250ms/500ms/1000ms delays).
 
+### [ ] 4a. Restore TypeScript production build
+
+**Why:** `npm test` passes, but `npm run build` currently fails. This makes deployment/release checks unreliable.
+
+**Current known failures:**
+- Recharts chart components pass `isAnimationActive` to chart containers where the installed type definitions do not allow it.
+- `FieldArrayWithId<AssetCreate, "assets", ...>` style component props are typed against item types rather than the full form value type, producing `never` constraints.
+- Some test files contain type-only mismatches (`state_pension_median` vs `state_pension_income_median`, nullable chart test data, relative imports).
+- `AssumptionsForm.tsx` imports `TaxYearPreset` from `types` even though it is exported by `api/client`.
+
+**Tasks:**
+- [ ] Move `isAnimationActive={false}` to individual Recharts series elements or wrap with compatible props.
+- [ ] Re-type extracted config form components around the full form schema type instead of per-item types.
+- [ ] Fix test-only type mismatches and stale imports.
+- [ ] Add `npm run build` to the regular validation checklist/CI once green.
+
 ---
 
 ## P1 — High Impact / Medium Effort
@@ -88,7 +106,7 @@ Then replace the inline `adjustForInflation` + the big spread in `Dashboard.tsx`
 - `frontend/src/components/Dashboard/index.ts` — barrel exports
 - `frontend/src/components/__tests__/bondAllocations.test.ts` — 13 tests for utility functions
 
-**Result:** `Dashboard.tsx` reduced from 1,180 → 459 lines (61% reduction). All 18 tests pass. Build succeeds.
+**Result:** `Dashboard.tsx` reduced from 1,180 → ~459 lines at the time of refactor (later UI/onboarding work changed line counts). Dashboard tests pass. Full build is currently blocked by unrelated TypeScript issues tracked below.
 
 ---
 
@@ -154,10 +172,10 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 **Done:** Added 5 new test files with 73 tests:
 - `src/utils/__tests__/inflation.test.ts` — 17 tests for `adjustForInflation` + `applyInflationAdjustment` (rates, edge cases, percentage fields unchanged)
 - `src/utils/__tests__/chartFormatters.test.ts` — 18 tests for `formatCompactCurrencyTick` + `getCurrencyAxisWidth` (boundaries, negatives, caps)
-- `src/hooks/__tests__/useSimulation.test.tsx` — 19 tests for hook state transitions (init, recalc, safe withdrawal, bond sweep, error handling)
+- `src/hooks/__tests__/useSimulation.test.tsx` — 20 tests for hook state transitions (init, recalc, safe withdrawal, safe-withdrawal error handling, bond sweep)
 - `src/components/__tests__/OverviewInsights.test.tsx` — 19 tests for insight generation (success rate tiers, safe spending, over-spending, children, retirement)
 
-**Result:** 137 → 210 tests (54% increase). All pass.
+**Result:** 137 → 210 tests at the time of this milestone (now 249 tests). All tests pass.
 
 ---
 
@@ -278,6 +296,8 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 - [x] Added ResizeObserver polyfill to test setup (fixes Recharts jsdom tests)
 - [x] New test files: ExpensesChart.test.tsx (19 tests), AllocationTab.test.tsx (16 tests)
 - [x] Total tests: 245 across 22 test files (+35 new)
+- [x] Current total after risk-analysis error handling: 249 tests across 22 test files
+- [x] Fixed Risk Analysis max-safe-spending display: frontend now tracks and displays safe-withdrawal calculation errors instead of silently showing `---`
 
 ---
 
@@ -293,7 +313,7 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 
 ### [ ] UX-1. Add a proper first-run welcome / empty-state experience
 
-**Status:** In progress — added a reusable intro/welcome page and show it from the dashboard when no scenarios exist.
+**Status:** In progress — added `/intro`, reusable intro/welcome content, sample/starter scenario CTAs, and dashboard empty-state routing when no scenarios exist.
 
 **Why:** The app currently opens on the simulation dashboard. If the user has no scenario, or does not understand what a scenario is, they are dropped into a dense technical UI.
 
@@ -316,7 +336,7 @@ Model your household finances and stress-test retirement plans.
 
 - [x] Add an empty-state component for `Dashboard` when there are no scenarios.
 - [x] Add a first-run welcome/intro route.
-- [ ] Add a first-run welcome panel in `ScenarioConfigPage`.
+- [x] Add a refreshed first-run/setup panel in `ScenarioConfigPage`.
 - [x] Add clear calls to action: walkthrough, starter template, sample scenario.
 - [x] Avoid showing simulation sliders/charts until a scenario exists.
 - [ ] Add tests for empty-state rendering.
@@ -428,6 +448,7 @@ src/components/ui/
 
 - [x] Implement `Button` with variants: primary, secondary, ghost, destructive.
 - [x] Implement `Card`.
+- [ ] Implement `PageHeader`.
 - [ ] Implement `Alert`/`Callout` for errors, warnings, and education.
 - [ ] Implement `StatCard` for dashboard metrics.
 - [ ] Implement accessible `Tooltip` instead of relying on `title` attributes.
