@@ -5,3 +5,33 @@ finances.db
 frontend/.vite
 frontend/dist
 frontend/tsconfig.tsbuildinfo
+
+# Backend test artifacts
+backend/.pytest_cache/
+backend/prof/
+
+# Backend data files (not source)
+backend/data/historical_returns_metadata.json
+
+# Environment files
+**/.env
+**/.env.*
+
+# Python build artifacts
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+**/dist/
+**/build/
+
+# Python caches
+**/.mypy_cache/
+**/.ruff_cache/
+**/.hypothesis/
+
+# IDE
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+*~
