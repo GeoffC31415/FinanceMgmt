@@ -344,6 +344,7 @@ def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
         people=sim_scenario.people,
         inflation_rate=sim_scenario.assumptions.inflation_rate,
         start_year=sim_scenario.start_year,
+        pct=payload.percentile if payload.percentile is not None else 50,
     )
     return SimulationResponse(**formatted)
 

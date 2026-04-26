@@ -86,7 +86,8 @@ function renderAllocationTab(props: Partial<React.ComponentProps<typeof Allocati
     setRiskThreshold: vi.fn(),
     bond_target_year: 2049,
     setBondTargetYear: vi.fn(),
-    bond_allocations: { isa: 0.3, gia: 0.2, pension: 0.4 },
+    bond_allocations: { ISA: 30, GIA: 20, PENSION: 40 },
+    percentile: 50,
     annual_spend_target: 30000,
     retirement_age_offset: 0,
     session_id: "test-session",
@@ -109,6 +110,17 @@ describe("AllocationTab", () => {
   it("renders the run bond sweep button", () => {
     renderAllocationTab();
     expect(screen.getByText("Run Bond Sweep")).toBeInTheDocument();
+  });
+
+  it("shows key figures for the current quick allocation projection", () => {
+    renderAllocationTab({ percentile: 25 });
+    expect(screen.getByText("Current allocation projection")).toBeInTheDocument();
+    expect(screen.getByText("Peak net worth")).toBeInTheDocument();
+    expect(screen.getByText("Final net worth")).toBeInTheDocument();
+    expect(screen.getByText("Bankruptcy risk")).toBeInTheDocument();
+    expect(screen.getByText(/selected P25 path/)).toBeInTheDocument();
+    expect(screen.getAllByText("£550k")).toHaveLength(2);
+    expect(screen.getByText("0.0%")).toBeInTheDocument();
   });
 
   it("shows loading state when bond sweep is running", () => {

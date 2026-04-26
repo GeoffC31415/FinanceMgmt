@@ -273,5 +273,7 @@ export type BondOverrideRequest = Omit<SimulationRequest, "scenario_id"> & {
   isa_bond_pct: number;
   gia_bond_pct: number;
   pension_bond_pct: number;
+  annual_spend_target?: number | null;
   retirement_age_offset?: number | null;
+  percentile?: number | null;
 };

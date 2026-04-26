@@ -170,13 +170,14 @@ export function useDashboardState(): UseDashboardStateReturn {
         isa_bond_pct: updatedAllocations.ISA,
         gia_bond_pct: updatedAllocations.GIA,
         pension_bond_pct: updatedAllocations.PENSION,
-        annual_spend_target: null,
-        retirement_age_offset: null,
+        annual_spend_target,
+        retirement_age_offset,
+        percentile,
       });
     } catch (e) {
       console.error("Failed to recalculate with new bond allocation:", e);
     }
-  }, [bond_allocations, simulation.session_id, simulation.fetch_bond_override]);
+  }, [bond_allocations, simulation.session_id, simulation.fetch_bond_override, annual_spend_target, retirement_age_offset, percentile]);
 
   // Save bond allocations handler
   const handleSaveBondAllocations = useCallback(async (allocations: Partial<BondAllocations>, assetTypes?: Array<keyof BondAllocations>) => {

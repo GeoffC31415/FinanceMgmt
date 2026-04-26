@@ -131,6 +131,7 @@ export function useSimulation() {
           pension_bond_pct: payload.pension_bond_pct,
           annual_spend_target: payload.annual_spend_target ?? null,
           retirement_age_offset: payload.retirement_age_offset ?? null,
+          percentile: payload.percentile ?? null,
         });
         setResult(res);
         return res;

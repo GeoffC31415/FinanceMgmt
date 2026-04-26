@@ -196,3 +196,4 @@ class BondOverrideRequest(BaseModel):
     pension_bond_pct: float = Field(default=0.0, ge=0.0, le=100.0, description="Pension bond allocation percentage (0-100)")
     annual_spend_target: float | None = Field(default=None, ge=0.0, description="New target annual retirement spend")
     retirement_age_offset: int | None = Field(default=0, ge=-30, le=30, description="Offset to apply to all planned retirement ages")
+    percentile: int | None = Field(default=50, ge=1, le=99, description="Percentile to use for representative iteration (1-99)")

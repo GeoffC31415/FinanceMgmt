@@ -457,6 +457,7 @@ export function Dashboard() {
                 bond_target_year={bond_target_year}
                 setBondTargetYear={setBondTargetYear}
                 bond_allocations={bond_allocations}
+                percentile={percentile}
                 annual_spend_target={annual_spend_target}
                 retirement_age_offset={retirement_age_offset}
                 session_id={session_id}

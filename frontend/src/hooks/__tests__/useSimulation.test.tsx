@@ -387,9 +387,21 @@ describe("useSimulation hook", () => {
           isa_bond_pct: 30,
           gia_bond_pct: 50,
           pension_bond_pct: 40,
+          annual_spend_target: 45_000,
+          retirement_age_offset: 2,
+          percentile: 10,
         });
       });
 
+      expect(bondOverrideMock).toHaveBeenCalledWith({
+        session_id: "sess-123",
+        isa_bond_pct: 30,
+        gia_bond_pct: 50,
+        pension_bond_pct: 40,
+        annual_spend_target: 45_000,
+        retirement_age_offset: 2,
+        percentile: 10,
+      });
       expect(result.current.result).toEqual(mockResponse);
       expect(result.current.is_loading).toBe(false);
     });

@@ -18,6 +18,7 @@ type Props = {
   bond_target_year: number | null;
   setBondTargetYear: (v: number | null) => void;
   bond_allocations: BondAllocations;
+  percentile: number;
   annual_spend_target: number;
   retirement_age_offset: number;
   session_id: string | null;
@@ -33,6 +34,13 @@ type Props = {
   isSaving: boolean;
   saveError: string | null;
 };
+
+function format_currency(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `£${(value / 1_000_000).toFixed(1)}m`;
+  if (abs >= 10_000) return `£${Math.round(value / 1_000).toLocaleString()}k`;
+  return `£${Math.round(value).toLocaleString()}`;
+}
 
 function format_duration(seconds: number): string {
   const total_seconds = Math.max(0, Math.round(seconds));
@@ -54,6 +62,7 @@ export function AllocationTab({
   bond_target_year,
   setBondTargetYear,
   bond_allocations,
+  percentile,
   annual_spend_target,
   retirement_age_offset,
   session_id,
@@ -69,6 +78,28 @@ export function AllocationTab({
     PENSION: { text: "text-yellow-400", bar: "#eab308" },
   };
   const cls_label: Record<string, string> = { ISA: "ISA", GIA: "GIA", PENSION: "Pension" };
+
+  const projection_metrics = (() => {
+    if (!display_result || display_result.years.length === 0) return null;
+    const net_worth = display_result.net_worth_median ?? [];
+    if (net_worth.length === 0) return null;
+
+    let peak_value = net_worth[0] ?? 0;
+    let peak_year = display_result.years[0];
+    for (let i = 1; i < net_worth.length; i++) {
+      if ((net_worth[i] ?? -Infinity) > peak_value) {
+        peak_value = net_worth[i];
+        peak_year = display_result.years[i] ?? peak_year;
+      }
+    }
+
+    const last_idx = display_result.years.length - 1;
+    const final_year = display_result.years[last_idx];
+    const final_net_worth = net_worth[last_idx] ?? 0;
+    const bankruptcy_risk = display_result.is_bankrupt_median?.[last_idx] ?? 0;
+
+    return { peak_value, peak_year, final_net_worth, final_year, bankruptcy_risk };
+  })();
 
   return (
     <div className="rounded border border-slate-800 bg-slate-900/30 p-4">
@@ -129,13 +160,48 @@ export function AllocationTab({
 
       {/* Bond Allocation Panel */}
       {display_result && (
-        <BondAllocationPanel
-          currentAllocations={bond_allocations}
-          onAllocationChange={onBondAllocationChange}
-          isSaving={isSaving}
-          saveError={saveError}
-          className="w-full"
-        />
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.75fr)]">
+          <BondAllocationPanel
+            currentAllocations={bond_allocations}
+            onAllocationChange={onBondAllocationChange}
+            isSaving={isSaving}
+            saveError={saveError}
+            className="w-full"
+          />
+
+          {projection_metrics && (
+            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-cyan-50">Current allocation projection</h3>
+                  <p className="mt-1 text-xs text-slate-300">
+                    Updates after each quick allocation recalculation. Values show the selected P{percentile} path.
+                  </p>
+                </div>
+                {isSaving && <span className="text-xs text-slate-400 animate-pulse">Saving...</span>}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3">
+                  <div className="text-xs text-slate-400">Peak net worth</div>
+                  <div className="mt-1 text-xl font-bold text-emerald-300">{format_currency(projection_metrics.peak_value)}</div>
+                  <div className="mt-1 text-xs text-slate-500">in {projection_metrics.peak_year}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3">
+                  <div className="text-xs text-slate-400">Final net worth</div>
+                  <div className="mt-1 text-xl font-bold text-cyan-100">{format_currency(projection_metrics.final_net_worth)}</div>
+                  <div className="mt-1 text-xs text-slate-500">in {projection_metrics.final_year}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3">
+                  <div className="text-xs text-slate-400">Bankruptcy risk</div>
+                  <div className={`mt-1 text-xl font-bold ${projection_metrics.bankruptcy_risk <= 5 ? "text-emerald-300" : projection_metrics.bankruptcy_risk <= 10 ? "text-amber-300" : "text-rose-300"}`}>
+                    {projection_metrics.bankruptcy_risk.toFixed(1)}%
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">by final year</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Progress bar */}
