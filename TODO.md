@@ -1,5 +1,7 @@
 # TODO — Tax Calculation Improvements and Extensions
 
+> **Purpose:** This root TODO is the tax-specific roadmap. General frontend UX/onboarding work lives in `frontend/TODO.md`; backend infrastructure/performance work lives in `backend/TODO.md`.
+>
 > Scope: UK tax modelling across backend simulation, API/schema, frontend configuration, reporting, and tests.
 >
 > Reviewed areas: `backend/simulation/tax/*`, `backend/simulation/engine_fast.py`, `backend/simulation/service.py`, `backend/schemas/*`, `backend/routers/config.py`, `frontend/src/components/config/*`, `frontend/src/types/index.ts`, and dashboard/chart tax outputs.
@@ -12,9 +14,22 @@
 
 ---
 
+## Current Repository Status Notes
+
+Recent repo changes that affect this roadmap:
+
+- Frontend UX/onboarding has moved forward: `/intro`, reusable `Button`/`Card`, starter/sample scenarios, and a refreshed app shell are implemented. Track remaining UX work in `frontend/TODO.md`.
+- Allocation projection now shows selected-percentile peak net worth, final net worth, and bankruptcy risk; bond override now preserves current extra spend, retirement-age offset, and percentile.
+- Risk Analysis safe-withdrawal no longer silently shows `---` on backend failure; frontend surfaces the error and backend `/safe-withdrawal` has the missing `numpy` import fixed.
+- Frontend tests: `npm test` passes with 250 tests across 22 files.
+- Frontend production build is still blocked by known TypeScript issues; see `frontend/TODO.md` item `4a`.
+- Backend tests were not run in this environment because `pytest` is unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`.
+
+---
+
 ## Current Tax Model Snapshot
 
-The repo currently models:
+Verified against current code on 2026-04-26. The repo currently models:
 
 - UK income tax bands with personal allowance tapering in `backend/simulation/tax/income_tax.py` and the JIT engine's internal `_calculate_income_tax()`.
 - Class 1 employee National Insurance with annual thresholds in `backend/simulation/tax/national_insurance.py` and the JIT engine.
@@ -24,11 +39,13 @@ The repo currently models:
 - Pension drawdown is modelled as 25% tax-free and 75% taxable.
 - GIA/property disposals use a simplified proportional cost-basis model with a single annual CGT allowance and flat CGT rate.
 - Tax year presets exist in `backend/simulation/tax/tax_config.py` and can be selected in `AssumptionsForm.tsx`.
+- Frontend copy now states that state pension is taxable and that private pension withdrawals are modelled as 25% tax-free / 75% taxable, subject to simplifications.
+- Frontend now warns about pension contributions with no matching pension asset and pension assets with no owner/default ownership.
 
 Important current limitations/gaps:
 
-- State pension is added to cash but is not directly taxed each year unless there is pension drawdown in the same year.
-- Pension drawdown tax is calculated against a household/eligible-pension aggregate instead of per individual.
+- State pension is added to cash but is not directly taxed each year unless there is pension drawdown in the same year. Frontend copy has been updated, but the backend correctness bug remains open under P0.1.
+- Pension drawdown tax is calculated against a household/eligible-pension aggregate instead of per individual. Frontend owner warnings have been added, but backend per-owner tax treatment remains open under P0.2.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
 - The simulation output does not separate CGT, pension drawdown tax, rental tax, state pension tax, and salary income tax.
 - Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`.

@@ -3,7 +3,7 @@
 > Prioritized list of improvements for the FinanceMgmt frontend.
 > This file is a living document — check it before starting work and update status as items are done.
 >
-> Last updated: 2026-04-26. Current frontend test suite: `npm test` passes with 249 tests across 22 files. `npm run build` is still blocked by known TypeScript issues (Recharts `isAnimationActive` props, field-array generic types, and a few test type mismatches).
+> Last updated: 2026-04-26. Current frontend test suite: `npm test` passes with 250 tests across 22 files. `npm run build` is still blocked by known TypeScript issues (Recharts `isAnimationActive` props, field-array generic types, and a few test type mismatches).
 
 ---
 
@@ -296,8 +296,9 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 - [x] Added ResizeObserver polyfill to test setup (fixes Recharts jsdom tests)
 - [x] New test files: ExpensesChart.test.tsx (19 tests), AllocationTab.test.tsx (16 tests)
 - [x] Total tests: 245 across 22 test files (+35 new)
-- [x] Current total after risk-analysis error handling: 249 tests across 22 test files
+- [x] Current total after risk-analysis error handling and allocation metrics: 250 tests across 22 test files
 - [x] Fixed Risk Analysis max-safe-spending display: frontend now tracks and displays safe-withdrawal calculation errors instead of silently showing `---`
+- [x] Added Allocation page current-projection metrics: selected-percentile peak net worth, final net worth, and bankruptcy risk
 
 ---
 
@@ -657,6 +658,8 @@ Median final net worth: £Z
 ---
 
 ### [ ] UX-12. Improve simulation controls
+
+**Status:** In progress — Allocation quick bond changes now preserve current extra spend, retirement-age offset, and percentile, and show key projection metrics beside the sliders.
 
 **Why:** The sticky control panel is functional but dense.
 
