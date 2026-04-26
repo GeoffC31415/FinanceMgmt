@@ -188,7 +188,11 @@ The fast engine uses **43 output fields** stored as `float64` arrays. Boolean me
 | **Pension** | Tax-free growth | 25% tax-free lump sum, 75% taxable |
 | **CASH** | No growth (in engine) | N/A (holding account) |
 
-### 5.2 Withdrawal Priority
+### 5.2 Retirement Discretionary Spending
+
+`annual_spend_target` / fun fund phases in by retired adult share in `engine_fast.py` (e.g. 1 of 2 adults retired means 50% of the configured amount is spent). The configured amount inflates annually.
+
+### 5.3 Withdrawal Priority
 
 Assets are withdrawn in priority order (higher = first):
 1. **Pension** (priority 100) — only after pension access age
@@ -197,7 +201,7 @@ Assets are withdrawn in priority order (higher = first):
 4. **Property** (priority 15) — net after mortgage repayment
 5. **Cash** (priority 0) — never withdrawn from
 
-### 5.3 UK Tax Year Presets
+### 5.4 UK Tax Year Presets
 
 Available: 2021/22, 2022/23, 2023/24, 2024/25, 2025/26
 
@@ -205,14 +209,14 @@ Each has:
 - Income tax: PA, basic/higher/additional rate limits & rates
 - NI: primary threshold, upper earnings limit, main/upper rates
 
-### 5.4 Return Models
+### 5.5 Return Models
 
 | Model | Description |
 |-------|-------------|
 | **parametric** | Normal distribution per asset class, per year |
 | **historical_bootstrap** | Stationary block bootstrap on aligned S&P 500 + US 10Y Treasury data |
 
-### 5.5 Simulation Session
+### 5.6 Simulation Session
 
 - `init` generates returns + scenario → cached in `_CACHE` dict
 - TTL: 30 minutes (monotonic clock)

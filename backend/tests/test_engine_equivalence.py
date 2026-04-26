@@ -310,6 +310,54 @@ class TestEngine:
         year_2045_idx = 2045 - 2038  # index 7
         assert np.all(salary[:, year_2045_idx] == 0.0), "Salary should be 0 after both retire"
 
+    def test_retirement_fun_spend_phases_in_by_retired_adult_share(self):
+        """If one of two adults is retired, half the configured fun fund is spent."""
+        retired_person = PersonEntity(
+            key="retired",
+            birth_date=date(1950, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=99,
+        )
+        working_age_person = PersonEntity(
+            key="worker",
+            birth_date=date(1990, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=99,
+        )
+        cash = AssetAccount(
+            name="Cash",
+            asset_type="CASH",
+            withdrawal_priority=0,
+            balance=100_000.0,
+            annual_contribution=0.0,
+            growth_rate_mean=0.0,
+            growth_rate_std=0.0,
+            contributions_end_at_retirement=False,
+            cost_basis=100_000.0,
+        )
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=[retired_person, working_age_person],
+            salary_by_person={},
+            pension_by_person={},
+            assets=[cash],
+            expenses=[],
+            annual_spend_target=20_000.0,
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=0.0,
+                emergency_fund_months=0.0,
+            ),
+        )
+
+        returns = generate_returns_matrix(scenario=scenario, iterations=1, seed=0)
+        result = run_simulation(scenario=scenario, returns=returns)
+
+        assert result.fields["fun_fund"][0, 0] == pytest.approx(10_000.0)
+        assert result.fields["total_expenses"][0, 0] == pytest.approx(10_000.0)
+        assert result.fields["cash_balance"][0, 0] == pytest.approx(90_000.0)
+
     def test_deterministic_with_same_returns(self):
         """Test that the engine is deterministic with the same cached returns."""
         scenario = _make_simple_scenario()

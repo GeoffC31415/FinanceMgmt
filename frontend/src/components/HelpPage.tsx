@@ -114,8 +114,8 @@ export function HelpPage() {
         <div className="text-sm font-semibold">Retirement discretionary spending</div>
         <p className="text-sm text-slate-300">
           The <span className="font-mono">annual_spend_target</span> is an{" "}
-          <span className="font-semibold">extra discretionary expense</span> added on top of your configured expenses
-          once everyone in the household is retired. Think of it as "fun money" for travel, hobbies, etc.
+          <span className="font-semibold">extra discretionary expense</span> added on top of your configured expenses.
+          It phases in as adults retire: if one of two adults is retired, 50% of this amount is spent; once all adults are retired, 100% is spent. Think of it as "fun money" for travel, hobbies, etc.
           Set it to 0 if you only want to use your configured expenses.
         </p>
       </div>
@@ -126,6 +126,10 @@ export function HelpPage() {
           <li>UK tax is simplified: salary uses income tax + NI; state pension and pension drawdown use income tax; GIA uses a simplified CGT model.</li>
           <li>Private pension withdrawals are modelled as 25% tax-free and 75% taxable income. Lifetime PCLS / Lump Sum Allowance limits are not modelled yet.</li>
           <li>Real-world details like dividend tax, full CGT rules, regional income tax differences, etc. are not modelled.</li>
+          <li>Surplus cash above the emergency fund is automatically invested (ISA first, then GIA). If configured current expenses omit discretionary lifestyle spending, projections can look optimistic because that unspent income is assumed to be saved.</li>
+          <li>Investment/platform/advice fees are not deducted from returns yet.</li>
+          <li>Historical bootstrap returns use nominal S&amp;P 500 and US Treasury data; future returns could be materially lower than historical averages.</li>
+          <li>The dashboard's selected-percentile series is a coherent representative path chosen by final net worth, not a separate year-by-year median for every field.</li>
         </ul>
       </div>
     </div>

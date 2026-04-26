@@ -561,17 +561,23 @@ def _simulate_all_iterations(
                 out[it, y_idx, F_PROPERTY_VALUE] = property_value_total
                 continue
 
-            # Check retirement status for each adult person (skip children)
+            # Check retirement status for each adult person (skip children).
+            # Extra retirement spending is phased in by adult retirement ratio:
+            # if 1 of 2 adults is retired, 50% of the configured fun fund is spent.
             is_all_retired = True
             has_adults = False
+            adult_count = 0
+            retired_adult_count = 0
             for p in range(n_people):
                 if people_is_child[p] == 1:
                     continue
                 has_adults = True
+                adult_count += 1
                 age = year - people_birth_years[p]
-                if age < people_retirement_ages[p]:
+                if age >= people_retirement_ages[p]:
+                    retired_adult_count += 1
+                else:
                     is_all_retired = False
-                    break
             if not has_adults:
                 is_all_retired = False
 
@@ -755,8 +761,9 @@ def _simulate_all_iterations(
                     # Apply inflation to child costs
                     it_child_costs[p] *= (1.0 + inflation_rate)
 
-            # Extra retirement spending
-            extra_retirement_spend = it_annual_spend if is_all_retired else 0.0
+            # Extra retirement spending phases in as each adult retires.
+            retired_ratio = retired_adult_count / adult_count if adult_count > 0 else 0.0
+            extra_retirement_spend = it_annual_spend * retired_ratio
             total_outflows = expense_total + mortgage_payment + property_maintenance_total + extra_retirement_spend
             # Inflate annual spend for next year (after use)
             it_annual_spend *= (1.0 + inflation_rate)

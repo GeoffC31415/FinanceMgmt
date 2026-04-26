@@ -1347,7 +1347,7 @@ export function ConfigWizard() {
                 </div>
                 
                 <div className="rounded border border-slate-700/50 bg-slate-800/20 p-3">
-                  <Label tooltip="Extra spending added on top of your configured expenses each year once everyone is retired. Grows with inflation. This is the same value as the 'Extra spend (retired)' slider on the dashboard.">Extra Retirement Spending (£)</Label>
+                  <Label tooltip="Extra spending added on top of your configured expenses. It phases in by retired adult share (one of two adults retired = 50%) and grows with inflation. This is the same value as the 'Extra spend (retired)' slider on the dashboard.">Extra Retirement Spending (£)</Label>
                   <input
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                     value={String(draft.assumptions.annual_spend_target ?? "")}
