@@ -411,6 +411,7 @@ class ResponseFormatter:
             "fun_fund_median": _from_iter("fun_fund"),
             # Tax
             "income_tax_paid_median": _from_iter("income_tax_paid"),
+            "state_pension_tax_paid_median": _from_iter("state_pension_tax_paid"),
             "ni_paid_median": _from_iter("ni_paid"),
             "total_tax_median": _from_iter("total_tax"),
             # Assets

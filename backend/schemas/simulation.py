@@ -21,7 +21,7 @@ class YearlySeriesPoint(BaseModel):
 
 
 class SimulationResponse(BaseModel):
-    """Monte Carlo simulation results with percentile bands and median values for all 42 output fields."""
+    """Monte Carlo simulation results with percentile bands and median values for all engine output fields."""
     years: list[int] = Field(description="Simulation years (e.g., [2024, 2025, ..., 2064])")
     net_worth_p10: list[float] = Field(description="10th percentile net worth per year")
     net_worth_median: list[float] = Field(description="Median net worth per year")
@@ -52,7 +52,8 @@ class SimulationResponse(BaseModel):
     fun_fund_median: list[float] = Field(description="Median extra retirement spend (fun fund) per year")
     
     # Tax
-    income_tax_paid_median: list[float] = Field(description="Median income tax paid per year")
+    income_tax_paid_median: list[float] = Field(description="Median income tax paid per year, including CGT in legacy aggregate")
+    state_pension_tax_paid_median: list[float] = Field(description="Median income tax attributable to taxable state pension per year")
     ni_paid_median: list[float] = Field(description="Median National Insurance paid per year")
     total_tax_median: list[float] = Field(description="Median total tax paid per year")
     

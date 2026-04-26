@@ -67,8 +67,9 @@ F_PROPERTY_VALUE = 38
 F_PROPERTY_RENTAL_INCOME = 39
 F_PROPERTY_MAINTENANCE = 40
 F_PROPERTY_RETURNS = 41
+F_STATE_PENSION_TAX_PAID = 42
 
-N_FIELDS = 42
+N_FIELDS = 43
 
 # Asset type codes
 ASSET_CASH = 0
@@ -236,6 +237,7 @@ def _run_monte_carlo_fast(
         "isa_withdrawals", "gia_withdrawals", "pension_withdrawals",
         "gia_balance",
         "property_value", "property_rental_income", "property_maintenance", "property_returns",
+        "state_pension_tax_paid",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -579,6 +581,7 @@ def _simulate_all_iterations(
             per_person_employee_pension = np.zeros(n_people, dtype=np.float64)
             per_person_employer_pension = np.zeros(n_people, dtype=np.float64)
             per_person_rental = np.zeros(n_people, dtype=np.float64)
+            per_person_state_pension = np.zeros(n_people, dtype=np.float64)
 
             salary_gross_total = 0.0
             employee_pension_total = 0.0
@@ -649,6 +652,19 @@ def _simulate_all_iterations(
 
             rental_income_gross += property_rental_gross
 
+            # State pension is taxable income, assessed per person.  For output/cashflow
+            # we keep the gross state pension income separately, then subtract the
+            # marginal tax attributable to it after salary and rental income.
+            state_pension_income = 0.0
+            for p in range(n_people):
+                if people_is_child[p] == 1:
+                    continue
+                age = year - people_birth_years[p]
+                if age >= people_state_pension_ages[p]:
+                    per_person_state_pension[p] += it_state_pension
+                    state_pension_income += it_state_pension
+            it_state_pension *= (1.0 + inflation_rate)
+
             # Process gift income (tax-free, no per-person tax needed)
             gift_income_total = 0.0
             for g in range(n_gifts):
@@ -663,12 +679,14 @@ def _simulate_all_iterations(
             income_tax = 0.0
             ni_paid = 0.0
             rental_income_tax = 0.0
+            state_pension_tax = 0.0
             for p in range(n_people):
                 if people_is_child[p] == 1:
                     continue
                 p_salary = per_person_salary[p]
                 p_emp_pension = per_person_employee_pension[p]
                 p_rental = per_person_rental[p]
+                p_state_pension = per_person_state_pension[p]
 
                 # Income tax on salary (net of pension contributions)
                 p_taxable_salary = max(0.0, p_salary - p_emp_pension)
@@ -681,20 +699,32 @@ def _simulate_all_iterations(
                     p_salary, ni_primary_threshold, ni_upper_earnings_limit,
                     ni_main_rate, ni_upper_rate,
                 )
-                # Marginal income tax on rental income (no NI)
+                # Marginal income tax on rental income (no NI). Tax ordering is:
+                # salary after employee pension contributions, then rental/property
+                # income, then state pension, then private pension drawdown.
+                tax_without_rental = _calculate_income_tax(
+                    p_taxable_salary, personal_allowance, basic_rate_limit,
+                    higher_rate_limit, basic_rate, higher_rate, additional_rate,
+                )
+                tax_with_rental = tax_without_rental
                 if p_rental > 0.0:
                     tax_with_rental = _calculate_income_tax(
                         p_taxable_salary + p_rental, personal_allowance, basic_rate_limit,
                         higher_rate_limit, basic_rate, higher_rate, additional_rate,
                     )
-                    tax_without_rental = _calculate_income_tax(
-                        p_taxable_salary, personal_allowance, basic_rate_limit,
+                    rental_income_tax += tax_with_rental - tax_without_rental
+
+                # Marginal income tax on state pension (no NI), per recipient.
+                if p_state_pension > 0.0:
+                    tax_with_state_pension = _calculate_income_tax(
+                        p_taxable_salary + p_rental + p_state_pension, personal_allowance, basic_rate_limit,
                         higher_rate_limit, basic_rate, higher_rate, additional_rate,
                     )
-                    rental_income_tax += tax_with_rental - tax_without_rental
+                    state_pension_tax += tax_with_state_pension - tax_with_rental
 
             salary_net = salary_gross_total - income_tax - ni_paid - employee_pension_total
             rental_income_net = rental_income_gross - rental_income_tax
+            state_pension_income_net = state_pension_income - state_pension_tax
 
             # Mortgage payment
             mortgage_payment = 0.0
@@ -725,14 +755,6 @@ def _simulate_all_iterations(
                     # Apply inflation to child costs
                     it_child_costs[p] *= (1.0 + inflation_rate)
 
-            # State pension
-            state_pension_income = 0.0
-            for p in range(n_people):
-                age = year - people_birth_years[p]
-                if age >= people_state_pension_ages[p]:
-                    state_pension_income += it_state_pension
-            it_state_pension *= (1.0 + inflation_rate)
-
             # Extra retirement spending
             extra_retirement_spend = it_annual_spend if is_all_retired else 0.0
             total_outflows = expense_total + mortgage_payment + property_maintenance_total + extra_retirement_spend
@@ -745,7 +767,7 @@ def _simulate_all_iterations(
 
             # Add income to cash
             if cash_idx >= 0:
-                it_asset_balances[cash_idx] += salary_net + rental_income_net + gift_income_total + state_pension_income
+                it_asset_balances[cash_idx] += salary_net + rental_income_net + gift_income_total + state_pension_income_net
                 it_asset_balances[cash_idx] -= total_outflows
 
             pension_income_net = 0.0
@@ -780,13 +802,15 @@ def _simulate_all_iterations(
                                     eligible_pension_balance += it_pension_balances[pen_idx]
 
                         if eligible_pension_balance > 0:
-                            # Compute other taxable income for eligible pension holders
-                            other_taxable = state_pension_income
+                            # Compute other taxable income for eligible pension holders.
+                            # TODO(P0.2): split this by pension owner instead of aggregating.
+                            other_taxable = 0.0
                             for pen_idx in range(n_pensions):
                                 pp = pension_person_idx[pen_idx]
                                 if pp >= 0 and (year - people_birth_years[pp]) >= pension_access_age:
                                     other_taxable += max(0.0, per_person_salary[pp] - per_person_employee_pension[pp])
                                     other_taxable += per_person_rental[pp]
+                                    other_taxable += per_person_state_pension[pp]
 
                             gross, tax, net = _calculate_pension_drawdown(
                                 shortfall, other_taxable, eligible_pension_balance,
@@ -899,13 +923,16 @@ def _simulate_all_iterations(
                                     eligible_pension_balance += it_pension_balances[pen_idx]
                             
                         if eligible_pension_balance > 0:
-                            # Compute other taxable income for eligible pension holders
-                            debt_other_taxable = state_pension_income + pension_income_net
+                            # Compute other taxable income for eligible pension holders.
+                            # TODO(P0.2): split this by pension owner and track taxable pension
+                            # drawdown separately instead of using net drawdown here.
+                            debt_other_taxable = pension_income_net
                             for pen_idx in range(n_pensions):
                                 pp = pension_person_idx[pen_idx]
                                 if pp >= 0 and (year - people_birth_years[pp]) >= pension_access_age:
                                     debt_other_taxable += max(0.0, per_person_salary[pp] - per_person_employee_pension[pp])
                                     debt_other_taxable += per_person_rental[pp]
+                                    debt_other_taxable += per_person_state_pension[pp]
                             gross, tax, net = _calculate_pension_drawdown(
                                 debt_to_repay, debt_other_taxable, eligible_pension_balance,
                                 personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate,
@@ -1102,8 +1129,8 @@ def _simulate_all_iterations(
             if net_worth < bankruptcy_threshold:
                 it_is_bankrupt = True
 
-            total_income = salary_net + rental_income_net + gift_income_total + pension_income_net + state_pension_income
-            total_tax = income_tax + rental_income_tax + pension_income_tax + cgt_paid + ni_paid
+            total_income = salary_net + rental_income_net + gift_income_total + pension_income_net + state_pension_income_net
+            total_tax = income_tax + rental_income_tax + state_pension_tax + pension_income_tax + cgt_paid + ni_paid
 
             # Store results
             out[it, y_idx, F_NET_WORTH] = net_worth
@@ -1119,7 +1146,7 @@ def _simulate_all_iterations(
             out[it, y_idx, F_MORTGAGE_PAYMENT] = mortgage_payment
             out[it, y_idx, F_PENSION_CONTRIBUTIONS] = employee_pension_total + employer_pension_total
             out[it, y_idx, F_FUN_FUND] = extra_retirement_spend
-            out[it, y_idx, F_INCOME_TAX_PAID] = income_tax + rental_income_tax + pension_income_tax + cgt_paid
+            out[it, y_idx, F_INCOME_TAX_PAID] = income_tax + rental_income_tax + state_pension_tax + pension_income_tax + cgt_paid
             out[it, y_idx, F_NI_PAID] = ni_paid
             out[it, y_idx, F_TOTAL_TAX] = total_tax
             out[it, y_idx, F_ISA_BALANCE] = isa_balance
@@ -1153,6 +1180,7 @@ def _simulate_all_iterations(
             out[it, y_idx, F_PROPERTY_RENTAL_INCOME] = property_rental_gross
             out[it, y_idx, F_PROPERTY_MAINTENANCE] = property_maintenance_total
             out[it, y_idx, F_PROPERTY_RETURNS] = property_investment_return
+            out[it, y_idx, F_STATE_PENSION_TAX_PAID] = state_pension_tax
 
     return out
 

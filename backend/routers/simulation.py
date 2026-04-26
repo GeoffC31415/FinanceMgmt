@@ -349,7 +349,7 @@ def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
     return SimulationResponse(**formatted)
 
 
-# Column headers for CSV export in the same order as the 42 engine fields
+# Column headers for CSV export in the same order as the engine fields
 _CSV_COLUMNS = [
     "net_worth", "salary_gross", "salary_net", "rental_income", "gift_income",
     "pension_income", "state_pension_income", "investment_returns", "total_income",
@@ -362,10 +362,11 @@ _CSV_COLUMNS = [
     "pension_contributions_total", "isa_withdrawals", "gia_withdrawals",
     "pension_withdrawals", "gia_balance", "property_value",
     "property_rental_income", "property_maintenance", "property_returns",
+    "state_pension_tax_paid",
 ]
 
 
-@router.get("/export", summary="Export simulation results", description="Export simulation results as CSV or JSON. Supports all 42 output fields. Use ?compress=true for gzip compression.")
+@router.get("/export", summary="Export simulation results", description="Export simulation results as CSV or JSON. Supports all engine output fields. Use ?compress=true for gzip compression.")
 async def export_simulation(
     session_id: str,
     format: str = Query(default="csv", pattern="^(csv|json)$"),
