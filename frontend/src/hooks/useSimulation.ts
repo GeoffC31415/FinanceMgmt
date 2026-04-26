@@ -8,7 +8,6 @@ import type {
   SimulationInitRequest,
   SimulationInitResponse,
   SimulationRecalcRequest,
-  SimulationRequest,
   SimulationResponse
 } from "../types";
 import {
@@ -17,7 +16,6 @@ import {
   bond_sweep_progress,
   init_simulation,
   recalc_simulation,
-  run_simulation,
   safe_withdrawal
 } from "../api/client";
 
@@ -43,21 +41,6 @@ export function useSimulation() {
   const sweep_poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
   const sweep_started_at_ms_ref = useRef<number | null>(null);
   const sweep_cancelled_ref = useRef(false);
-
-  const run = useCallback(async (payload: SimulationRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await run_simulation(payload);
-      setResult(res);
-      return res;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Simulation failed");
-      throw e;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
 
   const init = useCallback(async (payload: SimulationInitRequest): Promise<SimulationInitResponse> => {
     setIsLoading(true);
@@ -225,7 +208,6 @@ export function useSimulation() {
     session_id,
     is_loading,
     error,
-    run,
     init,
     recalc,
     safe_withdrawal_result,

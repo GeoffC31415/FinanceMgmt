@@ -28,7 +28,17 @@ frontend/
 │   │   ├── client.ts           # HTTP client + typed endpoint functions
 │   │   └── exportExcel.ts      # Excel export (lazy-loaded)
 │   ├── components/
-│   │   ├── Dashboard.tsx       # Main simulation dashboard (1,180 lines)
+│   │   ├── Dashboard.tsx       # Main simulation dashboard (459 lines, refactored)
+│   │   ├── Dashboard/          # Refactored Dashboard units
+│   │   │   ├── useDashboardState.ts
+│   │   │   ├── useDashboardData.ts
+│   │   │   ├── utils.ts
+│   │   │   ├── OverviewTab.tsx
+│   │   │   ├── IncomeSpendingTab.tsx
+│   │   │   ├── AssetsTab.tsx
+│   │   │   ├── RiskTab.tsx
+│   │   │   ├── AllocationTab.tsx
+│   │   │   └── index.ts
 │   │   ├── ComparisonDashboard.tsx  # Scenario comparison view
 │   │   ├── OverviewInsights.tsx    # Auto-generated insights
 │   │   ├── RiskSummaryPanel.tsx    # Risk analysis panel
@@ -44,8 +54,17 @@ frontend/
 │   │   │   └── BondSweepChart.tsx
 │   │   └── config/
 │   │       ├── ScenarioConfigPage.tsx  # Scenario CRUD page
-│   │       ├── ScenarioForm.tsx        # Full scenario editor (1,840 lines)
-│   │       └── ConfigWizard.tsx        # Step-by-step scenario builder
+│   │       ├── ScenarioForm.tsx        # Full scenario editor (753 lines, refactored)
+│   │       ├── ScenarioFormContext.tsx # Context provider for form state
+│   │       ├── formSchema.ts           # Zod validation schema (87 lines)
+│   │       ├── inputs.tsx             # Shared input components (213 lines)
+│   │       ├── formConverters.ts      # Form value converters (231 lines)
+│   │       ├── PropertiesForm.tsx     # Properties tab (367 lines)
+│   │       ├── PeopleForm.tsx         # People tab (163 lines)
+│   │       ├── IncomeForm.tsx         # Income tab (135 lines)
+│   │       ├── AssetsForm.tsx         # Assets tab (202 lines)
+│   │       ├── ExpensesForm.tsx       # Expenses tab (97 lines)
+│   │       └── ConfigWizard.tsx       # Step-by-step scenario builder (1,569 lines)
 │   ├── hooks/
 │   │   ├── useScenario.ts      # Scenario CRUD hooks
 │   │   └── useSimulation.ts    # Simulation session + bond sweep hooks
@@ -54,7 +73,7 @@ frontend/
 │   ├── utils/
 │   │   └── chartFormatters.ts  # Currency tick formatting
 │   ├── test/
-│   │   ├── Dashboard.test.tsx  # Only test file (5 assertions)
+│   │   ├── Dashboard.test.tsx  # Dashboard rendering (5 assertions)
 │   │   └── setup.ts
 │   ├── App.tsx                 # Router + navigation
 │   ├── main.tsx                # Entry point
@@ -239,8 +258,14 @@ The app uses **custom React hooks** with local state — no global state library
 
 ## 7. Key Components
 
-### Dashboard (`Dashboard.tsx`) — 1,180 lines
-The main simulation view with 5 tabs:
+### Dashboard (`Dashboard.tsx`) — 459 lines (was 1,180)
+Refactored into smaller units in `Dashboard/` directory:
+- `useDashboardState.ts` — all useState/useEffect logic
+- `useDashboardData.ts` — inflation adjustment, derived metrics
+- `utils.ts` — `getScenarioBondAllocations`, `format_currency_compact`
+- `OverviewTab.tsx` (153 lines), `IncomeSpendingTab.tsx` (50 lines), `AssetsTab.tsx` (73 lines), `RiskTab.tsx` (72 lines), `AllocationTab.tsx` (245 lines)
+
+Main simulation view with 5 tabs:
 1. **Overview** — metric cards, auto-generated insights, net worth chart
 2. **Income & Spending** — income chart, expenses/outgoings chart
 3. **Assets** — asset classes chart, detailed asset breakdown with bond allocation controls
@@ -257,7 +282,18 @@ The main simulation view with 5 tabs:
 - Merges year data across scenarios for overlay charts
 - Shows summary metrics table with color-coded risk
 
-### ScenarioForm (`ScenarioForm.tsx`) — 1,840 lines
+### ScenarioForm (`ScenarioForm.tsx`) — 753 lines (was 1,840)
+Tabbed form with Zod validation (schema in `formSchema.ts`). Refactored into:
+- `formSchema.ts` — Zod validation (87 lines, 7 tests)
+- `inputs.tsx` — shared input components (213 lines, 12 tests)
+- `formConverters.ts` — form value converters (231 lines, 18 tests)
+- `ScenarioFormContext.tsx` — context + provider + `useScenarioForm()` hook
+- `PropertiesForm.tsx` — 367 lines, 5 tests
+- `PeopleForm.tsx` — 163 lines, 12 tests
+- `IncomeForm.tsx` — 135 lines, 11 tests
+- `AssetsForm.tsx` — 202 lines, 12 tests
+- `ExpensesForm.tsx` — 97 lines, 10 tests
+
 Tabbed form with Zod validation:
 - **Assumptions** — tax year selector, return model, inflation, limits
 - **People** — adults + children with retirement/cost fields
@@ -268,7 +304,7 @@ Tabbed form with Zod validation:
 - **Housing** — display only
 - **Sell Order** — withdrawal order visualization
 
-### ConfigWizard (`ConfigWizard.tsx`) — 1,569 lines
+### ConfigWizard (`ConfigWizard.tsx`) — 1,569 lines (not yet refactored)
 8-step wizard: Start → People → Income → Assets → Property → Expenses → Assumptions → Summary
 - Auto-saves after each step
 - Progress bar with percentage
@@ -350,29 +386,33 @@ Used via `useFieldArray` from react-hook-form:
 
 ## 10. Known Issues & Technical Debt
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| `run_simulation` exported but never called | `useSimulation.ts` | Dead code |
-| `Assumptions` type is `Record<string, unknown>` | `types/index.ts` | No type safety for assumptions |
-| 6 `as any` casts across config components | `ScenarioConfigPage`, `ScenarioForm`, `ConfigWizard` | Type safety loss |
-| Fixed `w-[70%] min-w-[800px]` layout | `App.tsx` | Not responsive |
-| No retry on API failures | `api/client.ts` | Fragile UX |
-| Bond sweep polling race condition | `useSimulation.ts` | Stale ETA |
-| Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | Inconsistent rendering |
-| Only 5 test assertions | `Dashboard.test.tsx` | Low confidence |
-| `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | Hard to maintain |
-| `Dashboard.tsx` is 1,180 lines | `components/Dashboard.tsx` | Hard to maintain |
-| No `.env.example` | root | Developer onboarding gap |
+| Issue | Location | Status | Impact |
+|-------|----------|--------|--------|
+| `run_simulation` exported but never called | `useSimulation.ts` | Open | Dead code |
+| `Assumptions` type is `Record<string, unknown>` | `types/index.ts` | Fixed | No type safety for assumptions |
+| `as any` casts across config components | `ConfigWizard` (1 remaining) | Open | Type safety loss |
+| Fixed `w-[70%] min-w-[800px]` layout | `App.tsx` | Open | Not responsive |
+| No retry on API failures | `api/client.ts` | Open | Fragile UX |
+| Bond sweep polling race condition | `useSimulation.ts` | Fixed | Stale ETA |
+| Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | Open | Inconsistent rendering |
+| Only 5 test assertions | `Dashboard.test.tsx` | Open | Low confidence |
+| `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | **Partially fixed** (753 lines) | Hard to maintain |
+| `Dashboard.tsx` is 1,180 lines | `components/Dashboard.tsx` | **Fixed** (459 lines) | Hard to maintain |
+| No `.env.example` | root | Open | Developer onboarding gap |
 
 ---
 
-## 11. File Size Reference
+## 11. File Size Reference (Updated)
 
 | File | Lines | Size |
 |------|-------|------|
-| `ScenarioForm.tsx` | 1,840 | ~50KB |
-| `Dashboard.tsx` | 1,180 | ~50KB |
+| `ScenarioForm.tsx` | 753 | ~23KB (was 1,840) |
+| `Dashboard.tsx` | 459 | ~15KB (was 1,180) |
 | `ConfigWizard.tsx` | 1,569 | ~50KB (truncated) |
+| `PropertiesForm.tsx` | 367 | ~10KB |
+| `AssetsForm.tsx` | 202 | ~5KB |
+| `inputs.tsx` | 213 | ~5KB |
+| `formConverters.ts` | 231 | ~5KB |
 | `BondSweepChart.tsx` | ~200 | |
 | `AssetDetailChart.tsx` | ~250 | |
 | `ScenarioConfigPage.tsx` | ~350 | |
@@ -380,7 +420,7 @@ Used via `useFieldArray` from react-hook-form:
 | `useSimulation.ts` | ~180 | |
 | `types/index.ts` | ~200 | |
 | `exportExcel.ts` | ~250 | |
-| **Total source** | **~6,000+** | |
+| **Total source** | **~5,500+** | |
 
 ---
 
@@ -400,6 +440,36 @@ npm run test:watch    # Vitest watch mode
 ./start_backend.sh    # Linux/Mac
 start_backend.bat     # Windows
 ```
+
+---
+
+## 12. Recent Changes
+
+### ScenarioForm Refactoring (2026-04-26)
+**Goal:** Reduce `ScenarioForm.tsx` from 1,840 → ~500 lines by extracting each tab into its own component.
+
+**Completed:**
+| Phase | File | Lines | Tests | Status |
+|-------|------|-------|-------|--------|
+| Schema | `formSchema.ts` | 87 | 7 | ✅ Done |
+| Phase 1a | `inputs.tsx` | 213 | 12 | ✅ Done |
+| Phase 1b | `formConverters.ts` | 231 | 18 | ✅ Done |
+| Phase 2a | `PropertiesForm.tsx` | 367 | 5 | ✅ Done + wired |
+| Phase 2b | `PeopleForm.tsx` | 163 | 12 | ✅ Done + wired |
+| Phase 2c | `IncomeForm.tsx` | 135 | 11 | ✅ Done + wired |
+| Phase 2d | `AssetsForm.tsx` | 202 | 12 | ✅ Done + wired |
+| Phase 2e | `ExpensesForm.tsx` | 97 | 10 | ✅ Done + wired |
+| Phase 3a | `ScenarioFormContext.tsx` | 97 | — | ✅ Done |
+| Phase 3c | `ScenarioFormIntegration.test.tsx` | — | 18 | ✅ Done |
+| **Remaining** | Assumptions, Sell Order, Housing tabs | ~223 | — | ⏳ Not started |
+
+**Total reduction:** 1,840 → 753 lines (-1,087, 59%)
+**Total tests added:** 119 tests across 13 test files
+
+**Remaining work:**
+1. Extract Assumptions, Sell Order, and Housing tabs into separate components
+2. Wire all tabs to use `ScenarioFormContext` (eliminate prop drilling)
+3. Expand test coverage for remaining components
 
 ---
 

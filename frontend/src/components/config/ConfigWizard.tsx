@@ -295,8 +295,7 @@ export function ConfigWizard() {
                 setError(null);
                 try {
                   // Create the DB row first (basic entry). This returns an id.
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: {} as any, people: [], incomes: [], assets: [], properties: [], expenses: [] });
+                  const created: ScenarioRead = await create_scenario({ name: draft.name, assumptions: { inflation_rate: 0.02, isa_annual_limit: 20000, state_pension_annual: 11500, pension_access_age: 55, start_year: new Date().getFullYear(), end_year: new Date().getFullYear() + 60, annual_spend_target: 30000, debt_interest_rate: 0.08, bankruptcy_threshold: -100000, return_model: "parametric" }, people: [], incomes: [], assets: [], properties: [], expenses: [] });
                   setScenarioId(created.id);
 
                   // Immediately persist the full draft so step 1 starts from sensible defaults.
