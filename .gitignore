@@ -2,6 +2,8 @@
 **/__pycache__/
 frontend/node_modules
 finances.db
+finances.db.bak
+.session_cache/
 frontend/.vite
 frontend/dist
 frontend/tsconfig.tsbuildinfo
