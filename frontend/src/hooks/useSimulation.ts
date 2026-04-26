@@ -28,6 +28,7 @@ export function useSimulation() {
   // Safe withdrawal state
   const [safe_withdrawal_result, setSafeWithdrawalResult] = useState<SafeWithdrawalResponse | null>(null);
   const [is_loading_safe_withdrawal, setIsLoadingSafeWithdrawal] = useState(false);
+  const [safe_withdrawal_error, setSafeWithdrawalError] = useState<string | null>(null);
 
   // Bond sweep state
   const [bond_sweep_result, setBondSweepResult] = useState<BondSweepResponse | null>(null);
@@ -45,6 +46,8 @@ export function useSimulation() {
   const init = useCallback(async (payload: SimulationInitRequest): Promise<SimulationInitResponse> => {
     setIsLoading(true);
     setError(null);
+    setSafeWithdrawalResult(null);
+    setSafeWithdrawalError(null);
     try {
       const res = await init_simulation(payload);
       setSessionId(res.session_id);
@@ -90,6 +93,7 @@ export function useSimulation() {
       if (!effective_session_id) throw new Error("No simulation session. Initialize first.");
 
       setIsLoadingSafeWithdrawal(true);
+      setSafeWithdrawalError(null);
       try {
         const res = await safe_withdrawal({
           session_id: effective_session_id,
@@ -101,6 +105,8 @@ export function useSimulation() {
         setSafeWithdrawalResult(res);
         return res;
       } catch (e) {
+        const message = e instanceof Error ? e.message : "Safe withdrawal calculation failed";
+        setSafeWithdrawalError(message);
         console.error("Safe withdrawal calculation failed:", e);
         throw e;
       } finally {
@@ -212,6 +218,7 @@ export function useSimulation() {
     recalc,
     safe_withdrawal_result,
     is_loading_safe_withdrawal,
+    safe_withdrawal_error,
     fetch_safe_withdrawal,
     bond_sweep_result,
     is_loading_bond_sweep,

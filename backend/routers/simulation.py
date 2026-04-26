@@ -14,6 +14,7 @@ import logging
 import zlib
 from datetime import date
 
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 

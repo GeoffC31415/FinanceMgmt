@@ -311,7 +311,42 @@ describe("useSimulation hook", () => {
 
       expect(result.current.safe_withdrawal_result).not.toBeNull();
       expect(result.current.safe_withdrawal_result!.max_safe_fun_fund).toBe(25_000);
+      expect(result.current.safe_withdrawal_error).toBeNull();
       expect(result.current.is_loading_safe_withdrawal).toBe(false);
+    });
+
+    it("sets safe_withdrawal_error on failure", async () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const mockResponse = makeMockResponse();
+      const initMock = vi.mocked(apiClient.init_simulation);
+      initMock.mockResolvedValue({
+        ...mockResponse,
+        session_id: "sess-123",
+      });
+
+      const safeWithdrawalMock = vi.mocked(apiClient.safe_withdrawal);
+      safeWithdrawalMock.mockRejectedValue(new Error("HTTP 500: missing numpy import"));
+
+      const { result } = renderHook(() => useSimulation());
+
+      await act(async () => {
+        await result.current.init({ scenario_id: "s1" } as any);
+      });
+
+      await act(async () => {
+        await expect(
+          result.current.fetch_safe_withdrawal({
+            retirement_age_offset: 0,
+            risk_threshold: 5,
+            max_spend: 30_000,
+            steps: 10,
+          })
+        ).rejects.toThrow("missing numpy import");
+      });
+
+      expect(result.current.safe_withdrawal_error).toContain("missing numpy import");
+      expect(result.current.is_loading_safe_withdrawal).toBe(false);
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -512,7 +547,7 @@ describe("useSimulation hook", () => {
       const expectedKeys = [
         "result", "session_id", "is_loading", "error",
         "init", "recalc",
-        "safe_withdrawal_result", "is_loading_safe_withdrawal", "fetch_safe_withdrawal",
+        "safe_withdrawal_result", "is_loading_safe_withdrawal", "safe_withdrawal_error", "fetch_safe_withdrawal",
         "bond_sweep_result", "is_loading_bond_sweep", "sweep_progress", "fetch_bond_sweep",
         "fetch_bond_override",
       ];

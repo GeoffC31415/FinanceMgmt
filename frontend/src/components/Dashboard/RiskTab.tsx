@@ -7,6 +7,7 @@ type Props = {
   display_result: SimulationResponse | null;
   safe_withdrawal_result: SafeWithdrawalResponse | null;
   is_loading_safe_withdrawal: boolean;
+  safe_withdrawal_error: string | null;
   annual_spend_target: number;
   final_bankruptcy_pct: number;
   final_depletion_pct: number;
@@ -20,6 +21,7 @@ export function RiskTab({
   display_result,
   safe_withdrawal_result,
   is_loading_safe_withdrawal,
+  safe_withdrawal_error,
   annual_spend_target,
   final_bankruptcy_pct,
   final_depletion_pct,
@@ -33,6 +35,7 @@ export function RiskTab({
       <RiskSummaryPanel
         safe_withdrawal={safe_withdrawal_result}
         is_loading={is_loading_safe_withdrawal}
+        error={safe_withdrawal_error}
         current_fun_fund={annual_spend_target}
         bankruptcy_pct={final_bankruptcy_pct}
         depletion_pct={final_depletion_pct}

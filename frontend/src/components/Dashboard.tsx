@@ -79,6 +79,7 @@ export function Dashboard() {
     error: run_error,
     safe_withdrawal_result,
     is_loading_safe_withdrawal,
+    safe_withdrawal_error,
     bond_sweep_result,
     is_loading_bond_sweep,
     sweep_progress,
@@ -420,6 +421,7 @@ export function Dashboard() {
                 display_result={display_result}
                 safe_withdrawal_result={safe_withdrawal_result}
                 is_loading_safe_withdrawal={is_loading_safe_withdrawal}
+                safe_withdrawal_error={safe_withdrawal_error}
                 annual_spend_target={annual_spend_target}
                 final_bankruptcy_pct={final_bankruptcy_pct}
                 final_depletion_pct={final_depletion_pct}

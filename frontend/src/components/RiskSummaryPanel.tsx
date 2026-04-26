@@ -3,6 +3,7 @@ import type { SafeWithdrawalResponse } from "../types";
 type Props = {
   safe_withdrawal: SafeWithdrawalResponse | null;
   is_loading: boolean;
+  error?: string | null;
   current_fun_fund: number;
   bankruptcy_pct: number;
   depletion_pct: number;
@@ -16,6 +17,7 @@ const RISK_PRESETS = [1, 2, 5, 10];
 export function RiskSummaryPanel({
   safe_withdrawal,
   is_loading,
+  error,
   current_fun_fund,
   bankruptcy_pct,
   depletion_pct,
@@ -64,6 +66,12 @@ export function RiskSummaryPanel({
         )}
       </div>
 
+      {error && !is_loading && (
+        <div className="mb-4 rounded border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+          Safe spending calculation failed: {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Max Safe Fun Fund */}
         <div className={`rounded-lg border p-4 ${fund_bg}`}>
@@ -74,9 +82,11 @@ export function RiskSummaryPanel({
             </span>
           </div>
           <div className={`text-2xl font-bold ${fund_color}`}>
-            {safe_withdrawal
-              ? `£${Math.round(max_safe).toLocaleString()}`
-              : "---"}
+            {is_loading
+              ? "Calculating..."
+              : safe_withdrawal
+                ? `£${Math.round(max_safe).toLocaleString()}`
+                : "---"}
             <span className="text-sm font-normal text-slate-500">/year</span>
           </div>
           <div className="mt-2 flex items-center gap-2">
