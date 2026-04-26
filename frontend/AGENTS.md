@@ -38,6 +38,7 @@ frontend/
 │   │   │   ├── AssetsTab.tsx
 │   │   │   ├── RiskTab.tsx
 │   │   │   ├── AllocationTab.tsx
+│   │   │   ├── TaxBreakdownPanel.tsx # Dashboard tax summary including state pension tax
 │   │   │   └── index.ts
 │   │   ├── ComparisonDashboard.tsx  # Scenario comparison view
 │   │   ├── OverviewInsights.tsx    # Auto-generated insights
@@ -84,6 +85,8 @@ frontend/
 │   ├── components/__tests__/
 │   │   ├── bondAllocations.test.ts
 │   │   └── OverviewInsights.test.tsx  # insight generation (19 tests)
+│   ├── components/Dashboard/__tests__/
+│   │   └── TaxBreakdownPanel.test.tsx # tax breakdown summary/rendering (3 tests)
 │   ├── App.tsx                 # Router + navigation
 │   ├── main.tsx                # Entry point
 │   └── index.css               # Tailwind imports
@@ -161,7 +164,7 @@ Contains arrays indexed by year for:
 - **Net worth**: `net_worth_p10`, `net_worth_median`, `net_worth_p90`
 - **Income**: salary (gross/net), rental, gift, pension, state pension, investment returns, total
 - **Expenses**: total, mortgage, pension contributions, fun fund
-- **Tax**: income tax, optional state pension tax breakdown (`state_pension_tax_paid_median`, included in inflation adjustment and Excel export), NI, total tax
+- **Tax**: income tax, optional state pension tax breakdown (`state_pension_tax_paid_median`, included in inflation adjustment, dashboard tax breakdown, and Excel export), NI, total tax
 - **Asset balances**: ISA, pension, cash, GIA, property, total
 - **Flows**: returns, contributions, withdrawals per asset type
 - **Liabilities**: mortgage balance, debt balance, debt interest
@@ -276,7 +279,7 @@ Refactored into smaller units in `Dashboard/` directory:
 
 Main simulation view with 5 tabs:
 1. **Overview** — metric cards, auto-generated insights, net worth chart
-2. **Income & Spending** — income chart, expenses/outgoings chart
+2. **Income & Spending** — income chart, expenses/outgoings chart, tax breakdown panel with state-pension tax visibility
 3. **Assets** — asset classes chart, detailed asset breakdown with bond allocation controls
 4. **Risk Analysis** — risk summary panel, sensitivity chart, risk timeline
 5. **Allocation** — bond allocation optimiser (bond sweep)
@@ -400,8 +403,8 @@ Used via `useFieldArray` from react-hook-form:
 | `run_simulation` exported but never called | `useSimulation.ts` | **Fixed** | Dead code |
 | `Assumptions` type is `Record<string, unknown>` | `types/index.ts` | Fixed | No type safety for assumptions |
 | `as any` casts across config components | `ConfigWizard` (1 remaining) | Open | Type safety loss |
-| Fixed `w-[70%] min-w-[800px]` layout | `App.tsx` | Open | Not responsive |
-| No retry on API failures | `api/client.ts` | Open | Fragile UX |
+| Fixed `w-[70%] min-w-[800px]` layout | `App.tsx` | **Fixed** | Not responsive |
+| No retry on API failures | `api/client.ts` | **Fixed** | Fragile UX |
 | Bond sweep polling race condition | `useSimulation.ts` | **Fixed** | Stale ETA |
 | Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | **Fixed** | Replaced with SVG icons (GraduationCapIcon, HouseIcon) |
 | Only 5 test assertions | `Dashboard.test.tsx` | **Fixed** (245 tests) | Low confidence |
@@ -409,6 +412,7 @@ Used via `useFieldArray` from react-hook-form:
 | `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | **Partially fixed** (434 lines) | Hard to maintain |
 | `Dashboard.tsx` is 1,180 lines | `components/Dashboard.tsx` | **Fixed** (459 lines) | Hard to maintain |
 | No `.env.example` | root | **Fixed** | Created `.env.example` with `VITE_API_BASE_URL` |
+| Frontend production build blocked by TypeScript errors | charts, config forms, tests | **Fixed** | `npm run build` passes; Vite only warns about large chunks |
 
 ---
 
@@ -431,7 +435,7 @@ Used via `useFieldArray` from react-hook-form:
 | `types/index.ts` | ~200 | |
 | `exportExcel.ts` | ~250 | |
 | **Total source** | **~5,500+** | |
-| **Total tests** | **245** | (22 test files)
+| **Total tests** | **253** | (23 test files)
 
 ---
 

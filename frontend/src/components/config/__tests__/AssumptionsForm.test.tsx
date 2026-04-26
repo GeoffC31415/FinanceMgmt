@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useForm } from "react-hook-form";
-import type { Assumptions } from "../../types";
+import type { Assumptions } from "../../../types";
 import { AssumptionsForm } from "../AssumptionsForm";
 
 // Mock API functions
-vi.mock("../../api/client", () => ({
+vi.mock("../../../api/client", () => ({
   list_tax_years: vi.fn().mockResolvedValue([
     { tax_year: "2025-26", personal_allowance: 12570, basic_rate: 0.2, basic_rate_limit: 37700, higher_rate: 0.4, higher_rate_limit: 125140, additional_rate: 0.45, ni_main_rate: 0.08, ni_upper_rate: 0.02 },
     { tax_year: "2024-25", personal_allowance: 12570, basic_rate: 0.2, basic_rate_limit: 37700, higher_rate: 0.4, higher_rate_limit: 125140, additional_rate: 0.45, ni_main_rate: 0.08, ni_upper_rate: 0.02 },
@@ -93,11 +93,11 @@ describe("AssumptionsForm", () => {
     const radios = screen.getAllByRole("radio");
     expect(radios.length).toBe(2);
     // One should be checked (parametric)
-    expect(radios.some(r => r.checked)).toBe(true);
+    expect(radios.some(r => (r as HTMLInputElement).checked)).toBe(true);
     
     // Start with bootstrap selected
     render(<TestWrapper initialReturnModel="historical_bootstrap" />);
     const radios2 = screen.getAllByRole("radio");
-    expect(radios2.some(r => r.checked)).toBe(true);
+    expect(radios2.some(r => (r as HTMLInputElement).checked)).toBe(true);
   });
 });

@@ -122,7 +122,7 @@ describe("ExpensesChart", () => {
     render(
       <ExpensesChart
         {...data}
-        total_expenses_median={[NaN, null, undefined]}
+        total_expenses_median={[NaN, null, undefined] as unknown as number[]}
         mortgage_payment_median={[0, 0, 0]}
         pension_contributions_median={[0, 0, 0]}
         total_tax_median={[0, 0, 0]}

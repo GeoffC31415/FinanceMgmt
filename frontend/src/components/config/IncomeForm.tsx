@@ -1,20 +1,20 @@
-import type { Control, UseFormRegister } from "react-hook-form";
-import type { FieldArrayWithId } from "react-hook-form";
+import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFormRegister } from "react-hook-form";
 import type { ScenarioRead } from "../../types";
 import { NumberInput, PercentInput, InfoTip } from "./inputs";
-import type { AssetCreate, IncomeCreate } from "../../types";
+import type { AssetCreate } from "../../types";
+import type { FormValues } from "./formSchema";
 
-type IncomeField = FieldArrayWithId<IncomeCreate, "incomes", "field_id">;
+type IncomeField = FieldArrayWithId<FormValues, "incomes", "field_id">;
 
 type Props = {
   form: {
     control: Control<any>;
     register: UseFormRegister<any>;
-    watch: <T>(name: string) => T;
+    watch: <T = any>(name: string) => T;
   };
   incomes: {
     fields: IncomeField[];
-    append: (value: Partial<IncomeCreate>) => void;
+    append: UseFieldArrayAppend<FormValues, "incomes">;
     remove: (index: number) => void;
   };
   scenario: ScenarioRead;

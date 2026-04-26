@@ -21,10 +21,10 @@ Recent repo changes that affect this roadmap:
 - Frontend UX/onboarding has moved forward: `/intro`, reusable `Button`/`Card`, starter/sample scenarios, and a refreshed app shell are implemented. Track remaining UX work in `frontend/TODO.md`.
 - Allocation projection now shows selected-percentile peak net worth, final net worth, and bankruptcy risk; bond override now preserves current extra spend, retirement-age offset, and percentile.
 - Risk Analysis safe-withdrawal no longer silently shows `---` on backend failure; frontend surfaces the error and backend `/safe-withdrawal` has the missing `numpy` import fixed.
-- Frontend tests: `npm test -- --run` passes with 250 tests across 22 files.
-- Frontend production build is still blocked by known TypeScript issues; see `frontend/TODO.md` item `4a`.
-- Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (250 tests / 22 files).
-- P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, and includes it in Excel export.
+- Frontend tests: `npm test -- --run` passes with 253 tests across 23 files.
+- Frontend production build now passes with `npm run build`; Vite emits only a non-blocking large-chunk warning. `frontend/TODO.md` item `4a` is complete.
+- Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (253 tests / 23 files).
+- P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, includes it in Excel export, and shows state-pension tax in the dashboard tax breakdown.
 - P0.3 backend validation now rejects salary employee/employer pension contribution percentages when the salary's person has no matching pension asset/pot, preventing contributions from silently disappearing.
 
 ---
@@ -46,7 +46,7 @@ Verified against current code on 2026-04-26. The repo currently models:
 
 Important current limitations/gaps:
 
-- State pension is now taxed per person each year in the fast engine and added to cash net of state-pension tax. Remaining visibility work is frontend chart/export presentation.
+- State pension is now taxed per person each year in the fast engine and added to cash net of state-pension tax. Dashboard tax-breakdown visibility and Excel export are implemented; broader source-specific tax reporting remains open under P1.1/P3.3.
 - Pension drawdown tax is calculated against a household/eligible-pension aggregate instead of per individual. Frontend owner warnings have been added, but backend per-owner tax treatment remains open under P0.2.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
 - The simulation output now separates `state_pension_tax_paid`, but still does not separately expose CGT, pension drawdown tax, rental tax, and salary income tax.
@@ -77,9 +77,9 @@ Important current limitations/gaps:
 **Frontend tasks:**
 
 - [x] Update help text in `PeopleForm`, `AssumptionsForm`, `ConfigWizard`, and `HelpPage` to say state pension is taxable and modelled per person.
-- [ ] Add state-pension tax visibility in dashboard tax breakdown UI; backend now exposes `state_pension_tax_paid_median` and Excel export includes a State Pension Tax column.
+- [x] Add state-pension tax visibility in dashboard tax breakdown UI; backend now exposes `state_pension_tax_paid_median` and Excel export includes a State Pension Tax column.
 
-**Acceptance criteria:** State pension is taxed every year it is received, independently of private pension drawdown. Backend fast-engine implementation is complete; frontend tax-breakdown visibility remains open.
+**Acceptance criteria:** State pension is taxed every year it is received, independently of private pension drawdown. Backend fast-engine implementation is complete; frontend tax-breakdown visibility is now implemented in the dashboard.
 
 ---
 

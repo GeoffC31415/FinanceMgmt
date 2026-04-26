@@ -6,7 +6,7 @@ import { PropertiesForm } from "../PropertiesForm";
 
 // Mock property_mortgage_balance from formConverters
 vi.mock("../formConverters", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./formConverters")>();
+  const actual = await importOriginal<typeof import("../formConverters")>();
   return {
     ...actual,
     property_mortgage_balance: vi.fn((p: { value: number; mortgage_ltv: number }) => {

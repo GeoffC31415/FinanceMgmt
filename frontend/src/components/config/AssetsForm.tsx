@@ -1,20 +1,20 @@
-import type { Control, UseFormRegister } from "react-hook-form";
-import type { FieldArrayWithId } from "react-hook-form";
+import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFormRegister } from "react-hook-form";
 import type { ScenarioRead } from "../../types";
 import { NumberInput, PercentInput, InfoTip } from "./inputs";
 import type { AssetCreate } from "../../types";
+import type { FormValues } from "./formSchema";
 
-type AssetField = FieldArrayWithId<AssetCreate, "assets", "field_id">;
+type AssetField = FieldArrayWithId<FormValues, "assets", "field_id">;
 
 type Props = {
   form: {
     control: Control<any>;
     register: UseFormRegister<any>;
-    watch: <T>(name: string) => T;
+    watch: <T = any>(name: string) => T;
   };
   assets: {
     fields: AssetField[];
-    append: (value: Partial<AssetCreate>) => void;
+    append: UseFieldArrayAppend<FormValues, "assets">;
     remove: (index: number) => void;
   };
   scenario: ScenarioRead;

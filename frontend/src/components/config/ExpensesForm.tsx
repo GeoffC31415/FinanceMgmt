@@ -1,9 +1,8 @@
-import type { Control, UseFormRegister, UseFormSetValue } from "react-hook-form";
-import type { FieldArrayWithId } from "react-hook-form";
+import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFormRegister, UseFormSetValue } from "react-hook-form";
 import { NumberInput, AnnualFromMonthlyInput } from "./inputs";
-import type { ExpenseCreate } from "../../types";
+import type { FormValues } from "./formSchema";
 
-type ExpenseField = FieldArrayWithId<ExpenseCreate, "expenses", "field_id">;
+type ExpenseField = FieldArrayWithId<FormValues, "expenses", "field_id">;
 
 type Props = {
   form: {
@@ -13,7 +12,7 @@ type Props = {
   };
   expenses: {
     fields: ExpenseField[];
-    append: (value: Partial<ExpenseCreate>) => void;
+    append: UseFieldArrayAppend<FormValues, "expenses">;
     remove: (index: number) => void;
   };
   expenses_total: number;

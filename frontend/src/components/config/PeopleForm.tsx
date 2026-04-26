@@ -1,19 +1,18 @@
-import type { Control, UseFormRegister } from "react-hook-form";
-import type { FieldArrayWithId } from "react-hook-form";
+import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFormRegister } from "react-hook-form";
 import { NumberInput } from "./inputs";
-import type { PersonCreate } from "../../types";
+import type { FormValues } from "./formSchema";
 
-type PersonField = FieldArrayWithId<PersonCreate, "people", "field_id">;
+type PersonField = FieldArrayWithId<FormValues, "people", "field_id">;
 
 type Props = {
   form: {
     control: Control<any>;
     register: UseFormRegister<any>;
-    watch: <T>(name: string) => T;
+    watch: <T = any>(name: string) => T;
   };
   people: {
     fields: PersonField[];
-    append: (value: Partial<PersonCreate>) => void;
+    append: UseFieldArrayAppend<FormValues, "people">;
     remove: (index: number) => void;
   };
 };

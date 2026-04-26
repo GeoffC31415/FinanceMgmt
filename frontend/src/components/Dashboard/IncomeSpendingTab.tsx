@@ -1,6 +1,7 @@
 import type { SimulationResponse } from "../../types";
 import { IncomeChart } from "../charts/IncomeChart";
 import { ExpensesChart } from "../charts/ExpensesChart";
+import { TaxBreakdownPanel } from "./TaxBreakdownPanel";
 
 type Props = {
   display_result: SimulationResponse | null;
@@ -45,6 +46,7 @@ export function IncomeSpendingTab({
         mortgage_payoff_year={mortgage_payoff_year}
         percentile={percentile}
       />
+      <TaxBreakdownPanel display_result={display_result} percentile={percentile} />
     </>
   );
 }

@@ -78,6 +78,20 @@ export type Assumptions = {
   return_model: ReturnModel;
 };
 
+export type TaxYearPreset = {
+  tax_year: string;
+  personal_allowance: number;
+  basic_rate_limit: number;
+  higher_rate_limit: number;
+  basic_rate: number;
+  higher_rate: number;
+  additional_rate: number;
+  ni_primary_threshold: number;
+  ni_upper_earnings_limit: number;
+  ni_main_rate: number;
+  ni_upper_rate: number;
+};
+
 export type HistoricalReturnsStats = {
   count: number;
   mean: number;

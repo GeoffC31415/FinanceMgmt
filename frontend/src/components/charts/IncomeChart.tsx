@@ -112,7 +112,7 @@ export function IncomeChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart isAnimationActive={false} data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
+          <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

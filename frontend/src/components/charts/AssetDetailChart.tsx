@@ -348,7 +348,7 @@ export function AssetDetailChart({
         <div className="h-[360px] rounded border border-slate-800/60 bg-slate-950/20 p-3">
           <div className="mb-2 text-xs font-medium text-slate-300">Balance</div>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart isAnimationActive={false} data={data} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
               <XAxis dataKey="year" stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" tickFormatter={(v) => `£${Math.round(v / 1000)}k`} />

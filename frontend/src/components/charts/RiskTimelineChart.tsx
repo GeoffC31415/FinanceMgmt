@@ -50,7 +50,6 @@ export function RiskTimelineChart({
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            isAnimationActive={false}
             data={data}
             margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
           >

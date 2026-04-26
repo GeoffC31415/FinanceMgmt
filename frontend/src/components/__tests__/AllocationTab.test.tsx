@@ -5,7 +5,7 @@ import type { SimulationResponse, BondSweepResponse } from "../../types";
 
 function createMockDisplayResult(): SimulationResponse {
   const years = Array.from({ length: 10 }, (_, i) => 2024 + i);
-  return {
+  const result = {
     years,
     net_worth_median: Array.from({ length: 10 }, (_, i) => 100000 + i * 50000),
     net_worth_p10: Array.from({ length: 10 }, (_, i) => 80000 + i * 40000),
@@ -56,6 +56,7 @@ function createMockDisplayResult(): SimulationResponse {
     is_depleted: Array.from({ length: 10 }, () => 0),
     is_bankrupt: Array.from({ length: 10 }, () => 0),
   };
+  return result as unknown as SimulationResponse;
 }
 
 function createMockBondSweepResult(): BondSweepResponse {

@@ -1,22 +1,21 @@
-import type { Control, UseFormRegister, UseFormSetValue } from "react-hook-form";
+import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFormRegister, UseFormSetValue } from "react-hook-form";
 import type { ScenarioRead } from "../../types";
-import type { FieldArrayWithId, UseFieldArrayRemove } from "react-hook-form";
 import { NumberInput, PercentInput, RentalSection, InfoTip } from "./inputs";
 import { property_mortgage_balance, property_mortgage_monthly_payment } from "./formConverters";
-import type { PropertyCreate } from "../../types";
+import type { FormValues } from "./formSchema";
 
-type PropertyField = FieldArrayWithId<PropertyCreate, "properties", "field_id">;
+type PropertyField = FieldArrayWithId<FormValues, "properties", "field_id">;
 
 type Props = {
   form: {
     control: Control<any>;
     setValue: UseFormSetValue<any>;
     register: UseFormRegister<any>;
-    watch: <T>(name: string) => T;
+    watch: <T = any>(name: string) => T;
   };
   properties: {
     fields: PropertyField[];
-    append: (value: Partial<PropertyCreate>) => void;
+    append: UseFieldArrayAppend<FormValues, "properties">;
     remove: (index: number) => void;
   };
   expandedPropertyIdx: number | null;
