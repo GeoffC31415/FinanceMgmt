@@ -71,6 +71,29 @@ async def init_db(*, engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await run_migrations(conn=conn)
 
+    # Create indexes for query performance
+    await _create_indexes(conn=engine)
+
+
+async def _create_indexes(*, conn: AsyncEngine) -> None:
+    """Create indexes on foreign keys and frequently queried columns."""
+    from sqlalchemy import text
+    async with conn.begin() as c:
+        # Indexes on scenario_id in all child tables
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_people_scenario_id ON people(scenario_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_incomes_scenario_id ON incomes(scenario_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_assets_scenario_id ON assets(scenario_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_properties_scenario_id ON properties(scenario_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_expenses_scenario_id ON expenses(scenario_id)"))
+
+        # Indexes on person_id in tables that reference people
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_assets_person_id ON assets(person_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_incomes_person_id ON incomes(person_id)"))
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_properties_person_id ON properties(person_id)"))
+
+        # Index on created_at for scenario listing
+        await c.execute(text("CREATE INDEX IF NOT EXISTS idx_scenarios_created_at ON scenarios(created_at DESC)"))
+
 
 async def provide_session(*, sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
     async with sessionmaker() as session:
