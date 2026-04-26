@@ -311,8 +311,8 @@ A scenario contains:
    - **Cash**: Low-risk, liquid savings.
    - **ISA**: Tax-free investment wrapper with an annual contribution limit (default £20,000).
    - **GIA**: General investment account, subject to CGT on withdrawals.
-   - **Pension**: Workplace or personal pension pots, accessible from pension access age (default 55). Supports bond allocation.
-   - Each asset has a balance, growth rate (mean and standard deviation), optional annual contribution cap, withdrawal priority, and bond allocation percentage.
+   - **Pension**: Workplace or personal pension pots, accessible from pension access age (default 55). Supports bond allocation. If a salary has non-zero employee or employer pension contributions, the salary's person must have a matching pension asset so contributions are invested rather than silently disappearing.
+   - Each asset has a balance, growth rate (mean and standard deviation), optional annual contribution cap, withdrawal priority, owner, and bond allocation percentage.
 4. **Properties** — Real estate with value, appreciation rates, mortgage details (LTV, rate, term), rental income, occupancy rate, and maintenance costs.
 5. **Expenses** — Recurring household expenses (monthly amounts). Each can be marked as inflation-linked or fixed.
 6. **Assumptions** — Global simulation parameters including:
@@ -391,17 +391,17 @@ Click the **Export** button on the dashboard to download a `.xlsx` workbook cont
 
 The engine simulates year-by-year from the start year to the end year. Each year follows this sequence:
 
-1. **Salary income** is applied for each person who has not yet retired (can be limited by income start/end year).
+1. **Salary income** is applied for each person who has not yet retired (can be limited by income start/end year). Employee pension contributions reduce taxable pay and, together with employer contributions, are paid into that person's pension pot.
 2. **Rental income** is applied (subject to income tax, no NI). Continues into retirement if configured.
 3. **Gift income** is applied (tax-free). Continues into retirement if configured.
-4. **Tax is calculated**: salary has income tax + NI; rental has income tax only; gifts are untaxed. Pension contributions (employee share) reduce taxable income.
-5. **Mortgage payments** are deducted. **Expenses** are stepped (inflation-linked expenses grow each year).
-6. **Cash** pays all outflows (expenses + mortgage + discretionary retirement spend if applicable).
-7. **If cash is negative**, withdrawals happen from assets in withdrawal priority order (highest priority first), then pension drawdown if still short and the person has reached pension access age.
-8. **If cash exceeds the emergency fund target**, surplus is allocated to investments (ISA first up to the annual limit, then GIA).
-9. **Growth** is applied to all assets and pensions at the end of the year.
-10. **Child costs** are applied for any children still in the household.
-11. **State pension** income is added for anyone who has reached state pension age.
+4. **State pension** income is added for anyone who has reached state pension age and is treated as taxable income for that person.
+5. **Tax is calculated**: salary has income tax + NI; rental and state pension have income tax only; gifts are untaxed. Current income-tax ordering is salary after employee pension contributions, then rental/property income, then state pension, then private pension drawdown if needed later in the year.
+6. **Mortgage payments** are deducted. **Expenses** are stepped (inflation-linked expenses grow each year).
+7. **Cash** pays all outflows (expenses + mortgage + discretionary retirement spend if applicable).
+8. **If cash is negative**, withdrawals happen from assets in withdrawal priority order (highest priority first), then pension drawdown if still short and the person has reached pension access age.
+9. **If cash exceeds the emergency fund target**, surplus is allocated to investments (ISA first up to the annual limit, then GIA).
+10. **Growth** is applied to all assets and pensions at the end of the year.
+11. **Child costs** are applied for any children still in the household.
 12. **Net worth** is calculated and checked against the bankruptcy threshold.
 
 ### Income Types and Tax Treatment
@@ -452,9 +452,10 @@ The simulator supports two return models:
 
 The simulator includes a simplified UK tax model with configurable bands:
 
-- **Income Tax**: Three-band system (basic rate, higher rate, additional rate) with a personal allowance. Pension contributions reduce taxable income.
+- **Income Tax**: Three-band system (basic rate, higher rate, additional rate) with a personal allowance and personal allowance tapering above £100k. Employee pension contributions reduce taxable salary.
 - **National Insurance**: Two-tier system (main rate up to upper earnings limit, then upper rate above). Applied to salary only.
-- **Pension Relief**: Employee pension contributions receive tax relief at marginal rate. Employer contributions are pre-tax.
+- **State Pension Tax**: State pension is modelled per person as taxable income, using that person's remaining allowance and income-tax bands after salary/rental income.
+- **Pension Contributions**: Employee and employer salary pension contributions must have a matching pension pot for that person; invalid scenarios are rejected rather than allowing contributions to disappear. Current contribution treatment is simplified and closest to a net-pay/salary-sacrifice-style reduction of taxable salary, while NI remains based on gross salary.
 - **Pension Drawdown Tax**: 25% of each withdrawal is tax-free; the remaining 75% is taxed as income.
 - **Capital Gains Tax**: Simplified model applied to GIA withdrawals — gains above the annual CGT allowance are taxed at a flat rate.
 
@@ -721,11 +722,11 @@ The Monte Carlo engine (`backend/simulation/engine_fast.py`) uses Numba's `@njit
 
 The simulator uses simplified models in several areas. It is intended as a planning and exploration tool, not a precise tax calculator.
 
-- **Income tax**: Uses a three-band system. Tapered personal allowance (above £100k) is not modelled.
+- **Income tax**: Uses a simplified three-band UK model with personal allowance tapering. Regional income-tax differences (Scotland/Wales), savings/dividend bands, and detailed allowance interactions are not modelled.
 - **Dividend tax**: Not modelled separately — all investment returns are treated as growth, not income.
-- **Capital gains tax**: Uses a simplified flat-rate model on GIA withdrawals. Full CGT rules (different rates for different asset types, bed-and-breakfasting, etc.) are not modelled.
+- **Capital gains tax**: Uses a simplified flat-rate model on GIA withdrawals. Full CGT rules (different rates for different asset types, owner-specific annual exempt amounts, bed-and-breakfasting, loss carry-forward, property disposal rules, etc.) are not modelled.
 - **National Insurance**: Simplified to two tiers. Class 2/4 NI for self-employment is not modelled.
-- **Pension lifetime/annual allowance**: Not enforced.
+- **Pension contribution methods and allowances**: Pension contributions require a matching pension pot, but net-pay vs relief-at-source vs salary-sacrifice details and pension lifetime/annual allowance checks are not fully modelled.
 - **Inheritance tax**: Not modelled.
 - **Stamp duty / SDLT**: Not modelled on property purchases.
 - **Inflation**: Applied as a single flat rate across all expenses. Differential inflation (e.g. housing vs food) is not modelled.

@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from backend.simulation.engine import SimulationAssumptions, SimulationScenario
+from backend.simulation.entities import PensionPot, SalaryIncome
 from backend.simulation.validator import validate_scenario
 
 
@@ -68,6 +69,8 @@ def _make_scenario(
     people: list | None = None,
     assets: list | None = None,
     properties: list | None = None,
+    salary_by_person: dict | None = None,
+    pension_by_person: dict | None = None,
 ) -> SimulationScenario:
     """Create a minimal valid SimulationScenario for testing."""
     if people is None:
@@ -78,8 +81,8 @@ def _make_scenario(
         start_year=start_year,
         end_year=end_year,
         people=people,
-        salary_by_person={"Alice": []},
-        pension_by_person={},
+        salary_by_person=salary_by_person if salary_by_person is not None else {"Alice": []},
+        pension_by_person=pension_by_person if pension_by_person is not None else {},
         assets=assets,
         expenses=[],
         properties=properties or [],
@@ -144,3 +147,75 @@ def test_negative_property_value():
     report = validate_scenario(scenario)
     assert not report.is_valid
     assert report.error_count == 1
+
+
+def test_salary_employee_pension_contribution_requires_matching_pension_pot():
+    salary = SalaryIncome(
+        gross_annual=50_000.0,
+        annual_growth_rate=0.02,
+        employee_pension_pct=0.05,
+        employer_pension_pct=0.0,
+    )
+    scenario = _make_scenario(salary_by_person={"Alice": [salary]}, pension_by_person={})
+
+    report = validate_scenario(scenario)
+
+    assert not report.is_valid
+    assert report.error_count == 1
+    assert "no pension asset/pot" in report.issues[0].message
+
+
+def test_salary_employer_pension_contribution_requires_matching_pension_pot():
+    salary = SalaryIncome(
+        gross_annual=50_000.0,
+        annual_growth_rate=0.02,
+        employee_pension_pct=0.0,
+        employer_pension_pct=0.03,
+    )
+    scenario = _make_scenario(salary_by_person={"Alice": [salary]}, pension_by_person={})
+
+    report = validate_scenario(scenario)
+
+    assert not report.is_valid
+    assert report.error_count == 1
+    assert "employee 0.00%, employer 3.00%" in report.issues[0].message
+
+
+def test_salary_pension_contribution_with_matching_pension_pot_is_valid():
+    salary = SalaryIncome(
+        gross_annual=50_000.0,
+        annual_growth_rate=0.02,
+        employee_pension_pct=0.05,
+        employer_pension_pct=0.03,
+    )
+    pension = PensionPot(balance=10_000.0, growth_rate_mean=0.05, growth_rate_std=0.10)
+    scenario = _make_scenario(
+        salary_by_person={"Alice": [salary]},
+        pension_by_person={"Alice": pension},
+    )
+
+    report = validate_scenario(scenario)
+
+    assert report.is_valid
+    assert report.error_count == 0
+
+
+def test_salary_pension_contribution_requires_pension_for_same_person():
+    salary = SalaryIncome(
+        gross_annual=50_000.0,
+        annual_growth_rate=0.02,
+        employee_pension_pct=0.05,
+        employer_pension_pct=0.03,
+    )
+    pension = PensionPot(balance=10_000.0, growth_rate_mean=0.05, growth_rate_std=0.10)
+    scenario = _make_scenario(
+        people=[_make_person("Alice"), _make_person("Bob")],
+        salary_by_person={"Bob": [salary]},
+        pension_by_person={"Alice": pension},
+    )
+
+    report = validate_scenario(scenario)
+
+    assert not report.is_valid
+    assert report.error_count == 1
+    assert report.issues[0].field == "salary.Bob.0.pension_contributions"

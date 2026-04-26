@@ -59,6 +59,7 @@ def validate_scenario(scenario: SimulationScenario) -> ValidationReport:
     - All growth_rate_std >= 0
     - Retirement age > birth year
     - Pension access age <= planned retirement age
+    - Salary pension contributions require a pension pot for that person
     - No zero-volatility assets with non-zero mean return (degenerate)
     - Start year <= end year
     - At least one person
@@ -117,6 +118,30 @@ def validate_scenario(scenario: SimulationScenario) -> ValidationReport:
             issues.append(ValidationIssue(
                 field=f"asset.{asset.name}.growth_rate_std",
                 message=f"Asset '{asset.name}' has negative growth rate std ({asset.growth_rate_std})",
+                severity="error",
+            ))
+
+    # Check salary pension contributions are backed by a pension pot.
+    # The fast engine deducts employee contributions from cash/taxable pay and
+    # only invests employee/employer contributions when a matching pension pot
+    # exists for that salary's person. Treat missing pots as validation errors
+    # so contributions cannot silently disappear from the balance sheet.
+    for person_key, salaries in scenario.salary_by_person.items():
+        for idx, salary in enumerate(salaries):
+            employee_pct = salary.employee_pension_pct or 0.0
+            employer_pct = salary.employer_pension_pct or 0.0
+            if employee_pct <= 0 and employer_pct <= 0:
+                continue
+            if person_key in scenario.pension_by_person:
+                continue
+            issues.append(ValidationIssue(
+                field=f"salary.{person_key}.{idx}.pension_contributions",
+                message=(
+                    f"Salary for '{person_key}' has pension contributions "
+                    f"(employee {employee_pct:.2%}, employer {employer_pct:.2%}) "
+                    "but no pension asset/pot for that person. Add a pension asset "
+                    "or set contribution percentages to zero."
+                ),
                 severity="error",
             ))
 

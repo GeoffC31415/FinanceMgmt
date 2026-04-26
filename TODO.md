@@ -25,6 +25,7 @@ Recent repo changes that affect this roadmap:
 - Frontend production build is still blocked by known TypeScript issues; see `frontend/TODO.md` item `4a`.
 - Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (250 tests / 22 files).
 - P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, and includes it in Excel export.
+- P0.3 backend validation now rejects salary employee/employer pension contribution percentages when the salary's person has no matching pension asset/pot, preventing contributions from silently disappearing.
 
 ---
 
@@ -110,10 +111,10 @@ Important current limitations/gaps:
 
 **Backend tasks:**
 
-- [ ] In scenario validation, warn/error when salary pension contribution percentages are non-zero but the person has no pension asset.
-- [ ] Decide automatic behaviour: create implicit pension pot, reject scenario, or treat contribution as unavailable cash outflow only.
-- [ ] Prefer explicit validation: require a pension asset for any non-zero employee/employer pension contribution.
-- [ ] Add tests covering missing pension asset with non-zero contribution.
+- [x] In scenario validation, warn/error when salary pension contribution percentages are non-zero but the person has no pension asset.
+- [x] Decide automatic behaviour: create implicit pension pot, reject scenario, or treat contribution as unavailable cash outflow only. Current behaviour: reject the scenario with a validation error.
+- [x] Prefer explicit validation: require a pension asset for any non-zero employee/employer pension contribution.
+- [x] Add tests covering missing pension asset with non-zero contribution.
 
 **Frontend tasks:**
 
