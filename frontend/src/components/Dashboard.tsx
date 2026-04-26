@@ -1,16 +1,11 @@
 import { useCallback } from "react";
-import type { ScenarioRead } from "../types";
-import { useScenarioList } from "../hooks/useScenario";
-import { useSimulation } from "../hooks/useSimulation";
-import type { BondSweepResponse } from "../types";
 import { useDashboardState, useDashboardData } from "./Dashboard/index";
 import { OverviewTab } from "./Dashboard/OverviewTab";
 import { IncomeSpendingTab } from "./Dashboard/IncomeSpendingTab";
 import { AssetsTab } from "./Dashboard/AssetsTab";
 import { RiskTab } from "./Dashboard/RiskTab";
 import { AllocationTab } from "./Dashboard/AllocationTab";
-import { getScenarioBondAllocations, format_currency_compact } from "./Dashboard/utils";
-import type { BondAllocations } from "./Dashboard/utils";
+import { IntroPage } from "./onboarding/IntroPage";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -122,11 +117,30 @@ export function Dashboard() {
     await doExport(display_result, scenario_name, percentile, show_real_values);
   }, [display_result, selected, percentile, show_real_values]);
 
+  if (!is_loading_scenarios && scenarios.length === 0) {
+    return (
+      <IntroPage
+        compact
+        title="Welcome to Finance Planner"
+        subtitle="Create your first plan with a guided setup, start from a realistic template, or load a fictional sample to explore the projection dashboard."
+        onScenarioCreated={refresh}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Scenario Simulation</h1>
-        <p className="text-slate-300">Run Monte Carlo simulations with randomised investment returns to explore the range of possible financial outcomes.</p>
+      <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-6 shadow-2xl shadow-slate-950/20 backdrop-blur">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/80">Projection dashboard</div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Retirement Projection</h1>
+            <p className="mt-2 max-w-3xl text-slate-300">Stress-test your plan across thousands of market-return paths and focus on the questions that matter: spending, timing, shortfall risk, and resilience.</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
+            {display_result ? "Projection ready" : is_running ? "Calculating projection..." : "Choose a plan to begin"}
+          </div>
+        </div>
       </div>
 
       {(scenarios_error || run_error) && (
@@ -136,14 +150,14 @@ export function Dashboard() {
       )}
 
       {/* ===== STICKY CONTROLS ===== */}
-      <div className="sticky top-0 z-10 rounded-lg border border-slate-800 bg-slate-900/95 p-4 backdrop-blur-sm shadow-lg space-y-3">
+      <div className="sticky top-20 z-10 space-y-3 rounded-[1.5rem] border border-white/10 bg-slate-950/80 p-4 shadow-2xl shadow-slate-950/30 backdrop-blur-xl">
         {/* Row 1: Scenario + Core Simulation Knobs */}
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_1fr_160px] gap-4 items-end">
           {/* Scenario selector */}
           <div>
             <label className="block text-sm font-medium">Scenario</label>
             <select
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
               disabled={is_loading_scenarios}
               value={selected_id ?? ""}
               onChange={(e) => setSelectedId(e.target.value || null)}
@@ -182,7 +196,7 @@ export function Dashboard() {
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">£</span>
                 <input
-                  className="w-[110px] rounded border border-slate-700 bg-slate-950 pl-7 pr-2 py-2 text-sm"
+                  className="w-[110px] rounded-xl border border-white/10 bg-white/10 py-2 pl-7 pr-2 text-sm outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
                   value={annual_spend_target}
                   onChange={(e) => setAnnualSpendTarget(Number(e.target.value))}
                   type="number"
@@ -213,7 +227,7 @@ export function Dashboard() {
                 max={10}
                 step={1}
               />
-              <div className="w-[60px] rounded border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-center">
+              <div className="w-[60px] rounded-xl border border-white/10 bg-white/10 px-2 py-2 text-center text-sm">
                 {retirement_age_offset >= 0 ? `+${retirement_age_offset}` : retirement_age_offset}
               </div>
             </div>
@@ -223,7 +237,7 @@ export function Dashboard() {
           <div>
             <label className="block text-sm font-medium">End year</label>
             <input
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
               value={end_year}
               onChange={(e) => setEndYear(Number(e.target.value))}
               type="number"
@@ -235,7 +249,7 @@ export function Dashboard() {
         </div>
 
         {/* Row 2: Display options */}
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-800 pt-3">
+        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-3">
           {/* Percentile preset buttons */}
           <div className="flex items-center gap-1">
             <span className="mr-1 text-xs text-slate-500">Percentile:</span>
@@ -244,8 +258,8 @@ export function Dashboard() {
                 key={p.value}
                 className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
                   percentile === p.value
-                    ? "bg-amber-600 text-white"
-                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                    ? "bg-cyan-300 text-slate-950"
+                    : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
                 }`}
                 onClick={() => setPercentile(p.value)}
                 title={p.desc}
@@ -254,7 +268,7 @@ export function Dashboard() {
               </button>
             ))}
             <input
-              className="ml-1 w-[52px] rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-center"
+              className="ml-1 w-[52px] rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-center text-xs"
               value={percentile}
               onChange={(e) => {
                 const val = Number(e.target.value);
@@ -298,7 +312,7 @@ export function Dashboard() {
 
           {/* Export Excel */}
           <button
-            className="rounded bg-slate-800 px-3 py-1 text-xs font-semibold hover:bg-slate-700 disabled:opacity-50"
+            className="rounded-lg bg-white/10 px-3 py-1 text-xs font-semibold hover:bg-white/20 disabled:opacity-50"
             disabled={!display_result}
             onClick={handle_export}
           >

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import type { ScenarioCreate } from "../../types";
+import { starterScenario } from "../../data/scenarioTemplates";
+import { Button, ButtonLink } from "../ui/Button";
 import { useScenarioCreate, useScenarioDetail, useScenarioList } from "../../hooks/useScenario";
 import { ScenarioForm } from "./ScenarioForm";
 
@@ -122,46 +124,6 @@ function RenameModal({
   );
 }
 
-const EMPTY_SCENARIO: ScenarioCreate = {
-  name: "My Scenario",
-  assumptions: {
-    inflation_rate: 0.02,
-    isa_annual_limit: 20000,
-    state_pension_annual: 11500,
-    pension_access_age: 55,
-    start_year: new Date().getFullYear(),
-    end_year: new Date().getFullYear() + 60,
-    annual_spend_target: 30000,
-    debt_interest_rate: 0.08,
-    bankruptcy_threshold: -100000,
-    return_model: "historical_bootstrap",
-  },
-  people: [
-    {
-      label: "you",
-      birth_date: "1985-01-01",
-      planned_retirement_age: 60,
-      state_pension_age: 67
-    }
-  ],
-  incomes: [
-    {
-      kind: "salary",
-      gross_annual: 60000,
-      annual_growth_rate: 0.02,
-      employee_pension_pct: 0.05,
-      employer_pension_pct: 0.05
-    }
-  ],
-  assets: [
-    { name: "ISA", asset_type: "ISA", withdrawal_priority: 30, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0 },
-    { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0 },
-    { name: "Cash", asset_type: "CASH", withdrawal_priority: 0, balance: 20000, annual_contribution: 0, growth_rate_mean: 0.0, growth_rate_std: 0.0, contributions_end_at_retirement: false, bond_allocation: 0 }
-  ],
-  properties: [],
-  expenses: [{ name: "Household", monthly_amount: 2500, is_inflation_linked: true }]
-};
-
 export function ScenarioConfigPage() {
   const location = useLocation();
   const { scenarios, is_loading, error, refresh } = useScenarioList();
@@ -188,29 +150,27 @@ export function ScenarioConfigPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Configuration</h1>
-          <p className="text-slate-300">Create and load scenarios. Next step adds full tabbed forms.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/config/wizard"
-            className="rounded bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700"
-          >
-            Walkthrough
-          </Link>
-          <button
-            className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50"
-            disabled={is_creating}
-            onClick={async () => {
-              const created = await create(EMPTY_SCENARIO);
-              await refresh();
-              setSelectedId(created.id);
-            }}
-          >
-            Create starter scenario
-          </button>
+      <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-6 shadow-2xl shadow-slate-950/20 backdrop-blur">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/80">Plan setup</div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">Build or refine a financial plan</h1>
+            <p className="mt-2 max-w-3xl text-slate-300">Use the guided setup for a simpler interview-style flow, or jump into the detailed editor when you want full control.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink to="/config/wizard" variant="primary">Guided Setup</ButtonLink>
+            <Button
+              variant="secondary"
+              disabled={is_creating}
+              onClick={async () => {
+                const created = await create(starterScenario);
+                await refresh();
+                setSelectedId(created.id);
+              }}
+            >
+              Create Starter Plan
+            </Button>
+          </div>
         </div>
       </div>
 

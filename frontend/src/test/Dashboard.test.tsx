@@ -38,7 +38,7 @@ function renderDashboard() {
 describe("Dashboard", () => {
   it("renders the heading", () => {
     renderDashboard();
-    expect(screen.getByText("Scenario Simulation")).toBeInTheDocument();
+    expect(screen.getByText("Retirement Projection")).toBeInTheDocument();
   });
 
   it("renders scenario dropdown with options", () => {
