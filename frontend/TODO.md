@@ -92,147 +92,31 @@ Then replace the inline `adjustForInflation` + the big spread in `Dashboard.tsx`
 
 ---
 
-### [~] 6. Break up `ScenarioForm.tsx` (753 lines)
+### [x] 6. Break up `ScenarioForm.tsx` (1,840 → 434 lines)
 
 **Why:** Same as #5 — maintainability and reviewability.
 
-**Current status:**
-- Schema → `formSchema.ts` (84 lines extracted, 7 tests)
-- Phase 1: **COMPLETE** ✅
-- Phase 2a: **COMPLETE** ✅ (PropertiesForm)
-- Phase 2b: **COMPLETE** ✅ (PeopleForm)
-- Phase 2c: **COMPLETE** ✅ (IncomeForm)
-- Phase 2d: **COMPLETE** ✅ (AssetsForm)
-- Phase 2e: **COMPLETE** ✅ (ExpensesForm, 10 tests, wired)
-- Phase 3a: **COMPLETE** ✅ (ScenarioFormContext)
-- Phase 3c: **COMPLETE** ✅ (Integration test, 18 tests)
-- Remaining in-file: ~753 lines
-- **Worth doing?** Yes — each tab is independently testable, but they share form state tightly.
+**Done:** Extracted all tabs, helpers, and converters into separate components:
 
-**Done — Phase 1 (COMPLETE):**
+| Extracted File | Lines | Tests |
+|----------------|-------|-------|
+| `formSchema.ts` | 87 | 7 |
+| `inputs.tsx` | 213 | 12 |
+| `formConverters.ts` | 231 | 18 |
+| `PropertiesForm.tsx` | 367 | 5 |
+| `PeopleForm.tsx` | 163 | 12 |
+| `IncomeForm.tsx` | 135 | 11 |
+| `AssetsForm.tsx` | 202 | 12 |
+| `ExpensesForm.tsx` | 97 | 10 |
+| `AssumptionsForm.tsx` | 107 | 6 |
+| `SellOrderForm.tsx` | 58 | 6 |
+| `HousingForm.tsx` | 58 | 6 |
+| `ScenarioFormContext.tsx` | 97 | — |
+| `ScenarioFormIntegration.test.tsx` | — | 18 |
 
-**1a. Extract helper components** → `src/components/config/inputs.tsx` ✅ (213 lines)
-- `NumberInput`, `PercentInput`, `AnnualFromMonthlyInput`, `RentalSection`, `InfoTip`
-- Tests: 12 tests in `inputs.test.tsx`
+**Result:** 1,840 → 434 lines (-1,406, 76% reduction). 137 tests across 16 test files.
 
-**1b. Extract form converters** → `src/components/config/formConverters.ts` ✅ (231 lines)
-- `to_form_values`, `to_scenario_create`, `normalize_person_id`, `property_mortgage_balance`, `property_mortgage_monthly_payment`
-- Pure functions: `parse_number_input`, `format_number_input`, `parse_percent_input`, `format_percent_input`
-- Tests: 18 tests (9 converters + 9 form value tests)
-
-**Done — Phase 2a (COMPLETE):**
-
-**2a. Extract PropertiesForm** → `src/components/config/PropertiesForm.tsx` ✅ (367 lines)
-- Portfolio summary bar with total value/equity/debt
-- Property cards with collapse/expand
-- Value & appreciation fields
-- Rental income section (uses RentalSection)
-- Mortgage config (LTV, rate, term) with computed metrics
-- Maintenance & costs
-- Net cashflow summary
-- Add/remove property controls
-- Tests: 5 tests in `PropertiesForm.test.tsx`
-
-**Done — Phase 2b (COMPLETE):**
-
-**2b. Extract PeopleForm** → `src/components/config/PeopleForm.tsx` ✅ (163 lines)
-- People & Children section heading + description
-- Person cards with name, DoB, and conditional fields
-- Adult fields: planned retirement age, state pension age
-- Child fields: annual cost (£), leaves household at age
-- Add adult / Add child buttons with smart defaults
-- Tests: 12 tests in `PeopleForm.test.tsx`
-
-**Done — Phase 2c (COMPLETE):**
-
-**2c. Extract IncomeForm** → `src/components/config/IncomeForm.tsx` ✅ (135 lines)
-- Income section heading + annual total
-- Income types helper (Salary/Rental/Gift explanation)
-- Income rows with person dropdown, type selector, gross annual, growth rate
-- Pension contribution fields (opacity-40 for non-salary)
-- Add income button
-- Tests: 11 tests in `IncomeForm.test.tsx`
-
-**Done — Phase 2d (COMPLETE):**
-
-**2d. Extract AssetsForm** → `src/components/config/AssetsForm.tsx` ✅ (202 lines)
-- Assets section heading + total balance
-- Withdrawal priority helper (ISA/GIA/Pension)
-- Pension note with age restriction info
-- Asset rows: person dropdown, name, type (CASH/ISA/GIA/Pension), priority, balance, contribution cap
-- Growth rate + volatility fields (opacity-40 for CASH when using bootstrap)
-- Bond allocation field (only visible for equity assets with bootstrap)
-- "End at retire" checkbox
-- Add asset button
-- Tests: 12 tests in `AssetsForm.test.tsx`
-
-**Phase 2e (COMPLETE):**
-
-**2e. Extract ExpensesForm** → `src/components/config/ExpensesForm.tsx` ✅ (97 lines, 10 tests)
-- Expenses section heading + annual total
-- Expense rows: name, monthly amount, annual amount, inflation toggle
-- Add expense button
-- Tests: 10 tests in `ExpensesForm.test.tsx`
-- Wiring: ✅ Done
-
-**Remaining tabs to extract:** ✅ COMPLETE
-
-**Phase 2f (COMPLETE):**
-
-**2f. Extract AssumptionsForm** → `src/components/config/AssumptionsForm.tsx` ✅
-- TaxYearSelector with preset loading
-- ReturnModelSelector with historical stats
-- All assumption fields: inflation, ISA limit, state pension, pension age, start/end year, annual spend, debt interest, bankruptcy threshold
-- Tests: 6 tests in `AssumptionsForm.test.tsx`
-
-**Phase 2g (COMPLETE):**
-
-**2g. Extract SellOrderForm** → `src/components/config/SellOrderForm.tsx` ✅
-- Withdrawal order summary with priority-sorted items
-- Asset and property rows with owner, priority, value
-- Empty state handling
-- Tests: 6 tests in `SellOrderForm.test.tsx`
-
-**Phase 2h (COMPLETE):**
-
-**2h. Extract HousingForm** → `src/components/config/HousingForm.tsx` ✅
-- Property mortgage display with totals
-- Per-property mortgage details
-- Empty state handling
-- Tests: 6 tests in `HousingForm.test.tsx`
-
-**ScenarioForm.tsx reduction:** 1,840 → **434 lines** (-1,406 lines total, 76% reduction)
-
-#### Phase 3: Wiring (medium risk)
-
-**3a. Create `ScenarioFormContext`** — wrap shared form state so tabs can access it without prop drilling ✅
-- `ScenarioFormContext.tsx` — context + provider + `useScenarioForm()` hook
-- Full types for all field arrays, computed totals, and form methods
-
-**3b. Wire all tabs into ScenarioForm** ✅
-- All tabs now use the extracted component pattern
-- ExpensesForm wired in (was the last Phase 2 tab)
-
-**3c. Integration test** — verify form validates, saves, loads correctly ✅
-- `ScenarioFormIntegration.test.tsx` — 18 tests covering all tabs, switching, validation, editing
-
-**Remaining:**
-- Extract Assumptions, Sell Order, Housing tabs (still inline in ScenarioForm.tsx)
-- Wire all tabs to use `ScenarioFormContext` to eliminate prop drilling
-
-**Risk assessment:**
-
-| Phase | Risk | Effort | Payoff |
-|-------|------|--------|--------|
-| 1a (inputs) | Low | Small | Reusable components |
-| 1b (converters) | Low | Small | Testable pure functions |
-| 2a (PropertiesForm) | Medium | Medium | Biggest line count win |
-| 2b-2c (People/Income) | Medium | Medium | Field array patterns |
-| 2d (AssetsForm) | Medium | Medium | Bond allocation logic |
-| 2e (remaining) | Low | Small | Cleanup |
-| 3a-3c (wiring) | Medium | Medium | End-to-end |
-
-**Total remaining reduction:** ~1,200 lines → ScenarioForm dropped to **434 lines** (76% reduction).
+**Remaining:** Wire all tabs to use `ScenarioFormContext` (eliminate prop drilling).
 
 ---
 

@@ -443,38 +443,25 @@ start_backend.bat     # Windows
 
 ---
 
-## 12. Recent Changes
+## 13. TODO Expansion Convention
 
-### ScenarioForm Refactoring (2026-04-26)
-**Goal:** Reduce `ScenarioForm.tsx` from 1,840 → ~500 lines by extracting each tab into its own component.
+When AGENTS.md references work from TODO.md (refactoring plans, tech debt items, feature requests), the detailed breakdown must live in a **standalone referenced file** — never inlined in AGENTS.md itself.
 
-**Completed:**
-| Phase | File | Lines | Tests | Status |
-|-------|------|-------|-------|--------|
-| Schema | `formSchema.ts` | 87 | 7 | ✅ Done |
-| Phase 1a | `inputs.tsx` | 213 | 12 | ✅ Done |
-| Phase 1b | `formConverters.ts` | 231 | 18 | ✅ Done |
-| Phase 2a | `PropertiesForm.tsx` | 367 | 5 | ✅ Done + wired |
-| Phase 2b | `PeopleForm.tsx` | 163 | 12 | ✅ Done + wired |
-| Phase 2c | `IncomeForm.tsx` | 135 | 11 | ✅ Done + wired |
-| Phase 2d | `AssetsForm.tsx` | 202 | 12 | ✅ Done + wired |
-| Phase 2e | `ExpensesForm.tsx` | 97 | 10 | ✅ Done + wired |
-| Phase 2f | `AssumptionsForm.tsx` | 107 | 6 | ✅ Done + wired |
-| Phase 2g | `SellOrderForm.tsx` | 58 | 6 | ✅ Done + wired |
-| Phase 2h | `HousingForm.tsx` | 58 | 6 | ✅ Done + wired |
-| Phase 3a | `ScenarioFormContext.tsx` | 97 | — | ✅ Done |
-| Phase 3c | `ScenarioFormIntegration.test.tsx` | — | 18 | ✅ Done |
+**Rule:** If a TODO item has more than ~15 lines of detail, extract it to its own file and reference it by path.
 
-**Total reduction:** 1,840 → 434 lines (-1,406, 76%)
-**Total tests added:** 137 tests across 16 test files
+**Example:**
+```markdown
+### ScenarioForm Refactoring
+**Goal:** Reduce `ScenarioForm.tsx` from 1,840 → ~500 lines.
+See `TODO.md` §6 for full task breakdown and status.
+```
 
-**Remaining work:**
-1. Wire all tabs to use `ScenarioFormContext` (eliminate prop drilling)
-2. Expand test coverage for remaining components
+**Why:** AGENTS.md is a reference for the *current state* of the codebase. Detailed task tracking is operational metadata that belongs in TODO.md (or project-management tools). Inlining it causes:
+- AGENTS.md to bloat with stale process history
+- Confusion between "what is" and "what was planned"
+- Harder maintenance when TODO items change
 
----
-
-## 13. Style Conventions
+## 14. Style Conventions
 
 - **Naming**: camelCase for variables/functions, PascalCase for components/types
 - **Components**: Exported as named function components (not default exports)
