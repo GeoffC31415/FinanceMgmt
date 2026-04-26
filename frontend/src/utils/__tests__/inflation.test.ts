@@ -96,6 +96,11 @@ describe("applyInflationAdjustment", () => {
       income_tax_paid_median: Array.from({ length: n }, () => 10_000),
       ni_paid_median: Array.from({ length: n }, () => 4_000),
       total_tax_median: Array.from({ length: n }, () => 14_000),
+      // P1.1: Structured tax breakdown
+      salary_income_tax_paid_median: Array.from({ length: n }, () => 6_000),
+      rental_income_tax_paid_median: Array.from({ length: n }, () => 0),
+      pension_drawdown_tax_paid_median: Array.from({ length: n }, () => 0),
+      capital_gains_tax_paid_median: Array.from({ length: n }, () => 0),
       isa_balance_median: Array.from({ length: n }, (_, i) => 50_000 * (i + 1)),
       pension_balance_median: Array.from({ length: n }, (_, i) => 80_000 * (i + 1)),
       cash_balance_median: Array.from({ length: n }, (_, i) => 20_000 * (i + 1)),

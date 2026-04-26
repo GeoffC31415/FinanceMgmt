@@ -414,6 +414,11 @@ class ResponseFormatter:
             "state_pension_tax_paid_median": _from_iter("state_pension_tax_paid"),
             "ni_paid_median": _from_iter("ni_paid"),
             "total_tax_median": _from_iter("total_tax"),
+            # P1.1: Structured tax breakdown
+            "salary_income_tax_paid_median": _from_iter("salary_income_tax_paid"),
+            "rental_income_tax_paid_median": _from_iter("rental_income_tax_paid"),
+            "pension_drawdown_tax_paid_median": _from_iter("pension_drawdown_tax_paid"),
+            "capital_gains_tax_paid_median": _from_iter("capital_gains_tax_paid"),
             # Assets
             "isa_balance_median": _from_iter("isa_balance"),
             "pension_balance_median": _from_iter("pension_balance"),

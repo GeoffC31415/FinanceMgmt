@@ -38,6 +38,11 @@ function makeMockResponse() {
     income_tax_paid_median: [10_000, 10_000, 10_000],
     ni_paid_median: [4_000, 4_000, 4_000],
     total_tax_median: [14_000, 14_000, 14_000],
+    // P1.1: Structured tax breakdown
+    salary_income_tax_paid_median: [6_000, 6_000, 6_000],
+    rental_income_tax_paid_median: [0, 0, 0],
+    pension_drawdown_tax_paid_median: [0, 0, 0],
+    capital_gains_tax_paid_median: [0, 0, 0],
     isa_balance_median: [50_000, 52_000, 55_000],
     pension_balance_median: [80_000, 85_000, 90_000],
     cash_balance_median: [20_000, 21_000, 22_000],

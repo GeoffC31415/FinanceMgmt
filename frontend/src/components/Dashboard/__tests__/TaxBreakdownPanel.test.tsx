@@ -30,6 +30,11 @@ function makeResult(overrides: Partial<SimulationResponse> = {}): SimulationResp
     state_pension_tax_paid_median: [1200, 1800, 1600],
     ni_paid_median: [4000, 3000, 2000],
     total_tax_median: [10000, 10000, 10000],
+    // P1.1: Structured tax breakdown
+    salary_income_tax_paid_median: [5000, 5500, 6000],
+    rental_income_tax_paid_median: [0, 1200, 1600],
+    pension_drawdown_tax_paid_median: [0, 0, 0],
+    capital_gains_tax_paid_median: [0, 0, 0],
     isa_balance_median: [0, 0, 0],
     pension_balance_median: [0, 0, 0],
     cash_balance_median: [0, 0, 0],

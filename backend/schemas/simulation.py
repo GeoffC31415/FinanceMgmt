@@ -56,6 +56,11 @@ class SimulationResponse(BaseModel):
     state_pension_tax_paid_median: list[float] = Field(description="Median income tax attributable to taxable state pension per year")
     ni_paid_median: list[float] = Field(description="Median National Insurance paid per year")
     total_tax_median: list[float] = Field(description="Median total tax paid per year")
+    # P1.1: Structured tax breakdown
+    salary_income_tax_paid_median: list[float] = Field(description="Median income tax attributable to salary per year")
+    rental_income_tax_paid_median: list[float] = Field(description="Median income tax attributable to rental income per year")
+    pension_drawdown_tax_paid_median: list[float] = Field(description="Median income tax attributable to private pension drawdown per year")
+    capital_gains_tax_paid_median: list[float] = Field(description="Median capital gains tax paid per year")
     
     # Assets
     isa_balance_median: list[float] = Field(description="Median ISA balance per year")

@@ -69,7 +69,13 @@ F_PROPERTY_MAINTENANCE = 40
 F_PROPERTY_RETURNS = 41
 F_STATE_PENSION_TAX_PAID = 42
 
-N_FIELDS = 43
+# P1.1: Structured tax breakdown fields
+F_SALARY_INCOME_TAX_PAID = 43
+F_RENTAL_INCOME_TAX_PAID = 44
+F_PENSION_DRAWDOWN_TAX_PAID = 45
+F_CAPITAL_GAINS_TAX_PAID = 46
+
+N_FIELDS = 47
 
 # Asset type codes
 ASSET_CASH = 0
@@ -1193,6 +1199,11 @@ def _simulate_all_iterations(
             out[it, y_idx, F_PROPERTY_MAINTENANCE] = property_maintenance_total
             out[it, y_idx, F_PROPERTY_RETURNS] = property_investment_return
             out[it, y_idx, F_STATE_PENSION_TAX_PAID] = state_pension_tax
+            # P1.1: Structured tax breakdown
+            out[it, y_idx, F_SALARY_INCOME_TAX_PAID] = income_tax
+            out[it, y_idx, F_RENTAL_INCOME_TAX_PAID] = rental_income_tax
+            out[it, y_idx, F_PENSION_DRAWDOWN_TAX_PAID] = pension_income_tax
+            out[it, y_idx, F_CAPITAL_GAINS_TAX_PAID] = cgt_paid
 
     return out
 

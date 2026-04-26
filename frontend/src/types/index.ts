@@ -173,6 +173,11 @@ export type SimulationResponse = {
   state_pension_tax_paid_median?: number[];
   ni_paid_median: number[];
   total_tax_median: number[];
+  // P1.1: Structured tax breakdown
+  salary_income_tax_paid_median: number[];
+  rental_income_tax_paid_median: number[];
+  pension_drawdown_tax_paid_median: number[];
+  capital_gains_tax_paid_median: number[];
   
   // Assets
   isa_balance_median: number[];

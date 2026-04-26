@@ -370,6 +370,9 @@ _CSV_COLUMNS = [
     "pension_withdrawals", "gia_balance", "property_value",
     "property_rental_income", "property_maintenance", "property_returns",
     "state_pension_tax_paid",
+    # P1.1: Structured tax breakdown
+    "salary_income_tax_paid", "rental_income_tax_paid",
+    "pension_drawdown_tax_paid", "capital_gains_tax_paid",
 ]
 
 

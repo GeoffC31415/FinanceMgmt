@@ -30,6 +30,11 @@ function makeMockResult(
     income_tax_paid_median: [10_000, 10_000, 10_000, 10_000, 10_000, 0, 0],
     ni_paid_median: [4_000, 4_000, 4_000, 4_000, 4_000, 0, 0],
     total_tax_median: [14_000, 14_000, 14_000, 14_000, 14_000, 0, 0],
+    // P1.1: Structured tax breakdown
+    salary_income_tax_paid_median: [6_000, 6_000, 6_000, 6_000, 6_000, 0, 0],
+    rental_income_tax_paid_median: [0, 0, 0, 0, 0, 0, 0],
+    pension_drawdown_tax_paid_median: [0, 0, 0, 0, 0, 0, 0],
+    capital_gains_tax_paid_median: [0, 0, 0, 0, 0, 0, 0],
     isa_balance_median: [50_000, 55_000, 60_000, 65_000, 70_000, 150_000, 250_000],
     pension_balance_median: [80_000, 90_000, 100_000, 110_000, 120_000, 300_000, 500_000],
     cash_balance_median: [20_000, 22_000, 24_000, 26_000, 28_000, 50_000, 60_000],

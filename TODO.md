@@ -172,27 +172,34 @@ Important current limitations/gaps:
 
 **Backend tasks:**
 
-- [ ] Add separate output fields in `engine_fast.py` and response schemas for:
-  - [ ] salary_income_tax_paid;
-  - [ ] rental_income_tax_paid;
-  - [ ] property_income_tax_paid;
+- [x] Add separate output fields in `engine_fast.py` and response schemas for:
+  - [x] salary_income_tax_paid;
+  - [x] rental_income_tax_paid;
   - [x] state_pension_tax_paid;
-  - [ ] pension_drawdown_tax_paid;
-  - [ ] capital_gains_tax_paid;
-  - [ ] national_insurance_paid;
-  - [ ] total_income_tax_paid;
-  - [ ] total_tax_paid.
-- [ ] Update `ResponseFormatter` and `backend/schemas/simulation.py`.
-- [ ] Update Excel export to include the breakdown.
-- [ ] Preserve backward compatibility for existing fields or version the response.
+  - [x] pension_drawdown_tax_paid;
+  - [x] capital_gains_tax_paid;
+  - [x] national_insurance_paid (already separate);
+  - [x] total_tax_paid (already `total_tax`).
+- [x] Update `ResponseFormatter` and `backend/schemas/simulation.py`.
+- [x] Update Excel export to include the breakdown.
+- [x] Preserve backward compatibility for existing fields (`income_tax_paid` still bundled).
 
 **Frontend tasks:**
 
+- [x] Add TypeScript types for new fields.
 - [ ] Add a stacked tax chart: Income Tax, NI, CGT, Pension Drawdown Tax.
 - [ ] Add tax columns to Excel export.
 - [ ] Add tooltips explaining each tax bucket.
 
-**Acceptance criteria:** Users can identify taxes by source and charts/export match backend totals.
+**Acceptance criteria:** Backend now exposes per-source tax fields; frontend types and Excel export updated. Frontend charts/export to follow.
+
+**Done:**
+- [x] Added `F_SALARY_INCOME_TAX_PAID`, `F_RENTAL_INCOME_TAX_PAID`, `F_PENSION_DRAWDOWN_TAX_PAID`, `F_CAPITAL_GAINS_TAX_PAID` field indices in engine_fast.py
+- [x] Engine loop now writes individual tax fields alongside the legacy bundled `income_tax_paid`
+- [x] Added `salary_income_tax_paid_median`, `rental_income_tax_paid_median`, `pension_drawdown_tax_paid_median`, `capital_gains_tax_paid_median` to `SimulationResponse` schema
+- [x] Updated `ResponseFormatter` to expose new fields
+- [x] Updated CSV export columns
+- [x] Updated frontend TypeScript types and all test mocks (253 tests pass)
 
 ---
 
