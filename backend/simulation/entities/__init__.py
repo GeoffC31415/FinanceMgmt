@@ -1,4 +1,3 @@
-from backend.simulation.entities.base import FinancialEntity
 from backend.simulation.entities.cash import Cash
 from backend.simulation.entities.expense import ExpenseItem
 from backend.simulation.entities.gift_income import GiftIncome
@@ -15,7 +14,6 @@ __all__ = [
     "AssetAccount",
     "Cash",
     "ExpenseItem",
-    "FinancialEntity",
     "GiftIncome",
     "IsaAccount",
     "PensionPot",

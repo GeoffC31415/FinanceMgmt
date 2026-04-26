@@ -1,23 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol
+# base.py — no longer contains SimContext or FinancialEntity Protocol.
+# Those were dead code from the OO entity model that was never used by the
+# fast engine. The entity dataclasses in this package are now pure data
+# containers (frozen @dataclass) used by SimulationScenario and array_scenario.
 
-import numpy as np
-from numpy.random import Generator
-
-
-@dataclass(frozen=True)
-class SimContext:
-    year: int
-    inflation_rate: float
-    rng: Generator
-
-
-class FinancialEntity(Protocol):
-    def step(self, *, context: SimContext) -> None: ...
-
-    def get_balance_sheet(self) -> dict[str, float]: ...
-
-    def get_cash_flows(self) -> dict[str, float]: ...
 
