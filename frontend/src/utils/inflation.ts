@@ -50,6 +50,9 @@ export function applyInflationAdjustment(
     pension_contributions_median: adjust(result.pension_contributions_median),
     fun_fund_median: adjust(result.fun_fund_median),
     income_tax_paid_median: adjust(result.income_tax_paid_median),
+    state_pension_tax_paid_median: result.state_pension_tax_paid_median
+      ? adjust(result.state_pension_tax_paid_median)
+      : undefined,
     ni_paid_median: adjust(result.ni_paid_median),
     total_tax_median: adjust(result.total_tax_median),
     isa_balance_median: adjust(result.isa_balance_median),

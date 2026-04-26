@@ -72,6 +72,7 @@ const COLUMN_GROUPS: ColGroup[] = [
     fill_light: "FF4c0519", // rose-950
     columns: [
       { header: "Income Tax", key: "income_tax_paid_median", format: "currency" },
+      { header: "State Pension Tax", key: "state_pension_tax_paid_median", format: "currency" },
       { header: "National Insurance", key: "ni_paid_median", format: "currency" },
       { header: "Total Tax", key: "total_tax_median", format: "currency" },
     ],

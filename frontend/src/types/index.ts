@@ -156,6 +156,7 @@ export type SimulationResponse = {
   
   // Tax
   income_tax_paid_median: number[];
+  state_pension_tax_paid_median?: number[];
   ni_paid_median: number[];
   total_tax_median: number[];
   
