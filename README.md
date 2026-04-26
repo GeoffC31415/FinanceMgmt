@@ -526,7 +526,7 @@ Tax year presets are available (e.g. 2024/25 UK rates) or you can manually set a
 ## Project Structure
 
 ```
-finances/
+FinanceMgmt/
 ├── backend/
 │   ├── main.py                    # FastAPI app, lifespan, CORS setup
 │   ├── settings.py                # Pydantic settings (env vars)
@@ -535,53 +535,117 @@ finances/
 │   ├── migrations.py              # Lightweight additive schema migrations
 │   ├── routers/
 │   │   ├── config.py              # Scenario CRUD and tax year endpoints
-│   │   └── simulation.py          # Simulation, safe withdrawal, bond sweep
-│   ├── models/                    # SQLAlchemy ORM models
-│   │   ├── scenario.py            # Scenario, Person, Income, Asset, Property, Expense
+│   │   ├── simulation.py          # Simulation, safe withdrawal, bond sweep
+│   │   └── admin.py               # Admin endpoints
+│   ├── models/                    # SQLAlchemy ORM models (split by domain)
+│   │   ├── base.py                # Base model class
+│   │   ├── scenario.py            # Scenario model
+│   │   ├── person.py              # Person model
+│   │   ├── income.py              # Salary, Rental, Gift income models
+│   │   ├── assets.py              # Cash, ISA, GIA, Pension models
+│   │   ├── property.py            # Property model
+│   │   ├── expenses.py            # Expense model
 │   │   └── __init__.py
-│   ├── schemas/                   # Pydantic request/response schemas
-│   │   ├── config.py              # Scenario create/update schemas
-│   │   └── simulation.py          # Simulation request/response schemas
+│   ├── schemas/                   # Pydantic request/response schemas (split by domain)
+│   │   ├── __init__.py
+│   │   ├── admin.py               # Admin schema
+│   │   ├── scenario.py            # Scenario schemas
+│   │   ├── person.py              # Person schemas
+│   │   ├── income.py              # Income schemas
+│   │   ├── assets.py              # Asset schemas
+│   │   ├── property.py            # Property schemas
+│   │   ├── expenses.py            # Expense schemas
+│   │   └── simulation.py          # Simulation schemas
 │   ├── simulation/
 │   │   ├── engine.py              # SimulationScenario and SimulationAssumptions dataclasses
 │   │   ├── engine_fast.py         # Numba JIT-compiled Monte Carlo engine
 │   │   ├── array_scenario.py      # Scenario-to-array conversion for Numba
+│   │   ├── service.py             # High-level simulation service layer
+│   │   ├── validator.py           # Input validation logic
+│   │   ├── results.py             # Simulation result dataclasses
+│   │   ├── bond_sweep.py          # Bond allocation sweep algorithm
 │   │   ├── historical_returns.py  # Historical S&P 500 and bond return data loader
 │   │   ├── returns_cache.py       # Session-based return matrix caching
-│   │   ├── entities/              # Domain entities
+│   │   ├── entities/              # Domain entities (split by type)
+│   │   │   ├── base.py            # Entity base class
 │   │   │   ├── person.py          # PersonEntity
-│   │   │   ├── income.py          # SalaryIncome, RentalIncome, GiftIncome
-│   │   │   ├── pension.py         # PensionPot
-│   │   │   ├── asset.py           # AssetAccount
+│   │   │   ├── salary.py          # SalaryIncome entity
+│   │   │   ├── rental_income.py   # RentalIncome entity
+│   │   │   ├── gift_income.py    # GiftIncome entity
+│   │   │   ├── state_pension.py   # StatePension entity
+│   │   │   ├── pension.py         # PensionPot entity
+│   │   │   ├── asset.py           # AssetAccount entity
+│   │   │   ├── isa.py             # ISA account entity
+│   │   │   ├── cash.py            # Cash account entity
 │   │   │   ├── property.py        # PropertyEntity
 │   │   │   ├── expense.py         # ExpenseItem
-│   │   │   └── state_pension.py   # StatePension
+│   │   │   └── __init__.py
 │   │   └── tax/                   # UK tax calculation modules
+│   │       ├── __init__.py
+│   │       ├── calculator.py      # Unified tax calculator
 │   │       ├── income_tax.py      # Income tax bands
 │   │       ├── national_insurance.py  # NI contributions
 │   │       ├── pension_relief.py  # Pension contribution tax relief
 │   │       ├── pension_drawdown.py    # Pension withdrawal taxation
 │   │       ├── withdrawals.py     # Asset withdrawal with CGT
-│   │       ├── calculator.py      # Unified tax calculator
 │   │       ├── tax_config.py      # Tax year presets and config
 │   │       └── fast_tax.py        # Numba-optimised tax functions
 │   ├── alembic/                   # Alembic migration versions
+│   │   ├── versions/              # Migration scripts
+│   │   ├── env.py                 # Migration environment
+│   │   └── script.py.mako         # Migration template
+│   ├── alembic.ini                # Alembic configuration
 │   └── tests/                     # Backend test suite (pytest)
+│       ├── conftest.py            # Test fixtures
+│       ├── test_api.py            # API integration tests
+│       ├── test_engine_equivalence.py  # Engine correctness tests
+│       ├── test_bond_sweep.py     # Bond sweep tests
+│       ├── test_tax.py            # Tax calculation tests
+│       ├── test_validator.py      # Validation tests
+│       ├── test_schemas.py        # Schema tests
+│       ├── test_database_init.py  # Database init tests
+│       └── benchmark_engine.py    # Performance benchmarks
 ├── frontend/
 │   ├── src/
 │   │   ├── main.tsx               # React entry point
 │   │   ├── App.tsx                # Routes and layout
+│   │   ├── index.css              # Global styles (Tailwind)
 │   │   ├── api/
-│   │   │   └── client.ts          # API client (fetch wrappers)
+│   │   │   ├── client.ts          # API client (fetch wrappers)
+│   │   │   └── exportExcel.ts     # Excel export logic
 │   │   ├── components/
-│   │   │   ├── Dashboard.tsx      # Main simulation dashboard
+│   │   │   ├── Dashboard.tsx      # Main dashboard shell
+│   │   │   ├── Dashboard/         # Dashboard tab components
+│   │   │   │   ├── OverviewTab.tsx
+│   │   │   │   ├── IncomeSpendingTab.tsx
+│   │   │   │   ├── AssetsTab.tsx
+│   │   │   │   ├── RiskTab.tsx
+│   │   │   │   ├── AllocationTab.tsx
+│   │   │   │   ├── useDashboardData.ts
+│   │   │   │   ├── useDashboardState.ts
+│   │   │   │   ├── utils.ts
+│   │   │   │   └── index.ts
 │   │   │   ├── ComparisonDashboard.tsx  # Multi-scenario comparison
 │   │   │   ├── HelpPage.tsx       # Help documentation
-│   │   │   ├── config/
+│   │   │   ├── OverviewInsights.tsx     # Key insights panel
+│   │   │   ├── RiskSummaryPanel.tsx     # Risk summary component
+│   │   │   ├── config/            # Scenario configuration components
 │   │   │   │   ├── ScenarioConfigPage.tsx  # Scenario list and CRUD
 │   │   │   │   ├── ScenarioForm.tsx        # Full scenario editor
-│   │   │   │   └── ConfigWizard.tsx        # Step-by-step wizard
-│   │   │   └── charts/
+│   │   │   │   ├── ScenarioFormContext.tsx # Form state context
+│   │   │   │   ├── ConfigWizard.tsx        # Step-by-step wizard
+│   │   │   │   ├── PeopleForm.tsx
+│   │   │   │   ├── IncomeForm.tsx
+│   │   │   │   ├── AssetsForm.tsx
+│   │   │   │   ├── HousingForm.tsx
+│   │   │   │   ├── PropertiesForm.tsx
+│   │   │   │   ├── ExpensesForm.tsx
+│   │   │   │   ├── AssumptionsForm.tsx
+│   │   │   │   ├── SellOrderForm.tsx
+│   │   │   │   ├── formSchema.ts
+│   │   │   │   ├── formConverters.ts
+│   │   │   │   └── inputs.tsx
+│   │   │   └── charts/            # Chart components
 │   │   │       ├── NetWorthChart.tsx       # Net worth with P10/P90 bands
 │   │   │       ├── IncomeChart.tsx         # Income breakdown
 │   │   │       ├── ExpensesChart.tsx       # Expense breakdown
@@ -589,20 +653,31 @@ finances/
 │   │   │       ├── AssetDetailChart.tsx    # Per-asset-type detail
 │   │   │       ├── SensitivityChart.tsx    # Safe withdrawal sensitivity curve
 │   │   │       ├── RiskTimelineChart.tsx   # Depletion/bankruptcy over time
-│   │   │       └── BondSweepChart.tsx      # Bond allocation results
+│   │   │       ├── BondSweepChart.tsx      # Bond allocation results
+│   │   │       └── BondAllocationPanel.tsx # Bond allocation input panel
 │   │   ├── hooks/
 │   │   │   ├── useScenario.ts     # Scenario data fetching
 │   │   │   └── useSimulation.ts   # Simulation session management
-│   │   └── types/                 # TypeScript type definitions
+│   │   ├── types/                 # TypeScript type definitions
+│   │   │   └── index.ts
+│   │   └── utils/
+│   │       ├── chartFormatters.ts
+│   │       ├── inflation.ts
+│   │       └── __tests__/
+│   ├── public/
 │   ├── package.json
 │   ├── vite.config.ts
 │   ├── tsconfig.json
 │   ├── tailwind.config.js
-│   └── postcss.config.js
+│   ├── postcss.config.js
+│   └── .env.example
 ├── data/
 │   ├── historical_returns.tsv     # S&P 500 annual returns (1928–present)
 │   └── historical_bond_returns.tsv  # US 10-Year Treasury returns (1928–present)
-├── alembic.ini                    # Alembic configuration
+├── .github/workflows/ci.yml       # CI/CD pipeline
+├── finances.db                    # SQLite database (created on first run)
+├── start_backend.sh / .bat / .ps1  # Backend startup scripts
+├── start_frontend.sh / .bat / .ps1 # Frontend startup scripts
 └── README.md
 ```
 
