@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -11,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from backend.database import build_async_engine, build_sessionmaker, init_db
 from backend.routers import router as api_router
 from backend.settings import get_settings
+
+logger = logging.getLogger(__name__)
+SLOW_REQUEST_THRESHOLD = 1.0  # seconds
 
 
 @asynccontextmanager
@@ -44,7 +49,13 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
 
-    app = FastAPI(title="Finances Simulator", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="Finances Simulator",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -53,6 +64,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def log_slow_requests(request: Request, call_next):
+        """Log requests that take longer than the threshold."""
+        start = time.perf_counter()
+        response = await call_next(request)
+        elapsed = time.perf_counter() - start
+        if elapsed > SLOW_REQUEST_THRESHOLD:
+            logger.warning(
+                "Slow request: %s %s took %.2fs",
+                request.method,
+                request.url.path,
+                elapsed,
+            )
+        return response
 
     @app.get("/health")
     async def health() -> dict[str, str]:
