@@ -156,6 +156,7 @@ class BondSweepService:
             total_completed = 0
             active_count = len(active_classes)
             total_sim_runs = (5 ** active_count) + (5 ** active_count) + (7 ** active_count)
+            max_combos = payload.max_combos  # None = unlimited
 
             def _grid_for_class(cls: str, values: list[float]) -> list[float]:
                 return values if cls in active_classes else [0.0]
@@ -165,12 +166,17 @@ class BondSweepService:
                 isa_vals: list[float],
                 gia_vals: list[float],
                 pen_vals: list[float],
-            ) -> None:
+            ) -> bool:
+                """Run a round of combos. Returns True if round completed, False if capped/cancelled."""
                 nonlocal total_completed
                 combos = [(i, g, p) for i, g, p in itertools.product(isa_vals, gia_vals, pen_vals)]
                 round_count = len(combos)
                 await _set_progress(sid, total_completed, total_sim_runs, phase)
                 for idx, (isa, gia, pen) in enumerate(combos):
+                    # Check max_combos cap
+                    if max_combos is not None and total_completed >= max_combos:
+                        logger.info("Bond sweep capped at %d combos", max_combos)
+                        return False
                     results.append(_run_combo(
                         isa_pct=isa, gia_pct=gia, pen_pct=pen,
                         active_classes=active_classes,
@@ -184,8 +190,11 @@ class BondSweepService:
                     # Check for cancellation after each combo
                     if await _is_cancelled(sid):
                         logger.info("Bond sweep cancelled at %d/%d combos", total_completed + idx + 1, total_sim_runs)
-                        return
+                        return False
                 total_completed += round_count
+                return True
+
+
 
             def _range_around(center: float, pad: float, step: float) -> list[float]:
                 count = int((2 * pad) / step) + 1
@@ -196,7 +205,7 @@ class BondSweepService:
 
             # Round 1: 25% coarse scan
             coarse = [0.0, 25.0, 50.0, 75.0, 100.0]
-            await _run_round(
+            done = await _run_round(
                 phase="Coarse scan (25% steps)",
                 isa_vals=_grid_for_class("ISA", coarse),
                 gia_vals=_grid_for_class("GIA", coarse),
@@ -204,9 +213,9 @@ class BondSweepService:
             )
 
             # Round 2: 5% medium scan around best point
-            if results:
+            if done and results:
                 best = _find_best_point(results)
-                await _run_round(
+                done = await _run_round(
                     phase="Refining (5% steps)",
                     isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, 10, 5)),
                     gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, 10, 5)),
@@ -214,7 +223,7 @@ class BondSweepService:
                 )
 
             # Round 3: 1% fine scan around refined best
-            if results:
+            if done and results:
                 best = _find_best_point(results)
                 await _run_round(
                     phase="Fine-tuning (1% steps)",
@@ -322,6 +331,7 @@ class BondSweepService:
         total_completed = 0
         active_count = len(active_classes)
         total_sim_runs = (5 ** active_count) + (5 ** active_count) + (7 ** active_count)
+        max_combos = payload.max_combos  # None = unlimited
 
         def _grid_for_class(cls: str, values: list[float]) -> list[float]:
             return values if cls in active_classes else [0.0]
@@ -331,12 +341,17 @@ class BondSweepService:
             isa_vals: list[float],
             gia_vals: list[float],
             pen_vals: list[float],
-        ) -> None:
+        ) -> bool:
+            """Run a round of combos. Returns True if completed, False if capped."""
             nonlocal total_completed
             combos = [(i, g, p) for i, g, p in itertools.product(isa_vals, gia_vals, pen_vals)]
             round_count = len(combos)
             _SWEEP_PROGRESS[sid] = {"completed": total_completed, "total": total_sim_runs, "phase": phase}
             for idx, (isa, gia, pen) in enumerate(combos):
+                # Check max_combos cap
+                if max_combos is not None and total_completed >= max_combos:
+                    logger.info("Bond sweep capped at %d combos", max_combos)
+                    return False
                 results.append(_run_combo(
                     isa_pct=isa, gia_pct=gia, pen_pct=pen,
                     active_classes=active_classes,
@@ -352,6 +367,7 @@ class BondSweepService:
                     "phase": phase,
                 }
             total_completed += round_count
+            return True
 
         def _range_around(center: float, pad: float, step: float) -> list[float]:
             count = int((2 * pad) / step) + 1
@@ -362,7 +378,7 @@ class BondSweepService:
 
         # Round 1: 25% coarse scan
         coarse = [0.0, 25.0, 50.0, 75.0, 100.0]
-        _run_round(
+        done = _run_round(
             phase="Coarse scan (25% steps)",
             isa_vals=_grid_for_class("ISA", coarse),
             gia_vals=_grid_for_class("GIA", coarse),
@@ -370,22 +386,24 @@ class BondSweepService:
         )
 
         # Round 2: 5% medium scan around best point
-        best = _find_best_point(results)
-        _run_round(
-            phase="Refining (5% steps)",
-            isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, 10, 5)),
-            gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, 10, 5)),
-            pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, 10, 5)),
-        )
+        if done and results:
+            best = _find_best_point(results)
+            done = _run_round(
+                phase="Refining (5% steps)",
+                isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, 10, 5)),
+                gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, 10, 5)),
+                pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, 10, 5)),
+            )
 
         # Round 3: 1% fine scan around refined best
-        best = _find_best_point(results)
-        _run_round(
-            phase="Fine-tuning (1% steps)",
-            isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, 3, 1)),
-            gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, 3, 1)),
-            pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, 3, 1)),
-        )
+        if done and results:
+            best = _find_best_point(results)
+            _run_round(
+                phase="Fine-tuning (1% steps)",
+                isa_vals=_grid_for_class("ISA", _range_around(best.isa_bond_pct, 3, 1)),
+                gia_vals=_grid_for_class("GIA", _range_around(best.gia_bond_pct, 3, 1)),
+                pen_vals=_grid_for_class("PENSION", _range_around(best.pension_bond_pct, 3, 1)),
+            )
 
         # Clean up progress
         _SWEEP_PROGRESS.pop(sid, None)

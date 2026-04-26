@@ -145,6 +145,7 @@ class TestBondSweepServiceSync:
             retirement_age_offset=0,
             risk_threshold=5.0,
             max_spend=100000.0,
+            max_combos=20,
         )
         response = BondSweepService.run(payload)
 
@@ -181,6 +182,7 @@ class TestBondSweepServiceAsync:
             retirement_age_offset=0,
             risk_threshold=5.0,
             max_spend=100000.0,
+            max_combos=20,
         )
         response = await BondSweepService.run_async(payload)
 
@@ -208,6 +210,7 @@ class TestBondSweepServiceAsync:
             retirement_age_offset=0,
             risk_threshold=5.0,
             max_spend=100000.0,
+            max_combos=20,
         )
 
         # Start the sweep in a task
@@ -314,6 +317,7 @@ class TestBondSweepRouter:
             "retirement_age_offset": 0,
             "risk_threshold": 5.0,
             "max_spend": 100000.0,
+            "max_combos": 20,
         })
         assert sweep_resp.status_code == 200
         data = sweep_resp.json()

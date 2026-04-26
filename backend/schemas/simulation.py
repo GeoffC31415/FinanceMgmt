@@ -150,6 +150,7 @@ class BondSweepRequest(BaseModel):
     risk_threshold: float = Field(default=5.0, ge=0.0, le=100.0, description="Maximum acceptable bankruptcy percentage")
     target_year: int | None = Field(default=None, ge=1900, le=2200, description="Specific year to evaluate at (None = last year)")
     max_spend: float = Field(default=200_000.0, ge=0.0, description="Upper bound for spend search")
+    max_combos: int | None = Field(default=None, ge=1, le=10000, description="Maximum number of combos to test (None = unlimited, useful for testing)")
 
 
 class BondCombo(BaseModel):

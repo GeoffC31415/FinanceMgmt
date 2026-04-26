@@ -20,6 +20,8 @@
 | ❌ | Q8: pytest-benchmark in CI | `pytest-benchmark` not installed, not in requirements.txt |
 | ✅ | Q9: `__all__` exports | All `__init__.py` files have `__all__` |
 | ✅ | Q10: Slow request logging | `log_slow_requests` middleware in `main.py` |
+| ✅ | Perf: Speed up tests with `max_combos` cap | Bond sweep tests use `max_combos=20` — reduced from 9.5s → 3.1s (3x). Added `max_combos` field to `BondSweepRequest` schema. |
+| ✅ | 1.3: Add Simulation Cancellation / Timeout | Async sweep, cancel endpoint, timeout middleware |
 
 ---
 

@@ -289,7 +289,7 @@ The fast engine produces 42 fields per (iteration, year):
 | POST | `/init` | Initialize + run (caches returns) |
 | POST | `/recalc` | Recalculate with spend/retirement changes |
 | POST | `/safe-withdrawal` | Find max safe fun fund |
-| POST | `/bond-sweep` | Bond allocation optimization (async, returns after completion) |
+| POST | `/bond-sweep` | Bond allocation optimization (async, returns after completion). Use `max_combos` in request to cap combos (useful for testing). |
 | GET | `/bond-sweep/progress` | Poll sweep progress |
 | POST | `/bond-sweep/{session_id}/cancel` | Cancel a running bond sweep |
 | POST | `/bond-override` | Apply bond overrides |
