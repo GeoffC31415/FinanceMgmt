@@ -40,6 +40,7 @@ def initialize_sweep_progress(progress_file: str | None = None) -> SweepProgress
 
 def _get_sweep_progress() -> SweepProgressStore:
     """Return the active sweep progress store."""
+    global _sweep_progress
     if _sweep_progress is None:
         _sweep_progress = SweepProgressStore()
     return _sweep_progress
@@ -132,7 +133,7 @@ class BondSweepService:
         await _store_task(sid, asyncio.current_task())
 
         try:
-            cached = get_session(session_id=sid)
+            cached = await get_session(session_id=sid)
             if cached is None:
                 raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
@@ -303,10 +304,10 @@ class BondSweepService:
     @staticmethod
     def _run_sweep(payload: BondSweepRequest) -> BondSweepResponse:
         """Core sweep logic (used by both sync and async paths)."""
-        from backend.simulation.returns_cache import get_session
+        from backend.simulation.returns_cache import get_session_sync
         from fastapi import HTTPException
 
-        cached = get_session(session_id=payload.session_id)
+        cached = get_session_sync(session_id=payload.session_id)
         if cached is None:
             raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 

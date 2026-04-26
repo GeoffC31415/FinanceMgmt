@@ -64,6 +64,7 @@ class SweepProgressStore:
     async def get_progress(self, session_id: str) -> dict:
         """Get sweep progress for a session."""
         async with self._lock:
+            self._load()
             prog = self._data.get(session_id)
             if prog is None:
                 return {"completed": 0, "total": 0, "phase": "", "running": False}
@@ -72,6 +73,7 @@ class SweepProgressStore:
                 "total": prog["total"],
                 "phase": prog["phase"],
                 "running": prog["completed"] < prog["total"],
+                "cancelled": prog.get("cancelled", False),
             }
 
     async def set_progress(
@@ -95,6 +97,7 @@ class SweepProgressStore:
     async def is_cancelled(self, session_id: str) -> bool:
         """Check if a sweep has been cancelled."""
         async with self._lock:
+            self._load()
             prog = self._data.get(session_id)
             if prog is None:
                 return True
@@ -103,6 +106,7 @@ class SweepProgressStore:
     async def cancel(self, session_id: str) -> None:
         """Mark a sweep as cancelled."""
         async with self._lock:
+            self._load()
             if session_id in self._data:
                 self._data[session_id]["cancelled"] = True
                 self._save()
@@ -140,49 +144,48 @@ class SweepProgressStore:
 
     def get_progress_sync(self, session_id: str) -> dict:
         """Get sweep progress (sync version)."""
-        with self._lock:
-            prog = self._data.get(session_id)
-            if prog is None:
-                return {"completed": 0, "total": 0, "phase": "", "running": False}
-            return {
-                "completed": prog["completed"],
-                "total": prog["total"],
-                "phase": prog["phase"],
-                "running": prog["completed"] < prog["total"],
-            }
+        self._load()
+        prog = self._data.get(session_id)
+        if prog is None:
+            return {"completed": 0, "total": 0, "phase": "", "running": False}
+        return {
+            "completed": prog["completed"],
+            "total": prog["total"],
+            "phase": prog["phase"],
+            "running": prog["completed"] < prog["total"],
+            "cancelled": prog.get("cancelled", False),
+        }
 
     def set_progress_sync(self, session_id: str, completed: int, total: int, phase: str) -> None:
         """Set sweep progress (sync version)."""
-        with self._lock:
-            self._data[session_id] = {
-                "completed": completed,
-                "total": total,
-                "phase": phase,
-                "cancelled": False,
-                "started_at": _now_ts(),
-            }
-            self._save()
+        self._data[session_id] = {
+            "completed": completed,
+            "total": total,
+            "phase": phase,
+            "cancelled": False,
+            "started_at": _now_ts(),
+        }
+        self._save()
 
     def is_cancelled_sync(self, session_id: str) -> bool:
         """Check if a sweep has been cancelled (sync version)."""
-        with self._lock:
-            prog = self._data.get(session_id)
-            if prog is None:
-                return True
-            return prog.get("cancelled", False)
+        self._load()
+        prog = self._data.get(session_id)
+        if prog is None:
+            return True
+        return prog.get("cancelled", False)
 
     def cancel_sync(self, session_id: str) -> None:
         """Mark a sweep as cancelled (sync version)."""
-        with self._lock:
-            if session_id in self._data:
-                self._data[session_id]["cancelled"] = True
-                self._save()
+        self._load()
+        if session_id in self._data:
+            self._data[session_id]["cancelled"] = True
+            self._save()
 
     def remove_sync(self, session_id: str) -> None:
         """Remove progress data (sync version)."""
-        with self._lock:
-            self._data.pop(session_id, None)
-            self._save()
+        self._data.pop(session_id, None)
+        self._save()
 
     # -- file I/O (caller must hold self._lock) ---------------------------
 

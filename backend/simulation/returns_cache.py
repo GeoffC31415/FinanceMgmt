@@ -27,6 +27,7 @@ def initialize_cache(cache: SessionCache) -> None:
 
 def _get_cache() -> SessionCache:
     """Return the active session cache, falling back to in-memory if not initialized."""
+    global _cache
     if _cache is None:
         from backend.simulation.session_cache import InMemorySessionCache
         logger.warning("Session cache not initialized; falling back to in-memory")
@@ -111,6 +112,24 @@ async def get_session(*, session_id: str, ttl_s: float = 30 * 60) -> CachedSessi
         return None
     if ttl_s > 0 and (_now_s() - session.created_at_s) > ttl_s:
         await cache.delete(session_id)
+        return None
+    return session
+
+
+def get_session_sync(*, session_id: str, ttl_s: float = 30 * 60) -> CachedSession | None:
+    """Synchronous session lookup for legacy synchronous service paths."""
+    cache = _get_cache()
+    get_sync = getattr(cache, "get_sync", None)
+    delete_sync = getattr(cache, "delete_sync", None)
+    if get_sync is None:
+        raise RuntimeError(f"{type(cache).__name__} does not support synchronous access")
+
+    session = get_sync(session_id)
+    if session is None:
+        return None
+    if ttl_s > 0 and (_now_s() - session.created_at_s) > ttl_s:
+        if delete_sync is not None:
+            delete_sync(session_id)
         return None
     return session
 

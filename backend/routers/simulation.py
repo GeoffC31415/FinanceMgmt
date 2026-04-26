@@ -15,7 +15,7 @@ import zlib
 from datetime import date
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db_session
@@ -126,13 +126,13 @@ async def init_simulation(
     service.scenario_validator.validate(sim_scenario)
 
     from backend.simulation.returns_cache import create_session, get_session
-    session_id = create_session(
+    session_id = await create_session(
         scenario_id=scenario.id,
         base_scenario=sim_scenario,
         iterations=payload.iterations,
         seed=payload.seed,
     )
-    cached = get_session(session_id=session_id)
+    cached = await get_session(session_id=session_id)
     if cached is None:
         raise HTTPException(status_code=500, detail="Failed to initialize simulation session")
 
@@ -147,7 +147,7 @@ async def recalc_simulation(
     from backend.simulation.returns_cache import get_session
     from backend.simulation.service import ScenarioBuilder
 
-    cached = get_session(session_id=payload.session_id)
+    cached = await get_session(session_id=payload.session_id)
     if cached is None:
         raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
@@ -188,7 +188,7 @@ async def safe_withdrawal(
     from backend.simulation.engine_fast import run_simulation
     from backend.simulation.service import ScenarioBuilder
 
-    cached = get_session(session_id=payload.session_id)
+    cached = await get_session(session_id=payload.session_id)
     if cached is None:
         raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
@@ -309,12 +309,12 @@ async def bond_sweep(payload: BondSweepRequest) -> BondSweepResponse:
 
 
 @router.post("/bond-override", summary="Apply bond allocation override", response_model=SimulationResponse, description="Apply custom bond allocation percentages and re-run the simulation.")
-def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
+async def bond_override(payload: BondOverrideRequest) -> SimulationResponse:
     from backend.simulation.returns_cache import get_session, generate_returns_matrix_with_bond_override
     from backend.simulation.engine_fast import run_simulation
     from backend.simulation.service import ResponseFormatter, ScenarioBuilder
 
-    cached = get_session(session_id=payload.session_id)
+    cached = await get_session(session_id=payload.session_id)
     if cached is None:
         raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
@@ -385,7 +385,7 @@ async def export_simulation(
     from backend.simulation.returns_cache import get_session
     from backend.simulation.engine_fast import run_simulation
 
-    cached = get_session(session_id=session_id)
+    cached = await get_session(session_id=session_id)
     if cached is None:
         raise HTTPException(status_code=404, detail="Simulation session not found (expired?)")
 
