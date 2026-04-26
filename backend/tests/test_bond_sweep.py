@@ -202,8 +202,13 @@ class TestBondSweepServiceAsync:
         })
         session_id = init_resp.json()["session_id"]
 
-        from backend.simulation.bond_sweep import BondSweepService, _SWEEP_PROGRESS
+        from backend.simulation.bond_sweep import BondSweepService
+        from backend.simulation.sweep_progress import SweepProgressStore
         from backend.schemas.simulation import BondSweepRequest
+
+        # Use a temporary progress store for this test
+        store = SweepProgressStore()
+        store.set_progress_sync(session_id, 0, 200, "Initializing...")
 
         payload = BondSweepRequest(
             session_id=session_id,
@@ -243,22 +248,21 @@ class TestBondSweepCancel:
     @pytest.mark.asyncio
     async def test_cancel_marks_sweep_as_cancelled(self):
         """Calling cancel marks the sweep as cancelled."""
-        from backend.simulation.bond_sweep import BondSweepService, _SWEEP_PROGRESS, _SWEEP_TASKS
+        from backend.simulation.bond_sweep import BondSweepService
+        from backend.simulation.sweep_progress import SweepProgressStore
 
-        # Simulate a running sweep
+        # Use a temporary progress store for this test
+        store = SweepProgressStore()
         session_id = "test-cancel-session"
-        _SWEEP_PROGRESS[session_id] = {
-            "completed": 10,
-            "total": 100,
-            "phase": "Coarse scan (25% steps)",
-        }
+        store.set_progress_sync(session_id, 10, 100, "Coarse scan (25% steps)")
+
         # No actual task to cancel, but the flag should be set
         result = await BondSweepService.cancel(session_id)
 
         assert result["status"] == "cancelled"
         assert result["session_id"] == session_id
         # The cancelled flag should be set
-        assert _SWEEP_PROGRESS[session_id].get("cancelled") is True
+        assert store.get_progress_sync(session_id).get("cancelled") is True
 
     @pytest.mark.asyncio
     async def test_cancel_nonexistent_session(self):

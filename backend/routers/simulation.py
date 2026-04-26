@@ -43,9 +43,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/health", summary="Simulation engine health check", description="Returns 200 OK if the simulation engine is running and returns cache is accessible.")
-async def simulation_health() -> dict[str, str]:
-    return {"status": "ok"}
+@router.get("/health", summary="Simulation engine health check", description="Returns 200 OK if the simulation engine is running and session cache is accessible.")
+async def simulation_health(request: Request) -> dict[str, str]:
+    cache = getattr(request.app.state, "session_cache", None)
+    if cache is None:
+        return {"status": "degraded", "cache": "not_initialized"}
+    try:
+        size = await cache.size()
+        return {"status": "ok", "cache": "file-backed", "active_sessions": size}
+    except Exception:
+        return {"status": "degraded", "cache": "error"}
 
 
 @router.get("/historical-returns", summary="Get historical return data", description="Returns aligned S&P 500 + US 10Y Treasury historical return data used for the historical_bootstrap return model.")

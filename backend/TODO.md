@@ -30,23 +30,36 @@ _Last updated: 2026-04-26._
 
 ## P0 — Critical
 
-### 0.1: Replace In-Memory Session Cache with Persistent Store
+### 0.1: Replace In-Memory Session Cache with Persistent Store ✅ DONE
 
 **Impact**: Simulation sessions are lost on process restart. No multi-worker support. Memory leaks in long-running processes.
 
 **Effort**: Medium
 
 **Details**:
-- `_CACHE` in `returns_cache.py` is a plain `dict[str, CachedSession]` — volatile.
-- `bond-sweep` stores progress in `_SWEEP_PROGRESS` — also volatile.
-- Add a TTL-based eviction that's more robust (currently uses `monotonic()` which doesn't survive restarts).
-- Consider Redis for multi-worker deployments, or at least a simple file-backed cache for single-worker.
+- `_CACHE` in `returns_cache.py` was a plain `dict[str, CachedSession]` — volatile.
+- `bond-sweep` stored progress in `_SWEEP_PROGRESS` — also volatile.
+- Replaced with file-backed cache using pickle + JSON index.
 
-**Tasks**:
-- [ ] Design cache backend interface (Redis + fallback to in-memory)
-- [ ] Implement TTL-aware serialization for `CachedSession`
-- [ ] Replace `_SWEEP_PROGRESS` with persistent progress store
-- [ ] Add health check for cache backend
+**Done**:
+- [x] Design cache backend interface (`SessionCache` protocol) with `FileBackedSessionCache` + `InMemorySessionCache` fallback
+- [x] Implement TTL-aware serialization for `CachedSession` (pickle + JSON index, atomic writes)
+- [x] Replace `_SWEEP_PROGRESS` with persistent `SweepProgressStore` (file-backed JSON)
+- [x] Add health check for cache backend (`/health` returns cache status)
+- [x] Wire cache into `main.py` lifespan (startup/shutdown)
+- [x] Add `session_cache_dir` setting (`FINANCES_SESSION_CACHE_DIR` env var)
+- [x] Background purge task (every 5 min) for expired sessions
+
+**Files changed**:
+- `backend/simulation/session_cache.py` — new: `SessionCache` protocol, `FileBackedSessionCache`, `InMemorySessionCache`, `create_session_cache()` factory
+- `backend/simulation/sweep_progress.py` — new: `SweepProgressStore` with sync+async APIs
+- `backend/simulation/returns_cache.py` — `create_session`/`get_session`/`delete_session` now async, delegate to cache
+- `backend/simulation/bond_sweep.py` — `_SWEEP_PROGRESS` → `SweepProgressStore`
+- `backend/main.py` — cache init in lifespan, shutdown cleanup
+- `backend/settings.py` — `session_cache_dir` setting
+- `backend/routers/simulation.py` — enhanced `/health` endpoint
+
+**Remaining**: Redis backend for multi-worker deployments (future P1).
 
 ---
 

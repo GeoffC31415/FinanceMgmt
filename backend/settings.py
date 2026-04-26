@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://wsl.localhost:5173",
     ]
+    session_cache_dir: str = ".session_cache"
 
 
 def get_settings() -> Settings:

@@ -5,6 +5,8 @@ __all__ = [
     "engine_fast",
     "array_scenario",
     "returns_cache",
+    "session_cache",
+    "sweep_progress",
     "historical_returns",
     "results",
     "entities",

@@ -17,49 +17,56 @@ from backend.simulation.service import ScenarioBuilder
 from backend.simulation.engine import SimulationScenario
 from backend.simulation.engine_fast import run_simulation
 from backend.simulation.returns_cache import generate_returns_matrix_with_bond_override
+from backend.simulation.sweep_progress import SweepProgressStore
 
 logger = logging.getLogger(__name__)
 
-# Progress tracking for bond sweep (in-memory)
-_SWEEP_PROGRESS: dict[str, dict] = {}
-
-# Running asyncio Tasks keyed by session_id
+# Running asyncio Tasks keyed by session_id (in-memory only; can't persist across restarts)
 _SWEEP_TASKS: dict[str, asyncio.Task] = {}
 
-# Lock for thread-safe progress updates
+# Lock for thread-safe task tracking
 _SWEEP_LOCK = asyncio.Lock()
+
+# Persistent progress store (file-backed)
+_sweep_progress: SweepProgressStore | None = None
+
+
+def initialize_sweep_progress(progress_file: str | None = None) -> SweepProgressStore:
+    """Set the sweep progress store (called once at app startup)."""
+    global _sweep_progress
+    _sweep_progress = SweepProgressStore(progress_file)
+    return _sweep_progress
+
+
+def _get_sweep_progress() -> SweepProgressStore:
+    """Return the active sweep progress store."""
+    if _sweep_progress is None:
+        _sweep_progress = SweepProgressStore()
+    return _sweep_progress
 
 
 async def _get_progress(session_id: str) -> dict:
-    """Get sweep progress (async-safe)."""
-    async with _SWEEP_LOCK:
-        prog = _SWEEP_PROGRESS.get(session_id)
-        if prog is None:
-            return {"completed": 0, "total": 0, "phase": "", "running": False}
-        return {**prog, "running": prog["completed"] < prog["total"]}
+    """Get sweep progress (async-safe, file-backed)."""
+    store = _get_sweep_progress()
+    return await store.get_progress(session_id)
 
 
 async def _set_progress(session_id: str, completed: int, total: int, phase: str) -> None:
-    """Set sweep progress (async-safe)."""
-    async with _SWEEP_LOCK:
-        _SWEEP_PROGRESS[session_id] = {"completed": completed, "total": total, "phase": phase}
+    """Set sweep progress (async-safe, file-backed)."""
+    store = _get_sweep_progress()
+    await store.set_progress(session_id, completed, total, phase)
 
 
 async def _is_cancelled(session_id: str) -> bool:
-    """Check if a sweep has been cancelled."""
-    async with _SWEEP_LOCK:
-        prog = _SWEEP_PROGRESS.get(session_id)
-        if prog is None:
-            return True
-        return prog.get("cancelled", False)
+    """Check if a sweep has been cancelled (file-backed)."""
+    store = _get_sweep_progress()
+    return await store.is_cancelled(session_id)
 
 
 async def _cancel_sweep(session_id: str) -> None:
     """Cancel a running bond sweep by session_id."""
-    # Mark as cancelled in progress
-    async with _SWEEP_LOCK:
-        if session_id in _SWEEP_PROGRESS:
-            _SWEEP_PROGRESS[session_id]["cancelled"] = True
+    store = _get_sweep_progress()
+    await store.cancel(session_id)
 
     # Cancel the asyncio Task if it exists
     task = _SWEEP_TASKS.pop(session_id, None)
@@ -82,8 +89,8 @@ async def _cleanup_task(session_id: str) -> None:
 
 async def _cleanup_progress(session_id: str) -> None:
     """Remove progress data for a completed/cancelled sweep."""
-    async with _SWEEP_LOCK:
-        _SWEEP_PROGRESS.pop(session_id, None)
+    store = _get_sweep_progress()
+    await store.remove(session_id)
 
 
 class BondSweepService:
@@ -346,7 +353,7 @@ class BondSweepService:
             nonlocal total_completed
             combos = [(i, g, p) for i, g, p in itertools.product(isa_vals, gia_vals, pen_vals)]
             round_count = len(combos)
-            _SWEEP_PROGRESS[sid] = {"completed": total_completed, "total": total_sim_runs, "phase": phase}
+            _get_sweep_progress().set_progress_sync(sid, total_completed, total_sim_runs, phase)
             for idx, (isa, gia, pen) in enumerate(combos):
                 # Check max_combos cap
                 if max_combos is not None and total_completed >= max_combos:
@@ -361,11 +368,9 @@ class BondSweepService:
                     target_year_index=target_year_index,
                     max_spend=float(payload.max_spend),
                 ))
-                _SWEEP_PROGRESS[sid] = {
-                    "completed": total_completed + idx + 1,
-                    "total": total_sim_runs,
-                    "phase": phase,
-                }
+                _get_sweep_progress().set_progress_sync(
+                    sid, total_completed + idx + 1, total_sim_runs, phase
+                )
             total_completed += round_count
             return True
 
@@ -406,7 +411,7 @@ class BondSweepService:
             )
 
         # Clean up progress
-        _SWEEP_PROGRESS.pop(sid, None)
+        _get_sweep_progress().remove_sync(sid)
 
         # Deduplicate results
         unique_results_by_combo: dict[tuple[float, float, float], BondCombo] = {}

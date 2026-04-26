@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any
@@ -8,6 +9,29 @@ from uuid import uuid4
 import numpy as np
 
 from backend.simulation.engine import SimulationScenario
+from backend.simulation.session_cache import SessionCache
+
+logger = logging.getLogger(__name__)
+
+# Module-level session cache — set during app startup via ``initialize_cache``.
+# Defaults to in-memory for backwards compatibility when no startup wiring exists.
+_cache: SessionCache | None = None
+
+
+def initialize_cache(cache: SessionCache) -> None:
+    """Inject the session cache (called once at app startup)."""
+    global _cache
+    _cache = cache
+    logger.info("Session cache initialized: %s", type(cache).__name__)
+
+
+def _get_cache() -> SessionCache:
+    """Return the active session cache, falling back to in-memory if not initialized."""
+    if _cache is None:
+        from backend.simulation.session_cache import InMemorySessionCache
+        logger.warning("Session cache not initialized; falling back to in-memory")
+        _cache = InMemorySessionCache()
+    return _cache
 
 
 @dataclass(frozen=True)
@@ -55,23 +79,11 @@ class CachedSession:
     returns: ReturnsMatrix
 
 
-_CACHE: dict[str, CachedSession] = {}
-
-
 def _now_s() -> float:
     return monotonic()
 
 
-def _purge_expired(*, ttl_s: float) -> None:
-    if ttl_s <= 0:
-        return
-    now_s = _now_s()
-    expired_keys = [k for k, v in _CACHE.items() if (now_s - v.created_at_s) > ttl_s]
-    for k in expired_keys:
-        _CACHE.pop(k, None)
-
-
-def create_session(
+async def create_session(
     *,
     scenario_id: str,
     base_scenario: SimulationScenario,
@@ -79,31 +91,33 @@ def create_session(
     seed: int,
     ttl_s: float = 30 * 60,
 ) -> str:
-    _purge_expired(ttl_s=ttl_s)
+    cache = _get_cache()
     session_id = str(uuid4())
     returns = generate_returns_matrix(scenario=base_scenario, iterations=iterations, seed=seed)
-    _CACHE[session_id] = CachedSession(
-        created_at_s=_now_s(),
+    await cache.create(
+        session_id=session_id,
         scenario_id=scenario_id,
         base_scenario=base_scenario,
         returns=returns,
+        ttl_s=ttl_s,
     )
     return session_id
 
 
-def get_session(*, session_id: str, ttl_s: float = 30 * 60) -> CachedSession | None:
-    _purge_expired(ttl_s=ttl_s)
-    session = _CACHE.get(session_id)
+async def get_session(*, session_id: str, ttl_s: float = 30 * 60) -> CachedSession | None:
+    cache = _get_cache()
+    session = await cache.get(session_id)
     if session is None:
         return None
     if ttl_s > 0 and (_now_s() - session.created_at_s) > ttl_s:
-        _CACHE.pop(session_id, None)
+        await cache.delete(session_id)
         return None
     return session
 
 
-def delete_session(*, session_id: str) -> None:
-    _CACHE.pop(session_id, None)
+async def delete_session(*, session_id: str) -> None:
+    cache = _get_cache()
+    await cache.delete(session_id)
 
 
 def _scenario_assets_for_returns(*, scenario: SimulationScenario) -> list[Any]:

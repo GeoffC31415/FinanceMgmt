@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from backend.database import build_async_engine, build_sessionmaker, init_db
 from backend.routers import router as api_router
 from backend.settings import get_settings
+from backend.simulation.session_cache import create_session_cache
+from backend.simulation.returns_cache import initialize_cache
+from backend.simulation.bond_sweep import initialize_sweep_progress
 
 logger = logging.getLogger(__name__)
 SLOW_REQUEST_THRESHOLD = 1.0  # seconds
@@ -37,6 +41,18 @@ async def lifespan(app: FastAPI):
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
 
+    # Initialize persistent session cache (P0.1)
+    cache_dir = settings.session_cache_dir if hasattr(settings, "session_cache_dir") else ".session_cache"
+    session_cache = await create_session_cache(cache_dir=cache_dir, use_file_backed=True)
+    app.state.session_cache = session_cache
+    initialize_cache(session_cache)
+    logger.info("Session cache initialized at %s", cache_dir)
+
+    # Initialize persistent sweep progress store (P0.1)
+    sweep_file = str(Path(cache_dir) / "sweep_progress.json")
+    initialize_sweep_progress(sweep_file)
+    logger.info("Sweep progress store initialized")
+
     try:
         await init_db(engine=engine)
         logger.info("Database initialized successfully")
@@ -45,6 +61,10 @@ async def lifespan(app: FastAPI):
         logger.exception("Database initialization failed; aborting startup")
         raise
     finally:
+        # Clean up session cache background tasks
+        cache = getattr(app.state, "session_cache", None)
+        if cache is not None:
+            await cache.close()
         await engine.dispose()
 
 
