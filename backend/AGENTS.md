@@ -54,12 +54,14 @@ backend/
 │   ├── income.py            # IncomeCreate / IncomeRead
 │   ├── expenses.py          # ExpenseCreate / ExpenseRead
 │   ├── property.py          # PropertyCreate / PropertyRead
-│   └── simulation.py        # All simulation request/response models
+│   ├── simulation.py        # All simulation request/response models
+│   └── admin.py             # Admin endpoint schemas (historical returns metadata)
 │
 ├── routers/                 # FastAPI route handlers
-│   ├── __init__.py          # Aggregates config + simulation routers
+│   ├── __init__.py          # Aggregates config + simulation + admin routers
 │   ├── config.py            # Scenario CRUD + tax-year presets endpoint
-│   └── simulation.py        # Simulation endpoints (run, init, recalc, etc.)
+│   ├── simulation.py        # Simulation endpoints (run, init, recalc, etc.)
+│   └── admin.py             # Admin endpoints (historical returns upload, metadata)
 │
 ├── simulation/              # Monte Carlo engine
 │   ├── engine.py            # SimulationAssumptions, SimulationScenario, SimulationRunMatrices
@@ -68,6 +70,7 @@ backend/
 │   ├── returns_cache.py     # CachedSession, session TTL, returns matrix generation
 │   ├── historical_returns.py # Historical S&P 500 + bond TSV data loader
 │   ├── results.py           # (deprecated — output now uses SimulationRunMatrices)
+│   ├── validator.py         # SimulationScenarioValidator — validates scenario inputs
 │   │
 │   ├── entities/            # OO entity classes (legacy/unused by fast engine)
 │   │   ├── base.py          # SimContext, FinancialEntity Protocol
@@ -108,6 +111,7 @@ backend/
     ├── test_schemas.py      # Pydantic validation tests
     ├── test_historical_returns.py
     ├── test_database_init.py
+    ├── test_validator.py    # Simulation scenario validation tests
     └── benchmark_engine.py
 ```
 
@@ -268,6 +272,7 @@ The fast engine produces 42 fields per (iteration, year):
 | POST | `/scenarios` | Create scenario (nested payload) |
 | PUT | `/scenarios/{id}` | Update scenario (full replacement) |
 | DELETE | `/scenarios/{id}` | Delete scenario |
+| POST | `/scenarios/{id}/clone` | Clone scenario with all children |
 
 ### Simulation (`/api/simulation/`)
 | Method | Path | Description |
@@ -281,6 +286,14 @@ The fast engine produces 42 fields per (iteration, year):
 | POST | `/bond-sweep` | Bond allocation optimization |
 | GET | `/bond-sweep/progress` | Poll sweep progress |
 | POST | `/bond-override` | Apply bond overrides |
+| GET | `/export` | Export results as CSV/JSON (add `?compress=true` for gzip) |
+
+### Admin (`/api/admin/`)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/historical-returns/metadata` | View current historical data metadata |
+| POST | `/historical-returns/upload` | Upload new equity return data (CSV/TSV) |
+| POST | `/historical-returns/bond-upload` | Upload new bond return data (CSV/TSV) |
 
 ---
 
@@ -290,6 +303,7 @@ The fast engine produces 42 fields per (iteration, year):
 - **Engine tests** (`test_engine_equivalence.py`): Numba engine correctness, tax equivalence
 - **Tax tests** (`test_tax.py`): UK tax calculations against known worked examples
 - **Schema tests** (`test_schemas.py`): Pydantic validation edge cases
+- **Validator tests** (`test_validator.py`): Simulation scenario validation
 - **Benchmark** (`benchmark_engine.py`): Performance measurement
 
 Run: `pytest` or `pytest -v`
@@ -343,6 +357,7 @@ pytest tests/test_api.py
 pytest tests/test_engine_equivalence.py
 pytest tests/test_tax.py
 pytest tests/test_schemas.py
+pytest tests/test_validator.py
 
 # With verbose output
 pytest -v
