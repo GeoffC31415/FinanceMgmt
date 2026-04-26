@@ -12,12 +12,12 @@ from backend.schemas.scenario import ScenarioCloneRequest, ScenarioCloneResponse
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/health", summary="Health check", description="Returns 200 OK if the service is running.")
 async def config_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/tax-years")
+@router.get("/tax-years", summary="List available UK tax year presets", description="Returns the available UK tax year configurations (personal allowance, NI thresholds, tax bands).")
 async def list_tax_years() -> list[dict]:
     """Return available tax year presets with their band values."""
     from backend.simulation.tax.tax_config import TAX_YEAR_PRESETS, get_available_tax_years
@@ -51,13 +51,13 @@ def _scenario_query():
     )
 
 
-@router.get("/scenarios", response_model=list[ScenarioRead])
+@router.get("/scenarios", summary="List all scenarios", response_model=list[ScenarioRead], description="Returns all saved retirement planning scenarios with their people, incomes, assets, properties, and expenses.")
 async def list_scenarios(session: AsyncSession = Depends(get_db_session)) -> list[Scenario]:
     result = await session.execute(_scenario_query().order_by(Scenario.created_at.desc()))
     return list(result.scalars().unique().all())
 
 
-@router.get("/scenarios/{scenario_id}", response_model=ScenarioRead)
+@router.get("/scenarios/{scenario_id}", summary="Get a scenario by ID", response_model=ScenarioRead, description="Returns a single scenario with all its child records (people, incomes, assets, properties, expenses).")
 async def get_scenario(scenario_id: str, session: AsyncSession = Depends(get_db_session)) -> Scenario:
     result = await session.execute(_scenario_query().where(Scenario.id == scenario_id))
     scenario = result.scalars().unique().first()
@@ -66,7 +66,7 @@ async def get_scenario(scenario_id: str, session: AsyncSession = Depends(get_db_
     return scenario
 
 
-@router.post("/scenarios", response_model=ScenarioRead, status_code=201)
+@router.post("/scenarios", summary="Create a new scenario", response_model=ScenarioRead, status_code=201, description="Create a new retirement planning scenario with a nested tree of people, incomes, assets, properties, and expenses.")
 async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depends(get_db_session)) -> Scenario:
     scenario = Scenario(name=payload.name, assumptions=payload.assumptions)
     session.add(scenario)
@@ -168,7 +168,7 @@ async def create_scenario(payload: ScenarioCreate, session: AsyncSession = Depen
     return result.scalars().unique().one()
 
 
-@router.put("/scenarios/{scenario_id}", response_model=ScenarioRead)
+@router.put("/scenarios/{scenario_id}", summary="Update a scenario", response_model=ScenarioRead, description="Full replacement update of a scenario. Sends the complete nested tree of children.")
 async def update_scenario(
     scenario_id: str,
     payload: ScenarioCreate,
@@ -304,7 +304,7 @@ async def update_scenario(
     return result.scalars().unique().one()
 
 
-@router.post("/scenarios/{scenario_id}/clone", response_model=ScenarioCloneResponse)
+@router.post("/scenarios/{scenario_id}/clone", summary="Clone a scenario", response_model=ScenarioCloneResponse, description="Deep-copy a scenario with all its children, creating a variant for comparison.")
 async def clone_scenario(
     scenario_id: str,
     payload: ScenarioCloneRequest,
@@ -424,7 +424,7 @@ async def clone_scenario(
     )
 
 
-@router.delete("/scenarios/{scenario_id}", status_code=204, response_class=Response)
+@router.delete("/scenarios/{scenario_id}", summary="Delete a scenario", status_code=204, response_class=Response, description="Delete a scenario and all its child records (people, incomes, assets, properties, expenses).")
 async def delete_scenario(scenario_id: str, session: AsyncSession = Depends(get_db_session)) -> Response:
     result = await session.execute(select(Scenario).where(Scenario.id == scenario_id))
     scenario = result.scalars().first()
