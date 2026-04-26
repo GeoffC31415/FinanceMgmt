@@ -71,6 +71,8 @@ backend/
 │   ├── historical_returns.py # Historical S&P 500 + bond TSV data loader
 │   ├── results.py           # (deprecated — output now uses SimulationRunMatrices)
 │   ├── validator.py         # SimulationScenarioValidator — validates scenario inputs
+│   ├── service.py           # ScenarioBuilder, ResponseFormatter, SimulationService
+│   └── bond_sweep.py        # BondSweepService (coarse → refining → fine)
 │   │
 │   ├── entities/            # OO entity classes (legacy/unused by fast engine)
 │   │   ├── base.py          # SimContext, FinancialEntity Protocol
@@ -113,6 +115,7 @@ backend/
     ├── test_database_init.py
     ├── test_validator.py    # Simulation scenario validation tests
     └── benchmark_engine.py
+    └── test_bond_sweep.py     # Bond sweep async/cancel/progress tests
 ```
 
 ---
@@ -135,19 +138,20 @@ HTTP Response ← Pydantic Schema ← SQLAlchemy Model ← SQLite
 
 ```
 1. POST /api/simulation/init
-   ├── Fetch Scenario from DB
-   ├── _build_simulation_scenario() → SimulationScenario (Python objects)
+   ├── ScenarioBuilder.load_scenario() → SQLAlchemy Scenario
+   ├── ScenarioBuilder.build() → SimulationScenario (Python objects)
+   ├── SimulationScenarioValidator.validate() → errors if invalid
    ├── generate_returns_matrix() → ReturnsMatrix (pre-computed stochastic draws)
    ├── create_session() → session_id (TTL: 30 min)
-   └── run_simulation() → SimulationResponse
+   └── SimulationService.run_simulation() → formatted dict
 
 2. POST /api/simulation/recalc (interactive tweaking)
    ├── get_session(session_id) → cached ReturnsMatrix
-   ├── _build_scenario_from_cached() → variant SimulationScenario
+   ├── ScenarioBuilder.build_variant() → variant SimulationScenario
    ├── run_simulation() → new SimulationResponse
 
 3. POST /api/simulation/bond-sweep (optimization)
-   ├── generate_returns_matrix_with_bond_override()
+   ├── BondSweepService.run() → BondSweepResponse
    ├── Coarse → Refining → Fine rounds
    ├── Binary search per combo
    └── Return optimal + marginals
@@ -164,7 +168,9 @@ _simulate_all_iterations() [Numba njit, prange(parallel)]
         ↓
 SimulationRunMatrices (dict[str, ndarray] with shape (iterations, n_years))
         ↓
-_response_from_matrices() → SimulationResponse (Pydantic)
+ResponseFormatter.format() → dict
+        ↓
+SimulationResponse (Pydantic)
 ```
 
 The fast engine uses **42 output fields** stored as `float64` arrays. Boolean metrics use 0.0/1.0 for fast averaging.
@@ -283,8 +289,9 @@ The fast engine produces 42 fields per (iteration, year):
 | POST | `/init` | Initialize + run (caches returns) |
 | POST | `/recalc` | Recalculate with spend/retirement changes |
 | POST | `/safe-withdrawal` | Find max safe fun fund |
-| POST | `/bond-sweep` | Bond allocation optimization |
+| POST | `/bond-sweep` | Bond allocation optimization (async, returns after completion) |
 | GET | `/bond-sweep/progress` | Poll sweep progress |
+| POST | `/bond-sweep/{session_id}/cancel` | Cancel a running bond sweep |
 | POST | `/bond-override` | Apply bond overrides |
 | GET | `/export` | Export results as CSV/JSON (add `?compress=true` for gzip) |
 
@@ -411,3 +418,7 @@ pytest --benchmark-only
 6. **Historical data**: Loaded from TSV files in `data/` directory. Aligned to overlapping years between S&P 500 (1928+) and US 10Y bonds (1960+).
 
 7. **Migration strategy**: Alembic for schema changes + `migrations.py` for additive column migrations on existing databases. SQLite `ALTER TABLE` is limited, so table recreation is used for column drops.
+
+8. **Bond sweep cancellation**: `BondSweepService.run_async()` runs in a background task with per-combo cancellation checks. `POST /bond-sweep/{session_id}/cancel` marks the sweep as cancelled and cancels the asyncio.Task. `_SWEEP_LOCK` ensures thread-safe progress updates. `_SWEEP_TASKS` tracks running tasks.
+
+9. **Request timeout middleware**: `REQUEST_TIMEOUT` (3600s default) in `main.py` provides a safety net for long-running requests. Returns 504 on timeout. Configurable via environment or code.

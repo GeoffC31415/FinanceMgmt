@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from backend.settings import get_settings
 
 logger = logging.getLogger(__name__)
 SLOW_REQUEST_THRESHOLD = 1.0  # seconds
+REQUEST_TIMEOUT = 3600  # seconds (1 hour for long-running requests like bond sweep)
 
 
 @asynccontextmanager
@@ -64,6 +66,33 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def request_timeout(request: Request, call_next):
+        """Cancel requests that exceed the timeout threshold.
+
+        This is a safety net for long-running endpoints (e.g., bond sweep).
+        Individual endpoints may implement their own timeout logic.
+        """
+        if REQUEST_TIMEOUT <= 0:
+            return await call_next(request)
+
+        async def _cancel_after_timeout():
+            """Coroutine that raises TimeoutError after REQUEST_TIMEOUT seconds."""
+            await asyncio.sleep(REQUEST_TIMEOUT)
+            raise asyncio.TimeoutError(f"Request timed out after {REQUEST_TIMEOUT}s")
+
+        # Run the request with a timeout
+        try:
+            timeout_task = asyncio.get_event_loop().create_task(_cancel_after_timeout())
+            response = await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
+            timeout_task.cancel()
+            return response
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                status_code=504,
+                content={"detail": f"Request timed out after {REQUEST_TIMEOUT}s"},
+            )
 
     @app.middleware("http")
     async def log_slow_requests(request: Request, call_next):

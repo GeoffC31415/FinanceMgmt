@@ -6,9 +6,11 @@ simulation/bond_sweep.py.
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
+import logging
 import zlib
 from datetime import date
 
@@ -36,6 +38,7 @@ from backend.schemas.simulation import (
 from backend.simulation.bond_sweep import BondSweepService
 from backend.simulation.service import SimulationService, ScenarioBuilder
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -260,14 +263,41 @@ async def safe_withdrawal(
     )
 
 
-@router.get("/bond-sweep/progress", summary="Get bond sweep progress", description="Poll the progress of a running bond allocation sweep.")
+@router.get("/bond-sweep/progress", summary="Get bond sweep progress", description="Poll the progress of a running bond allocation sweep. Returns completed/total combos and current phase.")
 async def bond_sweep_progress(session_id: str) -> dict:
-    return BondSweepService.progress(session_id)
+    return await BondSweepService.progress(session_id)
 
 
-@router.post("/bond-sweep", summary="Run bond allocation optimization", response_model=BondSweepResponse, description="Run a multi-round optimization sweep to find the optimal bond allocation across ISA, GIA, and Pension accounts.")
-def bond_sweep(payload: BondSweepRequest) -> BondSweepResponse:
-    return BondSweepService.run(payload)
+@router.post("/bond-sweep/cancel", summary="Cancel a running bond sweep", description="Cancel a bond allocation sweep that is currently running. Returns immediately.")
+async def bond_sweep_cancel(session_id: str) -> dict:
+    """Cancel a running bond sweep."""
+    return await BondSweepService.cancel(session_id)
+
+
+@router.post("/bond-sweep", summary="Run bond allocation optimization", response_model=BondSweepResponse, description="Run a multi-round optimization sweep to find the optimal bond allocation across ISA, GIA, and Pension accounts. This runs asynchronously — poll /bond-sweep/progress to track status.")
+async def bond_sweep(payload: BondSweepRequest) -> BondSweepResponse:
+    """Run bond sweep asynchronously.
+
+    The sweep runs in a background task. Use /bond-sweep/progress to
+    poll for status. Use /bond-sweep/cancel to cancel.
+    """
+    # Run the sweep in a background task
+    task = asyncio.create_task(BondSweepService.run_async(payload))
+
+    # Wait for completion (with a generous timeout as a safety net)
+    try:
+        return await asyncio.wait_for(task, timeout=3600)  # 1 hour max
+    except asyncio.TimeoutError:
+        task.cancel()
+        raise HTTPException(
+            status_code=504,
+            detail="Bond sweep timed out after 1 hour",
+        )
+    except asyncio.CancelledError:
+        raise HTTPException(
+            status_code=499,
+            detail="Bond sweep was cancelled",
+        )
 
 
 @router.post("/bond-override", summary="Apply bond allocation override", response_model=SimulationResponse, description="Apply custom bond allocation percentages and re-run the simulation.")

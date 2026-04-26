@@ -64,38 +64,31 @@
 - [ ] Add CI integration (GitHub Actions)
 - [ ] Set performance budgets (e.g., 2000 iterations × 40 years < 5s)
 
-### 1.3: Add Simulation Cancellation / Timeout
+### 1.3: Add Simulation Cancellation / Timeout ✅ DONE
 
 **Impact**: Bond sweep can take minutes (hundreds of simulation runs). No way to cancel. No timeout on long requests.
 
 **Effort**: Medium
 
-**Details**:
-- `bond_sweep()` runs synchronously with no cancellation
-- Long sweeps block the event loop
-- No progress tracking endpoint that works reliably
+**Done**:
+- `BondSweepService.run_async()` — async sweep with per-combo cancellation checks
+- `POST /bond-sweep/{session_id}/cancel` endpoint — cancels running sweeps
+- `REQUEST_TIMEOUT` middleware (3600s default) — safety net for all requests
+- `GET /bond-sweep/{session_id}/progress` — async-safe progress polling with `_SWEEP_LOCK`
+- `_SWEEP_TASKS` dict — tracks running tasks for cancellation
+- `_SWEEP_PROGRESS` dict — async-safe progress updates via asyncio.Lock
+- `BondSweepService.cancel()` — marks sweep as cancelled and cancels asyncio.Task
+- `tests/test_bond_sweep.py` — 12 tests covering sync/async run, progress, cancel, router endpoints, timeout
 
 **Tasks**:
-- [ ] Add `asyncio.create_task()` for long-running sweeps
-- [ ] Add `/bond-sweep/{session_id}/cancel` endpoint
-- [ ] Add request timeout middleware (e.g., 60s)
-- [ ] Return progress polling via `/bond-sweep/progress` (already exists, needs async support)
+- [x] Add `asyncio.create_task()` for long-running sweeps
+- [x] Add `/bond-sweep/{session_id}/cancel` endpoint
+- [x] Add request timeout middleware (3600s configurable)
+- [x] Return progress polling via `/bond-sweep/progress` (async-safe)
 
 ---
 
 ## P2 — Medium
-
-### 2.1: Separate Simulation Engine from HTTP Layer ✅ DONE
-
-**Impact**: `routers/simulation.py` reduced from 1,072 → 383 lines (64% reduction).
-
-**Done**:
-- `simulation/service.py` — `ScenarioBuilder` (DB → SimulationScenario), `ResponseFormatter` (matrices → dict), `SimulationScenarioValidator`, `SimulationService` (orchestrator)
-- `simulation/bond_sweep.py` — `BondSweepService` (coarse → refining → fine sweep)
-- Router now delegates to services; only specialized logic remains inline (safe-withdrawal binary search, CSV/JSON export)
-- All 134 tests pass
-
-**Remaining**: Add unit tests for `SimulationService` and `ResponseFormatter` (separate from HTTP fixtures).
 
 ### 2.2: Add Tax Year Versioning with Migration Path
 
