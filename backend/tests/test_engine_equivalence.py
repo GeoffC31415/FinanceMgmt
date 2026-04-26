@@ -413,6 +413,165 @@ class TestTaxCalculations:
         np.testing.assert_allclose(tax_110k, numba_110k, rtol=1e-6, atol=0.01)
 
 
+class TestStatePensionTax:
+    """Regression tests for taxable state pension handling in the fast engine."""
+
+    @staticmethod
+    def _zero_return_result(scenario: SimulationScenario):
+        returns = generate_returns_matrix(scenario=scenario, iterations=1, seed=0)
+        returns = type(returns)(
+            years=returns.years,
+            asset_names=returns.asset_names,
+            asset_types=returns.asset_types,
+            asset_withdrawal_priority=returns.asset_withdrawal_priority,
+            initial_asset_balances=returns.initial_asset_balances,
+            initial_asset_cost_bases=returns.initial_asset_cost_bases,
+            asset_returns=np.zeros_like(returns.asset_returns),
+            property_names=returns.property_names,
+            property_person_keys=returns.property_person_keys,
+            property_withdrawal_priority=returns.property_withdrawal_priority,
+            initial_property_values=returns.initial_property_values,
+            initial_property_cost_bases=returns.initial_property_cost_bases,
+            property_returns=np.zeros_like(returns.property_returns),
+            pension_keys=returns.pension_keys,
+            initial_pension_balances=returns.initial_pension_balances,
+            pension_returns=np.zeros_like(returns.pension_returns),
+        )
+        return run_simulation(scenario=scenario, returns=returns)
+
+    @staticmethod
+    def _cash(balance: float = 0.0) -> AssetAccount:
+        return AssetAccount(
+            name="Cash",
+            asset_type="CASH",
+            withdrawal_priority=0,
+            balance=balance,
+            annual_contribution=0.0,
+            growth_rate_mean=0.0,
+            growth_rate_std=0.0,
+            contributions_end_at_retirement=False,
+            cost_basis=balance,
+        )
+
+    def test_state_pension_below_personal_allowance_has_no_tax(self):
+        person = PersonEntity(
+            key="person1",
+            birth_date=date(1950, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=67,
+        )
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=[person],
+            salary_by_person={},
+            pension_by_person={},
+            assets=[self._cash()],
+            expenses=[],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=11_500.0,
+                emergency_fund_months=0.0,
+            ),
+        )
+
+        result = self._zero_return_result(scenario)
+
+        assert result.fields["state_pension_income"][0, 0] == pytest.approx(11_500.0)
+        assert result.fields["state_pension_tax_paid"][0, 0] == pytest.approx(0.0)
+        assert result.fields["income_tax_paid"][0, 0] == pytest.approx(0.0)
+        assert result.fields["cash_balance"][0, 0] == pytest.approx(11_500.0)
+
+    def test_state_pension_and_rental_income_tax_excess_allowance(self):
+        person = PersonEntity(
+            key="person1",
+            birth_date=date(1950, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=67,
+        )
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=[person],
+            salary_by_person={},
+            pension_by_person={},
+            assets=[self._cash()],
+            expenses=[],
+            rental_incomes=[RentalIncome(gross_annual=3_000.0, annual_growth_rate=0.0, person_key="person1")],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=11_500.0,
+                emergency_fund_months=0.0,
+            ),
+        )
+
+        result = self._zero_return_result(scenario)
+
+        expected_tax = (11_500.0 + 3_000.0 - 12_570.0) * 0.20
+        assert result.fields["state_pension_tax_paid"][0, 0] == pytest.approx(expected_tax)
+        assert result.fields["income_tax_paid"][0, 0] == pytest.approx(expected_tax)
+        assert result.fields["cash_balance"][0, 0] == pytest.approx(14_500.0 - expected_tax)
+
+    def test_two_state_pensions_use_two_personal_allowances(self):
+        people = [
+            PersonEntity(key="person1", birth_date=date(1950, 1, 1), planned_retirement_age=65, state_pension_age=67),
+            PersonEntity(key="person2", birth_date=date(1951, 1, 1), planned_retirement_age=65, state_pension_age=67),
+        ]
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=people,
+            salary_by_person={},
+            pension_by_person={},
+            assets=[self._cash()],
+            expenses=[],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=11_500.0,
+                emergency_fund_months=0.0,
+            ),
+        )
+
+        result = self._zero_return_result(scenario)
+
+        assert result.fields["state_pension_income"][0, 0] == pytest.approx(23_000.0)
+        assert result.fields["state_pension_tax_paid"][0, 0] == pytest.approx(0.0)
+        assert result.fields["income_tax_paid"][0, 0] == pytest.approx(0.0)
+
+    def test_state_pension_uses_allowance_before_private_drawdown(self):
+        person = PersonEntity(
+            key="person1",
+            birth_date=date(1950, 1, 1),
+            planned_retirement_age=65,
+            state_pension_age=67,
+        )
+        pension = PensionPot(balance=100_000.0, growth_rate_mean=0.0, growth_rate_std=0.0)
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=[person],
+            salary_by_person={},
+            pension_by_person={"person1": pension},
+            assets=[self._cash()],
+            expenses=[ExpenseItem(name="Living", annual_amount=15_000.0, is_inflation_linked=False)],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=11_500.0,
+                emergency_fund_months=0.0,
+                pension_access_age=55,
+            ),
+        )
+
+        result = self._zero_return_result(scenario)
+
+        # State pension alone is below the allowance, but the later private pension
+        # drawdown should be taxed because the state pension has already consumed
+        # most of that person's allowance.
+        assert result.fields["state_pension_tax_paid"][0, 0] == pytest.approx(0.0)
+        assert result.fields["pension_withdrawals"][0, 0] > 3_500.0
+        assert result.fields["income_tax_paid"][0, 0] > 0.0
+
+
 class TestFirstYearGrowth:
     """Test that the first-year growth bug is fixed."""
 
