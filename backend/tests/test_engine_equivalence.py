@@ -572,6 +572,66 @@ class TestStatePensionTax:
         assert result.fields["income_tax_paid"][0, 0] > 0.0
 
 
+class TestPensionDrawdownOwnership:
+    """Regression tests for per-owner private pension drawdown tax."""
+
+    @staticmethod
+    def _zero_return_result(scenario: SimulationScenario):
+        return TestStatePensionTax._zero_return_result(scenario)
+
+    @staticmethod
+    def _cash(balance: float = 0.0) -> AssetAccount:
+        return TestStatePensionTax._cash(balance)
+
+    @staticmethod
+    def _retired_people() -> list[PersonEntity]:
+        return [
+            PersonEntity(key="person1", birth_date=date(1950, 1, 1), planned_retirement_age=65, state_pension_age=99),
+            PersonEntity(key="person2", birth_date=date(1951, 1, 1), planned_retirement_age=65, state_pension_age=99),
+        ]
+
+    def _drawdown_scenario(self, pension_by_person: dict[str, PensionPot]) -> SimulationScenario:
+        return SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=self._retired_people(),
+            salary_by_person={},
+            pension_by_person=pension_by_person,
+            assets=[self._cash()],
+            expenses=[ExpenseItem(name="Living", annual_amount=25_000.0, is_inflation_linked=False)],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=0.0,
+                emergency_fund_months=0.0,
+                pension_access_age=55,
+            ),
+        )
+
+    def test_two_owners_use_two_personal_allowances_for_private_drawdown(self):
+        split_owned = self._drawdown_scenario(
+            {
+                "person1": PensionPot(balance=15_000.0, growth_rate_mean=0.0, growth_rate_std=0.0),
+                "person2": PensionPot(balance=15_000.0, growth_rate_mean=0.0, growth_rate_std=0.0),
+            }
+        )
+        single_owned = self._drawdown_scenario(
+            {
+                "person1": PensionPot(balance=30_000.0, growth_rate_mean=0.0, growth_rate_std=0.0),
+            }
+        )
+
+        split_result = self._zero_return_result(split_owned)
+        single_result = self._zero_return_result(single_owned)
+
+        assert split_result.fields["pension_income"][0, 0] == pytest.approx(25_000.0, abs=0.05)
+        assert split_result.fields["income_tax_paid"][0, 0] == pytest.approx(0.0, abs=0.05)
+        assert split_result.fields["pension_withdrawals"][0, 0] == pytest.approx(25_000.0, abs=0.05)
+
+        assert single_result.fields["pension_income"][0, 0] == pytest.approx(25_000.0, abs=0.05)
+        assert single_result.fields["income_tax_paid"][0, 0] > 1_400.0
+        assert single_result.fields["pension_withdrawals"][0, 0] > split_result.fields["pension_withdrawals"][0, 0]
+
+
 class TestFirstYearGrowth:
     """Test that the first-year growth bug is fixed."""
 

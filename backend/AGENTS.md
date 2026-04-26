@@ -414,7 +414,7 @@ pytest --benchmark-only
 
 4. **CGT simplification**: Uses a flat CGT rate with annual allowance, proportional cost basis reduction on disposal. Real CGT is more complex (per-disposal rules, loss offsets).
 
-5. **Pension drawdown**: Uses binary search (20 iterations in `engine_fast.py`) to find gross withdrawal that delivers target net income, accounting for 25% tax-free portion and marginal tax rates. Current tax ordering in the fast engine is salary after employee pension contributions → rental/property income → state pension → private pension drawdown. State pension tax is per person and exposed as `state_pension_tax_paid`; private pension drawdown tax is still aggregated across eligible pension holders (see root TODO P0.2).
+5. **Pension drawdown**: Uses binary search (20 iterations in `engine_fast.py`) to find gross withdrawal that delivers target net income, accounting for 25% tax-free portion and marginal tax rates. Current tax ordering in the fast engine is salary after employee pension contributions → rental/property income → state pension → private pension drawdown. State pension tax is per person and exposed as `state_pension_tax_paid`; private pension drawdown is now processed per pension owner, with each owner using their own allowance/bands and prior taxable pension drawdown in the year.
 
 6. **Historical data**: Loaded from TSV files in `data/` directory. Aligned to overlapping years between S&P 500 (1928+) and US 10Y bonds (1960+).
 

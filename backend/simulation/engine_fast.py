@@ -772,6 +772,7 @@ def _simulate_all_iterations(
 
             pension_income_net = 0.0
             pension_income_tax = 0.0
+            per_person_pension_taxable = np.zeros(n_people, dtype=np.float64)
             cgt_paid = 0.0
             cgt_allowance_remaining = cgt_annual_allowance
 
@@ -791,46 +792,49 @@ def _simulate_all_iterations(
                         break
 
                     if withdrawal_kind[w_idx] == WITHDRAW_PENSION:
-                        # Pension withdrawal
-                        # Check eligibility (any person with pension at access age)
-                        eligible_pension_balance = 0.0
-                        for pen_idx in range(n_pensions):
-                            p_idx = pension_person_idx[pen_idx]
-                            if p_idx >= 0:
-                                age = year - people_birth_years[p_idx]
-                                if age >= pension_access_age:
-                                    eligible_pension_balance += it_pension_balances[pen_idx]
+                        # Pension withdrawal: process each eligible owner's pots separately
+                        # so each person uses their own allowance and tax bands.
+                        for p_owner in range(n_people):
+                            if shortfall <= 0:
+                                break
+                            if people_is_child[p_owner] == 1:
+                                continue
+                            if year - people_birth_years[p_owner] < pension_access_age:
+                                continue
 
-                        if eligible_pension_balance > 0:
-                            # Compute other taxable income for eligible pension holders.
-                            # TODO(P0.2): split this by pension owner instead of aggregating.
-                            other_taxable = 0.0
+                            owner_pension_balance = 0.0
                             for pen_idx in range(n_pensions):
-                                pp = pension_person_idx[pen_idx]
-                                if pp >= 0 and (year - people_birth_years[pp]) >= pension_access_age:
-                                    other_taxable += max(0.0, per_person_salary[pp] - per_person_employee_pension[pp])
-                                    other_taxable += per_person_rental[pp]
-                                    other_taxable += per_person_state_pension[pp]
+                                if pension_person_idx[pen_idx] == p_owner:
+                                    owner_pension_balance += it_pension_balances[pen_idx]
+
+                            if owner_pension_balance <= 0.0:
+                                continue
+
+                            other_taxable = max(0.0, per_person_salary[p_owner] - per_person_employee_pension[p_owner])
+                            other_taxable += per_person_rental[p_owner]
+                            other_taxable += per_person_state_pension[p_owner]
+                            other_taxable += per_person_pension_taxable[p_owner]
 
                             gross, tax, net = _calculate_pension_drawdown(
-                                shortfall, other_taxable, eligible_pension_balance,
+                                shortfall, other_taxable, owner_pension_balance,
                                 personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate,
                             )
+                            if net <= 0.0 and gross <= 0.0:
+                                continue
+
                             pension_income_net += net
                             pension_income_tax += tax
+                            per_person_pension_taxable[p_owner] += gross * 0.75
                             it_asset_balances[cash_idx] += net
                             shortfall -= net
                             pension_withdrawals += gross
 
-                            # Proportionally withdraw from each eligible pension
-                            if gross > 0:
+                            # Proportionally withdraw from this owner's eligible pots only.
+                            if gross > 0.0:
                                 for pen_idx in range(n_pensions):
-                                    p_idx = pension_person_idx[pen_idx]
-                                    if p_idx >= 0:
-                                        age = year - people_birth_years[p_idx]
-                                        if age >= pension_access_age and it_pension_balances[pen_idx] > 0:
-                                            proportion = it_pension_balances[pen_idx] / eligible_pension_balance
-                                            it_pension_balances[pen_idx] -= gross * proportion
+                                    if pension_person_idx[pen_idx] == p_owner and it_pension_balances[pen_idx] > 0.0:
+                                        proportion = it_pension_balances[pen_idx] / owner_pension_balance
+                                        it_pension_balances[pen_idx] -= gross * proportion
                     elif withdrawal_kind[w_idx] == WITHDRAW_ASSET:
                         # Asset withdrawal
                         a_idx = withdrawal_idx[w_idx]
@@ -913,46 +917,47 @@ def _simulate_all_iterations(
                         break
                         
                     if withdrawal_kind[w_idx] == WITHDRAW_PENSION:
-                        # Pension withdrawal to repay debt
-                        eligible_pension_balance = 0.0
-                        for pen_idx in range(n_pensions):
-                            p_idx = pension_person_idx[pen_idx]
-                            if p_idx >= 0:
-                                age = year - people_birth_years[p_idx]
-                                if age >= pension_access_age:
-                                    eligible_pension_balance += it_pension_balances[pen_idx]
-                            
-                        if eligible_pension_balance > 0:
-                            # Compute other taxable income for eligible pension holders.
-                            # TODO(P0.2): split this by pension owner and track taxable pension
-                            # drawdown separately instead of using net drawdown here.
-                            debt_other_taxable = pension_income_net
+                        # Pension withdrawal to repay debt, processed per owner for tax.
+                        for p_owner in range(n_people):
+                            if debt_to_repay <= 0:
+                                break
+                            if people_is_child[p_owner] == 1:
+                                continue
+                            if year - people_birth_years[p_owner] < pension_access_age:
+                                continue
+
+                            owner_pension_balance = 0.0
                             for pen_idx in range(n_pensions):
-                                pp = pension_person_idx[pen_idx]
-                                if pp >= 0 and (year - people_birth_years[pp]) >= pension_access_age:
-                                    debt_other_taxable += max(0.0, per_person_salary[pp] - per_person_employee_pension[pp])
-                                    debt_other_taxable += per_person_rental[pp]
-                                    debt_other_taxable += per_person_state_pension[pp]
+                                if pension_person_idx[pen_idx] == p_owner:
+                                    owner_pension_balance += it_pension_balances[pen_idx]
+
+                            if owner_pension_balance <= 0.0:
+                                continue
+
+                            debt_other_taxable = max(0.0, per_person_salary[p_owner] - per_person_employee_pension[p_owner])
+                            debt_other_taxable += per_person_rental[p_owner]
+                            debt_other_taxable += per_person_state_pension[p_owner]
+                            debt_other_taxable += per_person_pension_taxable[p_owner]
+
                             gross, tax, net = _calculate_pension_drawdown(
-                                debt_to_repay, debt_other_taxable, eligible_pension_balance,
+                                debt_to_repay, debt_other_taxable, owner_pension_balance,
                                 personal_allowance, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate,
                             )
-                            if net > 0:
+                            if net > 0.0:
                                 # Use the net to pay down debt
                                 actual_repayment = min(net, it_debt_balance)
                                 it_debt_balance -= actual_repayment
                                 debt_to_repay -= actual_repayment
                                 pension_income_net += net
                                 pension_income_tax += tax
+                                per_person_pension_taxable[p_owner] += gross * 0.75
                                 pension_withdrawals += gross
-                                    
-                                # Proportionally withdraw from each eligible pension
-                                for pen_idx in range(n_pensions):
-                                    p_idx = pension_person_idx[pen_idx]
-                                    if p_idx >= 0:
-                                        age = year - people_birth_years[p_idx]
-                                        if age >= pension_access_age and it_pension_balances[pen_idx] > 0:
-                                            proportion = it_pension_balances[pen_idx] / eligible_pension_balance
+
+                                # Proportionally withdraw from this owner's eligible pots only.
+                                if gross > 0.0:
+                                    for pen_idx in range(n_pensions):
+                                        if pension_person_idx[pen_idx] == p_owner and it_pension_balances[pen_idx] > 0.0:
+                                            proportion = it_pension_balances[pen_idx] / owner_pension_balance
                                             it_pension_balances[pen_idx] -= gross * proportion
                     elif withdrawal_kind[w_idx] == WITHDRAW_ASSET:
                         # Asset withdrawal to repay debt

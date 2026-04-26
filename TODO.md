@@ -25,6 +25,7 @@ Recent repo changes that affect this roadmap:
 - Frontend production build now passes with `npm run build`; Vite emits only a non-blocking large-chunk warning. `frontend/TODO.md` item `4a` is complete.
 - Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (253 tests / 23 files).
 - P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, includes it in Excel export, and shows state-pension tax in the dashboard tax breakdown.
+- P0.2 backend private-pension drawdown taxation now processes eligible pension pots per owner/person in `engine_fast.py`, tracks each owner's taxable pension drawdown in-year, and includes a regression test for one-owner vs two-owner households with equal pension totals.
 - P0.3 backend validation now rejects salary employee/employer pension contribution percentages when the salary's person has no matching pension asset/pot, preventing contributions from silently disappearing.
 
 ---
@@ -47,7 +48,7 @@ Verified against current code on 2026-04-26. The repo currently models:
 Important current limitations/gaps:
 
 - State pension is now taxed per person each year in the fast engine and added to cash net of state-pension tax. Dashboard tax-breakdown visibility and Excel export are implemented; broader source-specific tax reporting remains open under P1.1/P3.3.
-- Pension drawdown tax is calculated against a household/eligible-pension aggregate instead of per individual. Frontend owner warnings have been added, but backend per-owner tax treatment remains open under P0.2.
+- Private pension drawdown tax now processes eligible pots per owner in `engine_fast.py`, using each owner's own salary/rental/state-pension income and prior taxable pension drawdown in the year. Broader source-specific pension-tax reporting remains open under P1.1/P3.3.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
 - The simulation output now separates `state_pension_tax_paid`, but still does not separately expose CGT, pension drawdown tax, rental tax, and salary income tax.
 - Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`.
@@ -89,19 +90,19 @@ Important current limitations/gaps:
 
 **Backend tasks:**
 
-- [ ] Refactor pension withdrawal to process eligible pension pots by owner/person.
-- [ ] For each pension owner, calculate `other_taxable_income` from that person only: salary after pension deduction, rental/property income allocation, state pension, and prior pension taxable income in the year.
-- [ ] Withdraw from pensions according to configured withdrawal priority while preserving per-person tax treatment.
-- [ ] Track annual pension taxable income and pension tax per person to avoid double-counting allowances.
-- [ ] Add tests for one-person vs two-person pension drawdown with equal household totals but different ownership.
+- [x] Refactor pension withdrawal to process eligible pension pots by owner/person.
+- [x] For each pension owner, calculate `other_taxable_income` from that person only: salary after pension deduction, rental/property income allocation, state pension, and prior pension taxable income in the year.
+- [x] Withdraw from pensions according to configured withdrawal priority while preserving per-person tax treatment. Current implementation processes owners in scenario order within the pension withdrawal bucket because pension pots have a shared priority.
+- [x] Track annual pension taxable income and pension tax per person to avoid double-counting allowances.
+- [x] Add tests for one-person vs two-person pension drawdown with equal household totals but different ownership.
 
 **Frontend tasks:**
 
 - [x] Show pension owner prominently in `AssetsForm` because ownership affects tax.
-- [ ] Show pension owner prominently in sell order UI because ownership affects tax.
+- [x] Show pension owner prominently in sell order UI because ownership affects tax.
 - [x] Add warnings where pension assets have no owner or default to household/default ownership.
 
-**Acceptance criteria:** Pension drawdown tax uses the pension owner’s own allowance/bands and correctly handles multi-person households.
+**Acceptance criteria:** Pension drawdown tax uses the pension owner’s own allowance/bands and correctly handles multi-person households. Implemented in the fast engine; backend tests could not be executed in this environment because `pytest` is unavailable, but syntax checks pass.
 
 ---
 
