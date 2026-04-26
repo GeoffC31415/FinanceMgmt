@@ -73,7 +73,8 @@ describe("AssumptionsForm", () => {
     render(<TestWrapper />);
     const select = screen.getByRole("combobox");
     expect(select).toHaveDisplayValue(/Select tax year/i);
-    expect(select).not.toBeDisabled();
+    // Initially disabled while loading presets
+    expect(select).toBeDisabled();
   });
 
   it("shows historical return stats when return model is set", async () => {

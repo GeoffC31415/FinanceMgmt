@@ -54,7 +54,7 @@ frontend/
 │   │   │   └── BondSweepChart.tsx
 │   │   └── config/
 │   │       ├── ScenarioConfigPage.tsx  # Scenario CRUD page
-│   │       ├── ScenarioForm.tsx        # Full scenario editor (753 lines, refactored)
+│   │       ├── ScenarioForm.tsx        # Full scenario editor (434 lines, refactored)
 │   │       ├── ScenarioFormContext.tsx # Context provider for form state
 │   │       ├── formSchema.ts           # Zod validation schema (87 lines)
 │   │       ├── inputs.tsx             # Shared input components (213 lines)
@@ -282,7 +282,7 @@ Main simulation view with 5 tabs:
 - Merges year data across scenarios for overlay charts
 - Shows summary metrics table with color-coded risk
 
-### ScenarioForm (`ScenarioForm.tsx`) — 753 lines (was 1,840)
+### ScenarioForm (`ScenarioForm.tsx`) — 434 lines (was 1,840)
 Tabbed form with Zod validation (schema in `formSchema.ts`). Refactored into:
 - `formSchema.ts` — Zod validation (87 lines, 7 tests)
 - `inputs.tsx` — shared input components (213 lines, 12 tests)
@@ -396,7 +396,7 @@ Used via `useFieldArray` from react-hook-form:
 | Bond sweep polling race condition | `useSimulation.ts` | Fixed | Stale ETA |
 | Emoji markers (🎓🏠) in charts | `ExpensesChart.tsx` | Open | Inconsistent rendering |
 | Only 5 test assertions | `Dashboard.test.tsx` | Open | Low confidence |
-| `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | **Partially fixed** (753 lines) | Hard to maintain |
+| `ScenarioForm.tsx` is 1,840 lines | `config/ScenarioForm.tsx` | **Partially fixed** (434 lines) | Hard to maintain |
 | `Dashboard.tsx` is 1,180 lines | `components/Dashboard.tsx` | **Fixed** (459 lines) | Hard to maintain |
 | No `.env.example` | root | Open | Developer onboarding gap |
 
@@ -406,7 +406,7 @@ Used via `useFieldArray` from react-hook-form:
 
 | File | Lines | Size |
 |------|-------|------|
-| `ScenarioForm.tsx` | 753 | ~23KB (was 1,840) |
+| `ScenarioForm.tsx` | 434 | ~13KB (was 1,840) |
 | `Dashboard.tsx` | 459 | ~15KB (was 1,180) |
 | `ConfigWizard.tsx` | 1,569 | ~50KB (truncated) |
 | `PropertiesForm.tsx` | 367 | ~10KB |
@@ -459,17 +459,18 @@ start_backend.bat     # Windows
 | Phase 2c | `IncomeForm.tsx` | 135 | 11 | ✅ Done + wired |
 | Phase 2d | `AssetsForm.tsx` | 202 | 12 | ✅ Done + wired |
 | Phase 2e | `ExpensesForm.tsx` | 97 | 10 | ✅ Done + wired |
+| Phase 2f | `AssumptionsForm.tsx` | 107 | 6 | ✅ Done + wired |
+| Phase 2g | `SellOrderForm.tsx` | 58 | 6 | ✅ Done + wired |
+| Phase 2h | `HousingForm.tsx` | 58 | 6 | ✅ Done + wired |
 | Phase 3a | `ScenarioFormContext.tsx` | 97 | — | ✅ Done |
 | Phase 3c | `ScenarioFormIntegration.test.tsx` | — | 18 | ✅ Done |
-| **Remaining** | Assumptions, Sell Order, Housing tabs | ~223 | — | ⏳ Not started |
 
-**Total reduction:** 1,840 → 753 lines (-1,087, 59%)
-**Total tests added:** 119 tests across 13 test files
+**Total reduction:** 1,840 → 434 lines (-1,406, 76%)
+**Total tests added:** 137 tests across 16 test files
 
 **Remaining work:**
-1. Extract Assumptions, Sell Order, and Housing tabs into separate components
-2. Wire all tabs to use `ScenarioFormContext` (eliminate prop drilling)
-3. Expand test coverage for remaining components
+1. Wire all tabs to use `ScenarioFormContext` (eliminate prop drilling)
+2. Expand test coverage for remaining components
 
 ---
 

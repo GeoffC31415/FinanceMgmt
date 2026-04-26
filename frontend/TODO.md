@@ -18,7 +18,7 @@
 
 **How:** Define proper types for the dynamic fields, or use type guards. The `AssetCreate.asset_type` is already typed as `"CASH" | "ISA" | "GIA" | "PENSION"` — the casts come from legacy data or `Record<string, unknown>` assumptions. Fix the type flow instead of casting.
 
-**Remaining:** 1 cast in `ConfigWizard.tsx` (line 299) — `assumptions: {} as any` in `create_scenario()` call.
+**Status:** ✅ Complete — the remaining `as any` in `ConfigWizard.tsx` has been replaced with a proper `Assumptions` object with sensible defaults.
 
 ---
 
@@ -175,12 +175,33 @@ Then replace the inline `adjustForInflation` + the big spread in `Dashboard.tsx`
 - Tests: 10 tests in `ExpensesForm.test.tsx`
 - Wiring: ✅ Done
 
-**Remaining tabs to extract:**
-- Assumptions (~107 lines) — tax year selector, return model, inflation, limits
-- Sell Order (~58 lines) — withdrawal order visualization
-- Housing (~58 lines) — property mortgage display
+**Remaining tabs to extract:** ✅ COMPLETE
 
-**ScenarioForm.tsx reduction:** 1,840 → **753 lines** (-1,087 lines total, 59% reduction)
+**Phase 2f (COMPLETE):**
+
+**2f. Extract AssumptionsForm** → `src/components/config/AssumptionsForm.tsx` ✅
+- TaxYearSelector with preset loading
+- ReturnModelSelector with historical stats
+- All assumption fields: inflation, ISA limit, state pension, pension age, start/end year, annual spend, debt interest, bankruptcy threshold
+- Tests: 6 tests in `AssumptionsForm.test.tsx`
+
+**Phase 2g (COMPLETE):**
+
+**2g. Extract SellOrderForm** → `src/components/config/SellOrderForm.tsx` ✅
+- Withdrawal order summary with priority-sorted items
+- Asset and property rows with owner, priority, value
+- Empty state handling
+- Tests: 6 tests in `SellOrderForm.test.tsx`
+
+**Phase 2h (COMPLETE):**
+
+**2h. Extract HousingForm** → `src/components/config/HousingForm.tsx` ✅
+- Property mortgage display with totals
+- Per-property mortgage details
+- Empty state handling
+- Tests: 6 tests in `HousingForm.test.tsx`
+
+**ScenarioForm.tsx reduction:** 1,840 → **434 lines** (-1,406 lines total, 76% reduction)
 
 #### Phase 3: Wiring (medium risk)
 
@@ -211,7 +232,7 @@ Then replace the inline `adjustForInflation` + the big spread in `Dashboard.tsx`
 | 2e (remaining) | Low | Small | Cleanup |
 | 3a-3c (wiring) | Medium | Medium | End-to-end |
 
-**Total remaining reduction:** ~1,200 lines → ScenarioForm drops to ~500 lines.
+**Total remaining reduction:** ~1,200 lines → ScenarioForm dropped to **434 lines** (76% reduction).
 
 ---
 
@@ -315,11 +336,11 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 
 ---
 
-### [ ] 15. Remove dead `run_simulation` export
+### [x] 15. Remove dead `run_simulation` export
 
 **Why:** `useSimulation.ts` exports `run()` which is never called — the app uses `init()` + `recalc()` for the session-based flow.
 
-**Where:** `frontend/src/hooks/useSimulation.ts`
+**Done:** Removed `run_simulation` import, `run()` function, and `SimulationRequest` type import from `useSimulation.ts`. Removed `run` from the return object.
 
 ---
 
@@ -347,5 +368,10 @@ Added `src/types/__tests__/Assumptions.test.ts` with 4 tests verifying the type 
 - [x] ScenarioForm Phase 2e: Extract ExpensesForm (10 tests ✅)
 - [x] ScenarioForm Phase 3a: Create ScenarioFormContext (context + provider + hook)
 - [x] ScenarioForm Phase 3c: Integration test (18 tests)
-- [x] ScenarioForm total: 1,840 → 753 lines (-1,087, 59%)
-- [x] Total tests: 119 across 13 test files
+- [x] ScenarioForm total: 1,840 → 434 lines (-1,406, 76%)
+- [x] Total tests: 137 across 16 test files
+- [x] #1 Remove remaining `as any` cast in ConfigWizard.tsx
+- [x] #15 Remove dead `run_simulation` export from useSimulation.ts
+- [x] Phase 2f: Extract AssumptionsForm (6 tests)
+- [x] Phase 2g: Extract SellOrderForm (6 tests)
+- [x] Phase 2h: Extract HousingForm (6 tests)
