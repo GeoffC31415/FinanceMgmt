@@ -67,10 +67,11 @@ function makeResult(overrides: Partial<SimulationResponse> = {}): SimulationResp
 
 describe("TaxBreakdownPanel", () => {
   it("summarizes state pension tax for the final year and peak year", () => {
-    const summary = getTaxBreakdownSummary(makeResult());
+    const result = makeResult();
+    const summary = getTaxBreakdownSummary(result, result.years.length - 1);
 
     expect(summary).toMatchObject({
-      final_year: 2027,
+      selected_year: 2027,
       total_tax: 10000,
       income_tax_bucket: 8000,
       national_insurance: 2000,
@@ -78,22 +79,59 @@ describe("TaxBreakdownPanel", () => {
       state_pension_tax_share_pct: 16,
       peak_state_pension_tax: 1800,
       peak_state_pension_tax_year: 2026,
+      salary_tax: 6000,
+      rental_tax: 1600,
+      pension_drawdown_tax: 0,
+      cgt: 0,
     });
   });
 
   it("renders the state pension tax breakdown when backend data is present", () => {
-    render(<TaxBreakdownPanel display_result={makeResult()} percentile={50} />);
+    render(
+      <TaxBreakdownPanel
+        display_result={makeResult()}
+        percentile={50}
+        selectedYearIndex={null}
+      />,
+    );
 
     expect(screen.getByText("Tax Breakdown")).toBeInTheDocument();
     expect(screen.getByText("State pension tax")).toBeInTheDocument();
-    expect(screen.getByText("£1,600")).toBeInTheDocument();
+    expect(screen.getAllByText("£1,600").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/16% of total tax; peak £1,800 in 2026/)).toBeInTheDocument();
+    expect(screen.getByText("Salary income tax")).toBeInTheDocument();
+    expect(screen.getByText("Rental income tax")).toBeInTheDocument();
+    expect(screen.getByText("Pension drawdown tax")).toBeInTheDocument();
+    expect(screen.getByText("Capital gains tax")).toBeInTheDocument();
+  });
+
+  it("returns summary for a selected year index", () => {
+    const result = makeResult();
+    const summary = getTaxBreakdownSummary(result, 0);
+
+    expect(summary).toMatchObject({
+      selected_year: 2025,
+      total_tax: 10000,
+      income_tax_bucket: 6000,
+      national_insurance: 4000,
+      state_pension_tax: 1200,
+      salary_tax: 5000,
+      rental_tax: 0,
+      pension_drawdown_tax: 0,
+      cgt: 0,
+    });
   });
 
   it("shows a compatibility message when state pension tax is missing", () => {
     const result = makeResult({ state_pension_tax_paid_median: undefined });
 
-    render(<TaxBreakdownPanel display_result={result} percentile={10} />);
+    render(
+      <TaxBreakdownPanel
+        display_result={result}
+        percentile={10}
+        selectedYearIndex={null}
+      />,
+    );
 
     expect(screen.getByText("(P10)")).toBeInTheDocument();
     expect(screen.getByText("Not returned")).toBeInTheDocument();

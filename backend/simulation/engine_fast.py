@@ -244,6 +244,8 @@ def _run_monte_carlo_fast(
         "gia_balance",
         "property_value", "property_rental_income", "property_maintenance", "property_returns",
         "state_pension_tax_paid",
+        "salary_income_tax_paid", "rental_income_tax_paid",
+        "pension_drawdown_tax_paid", "capital_gains_tax_paid",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 

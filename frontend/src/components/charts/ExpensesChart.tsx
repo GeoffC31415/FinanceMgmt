@@ -29,6 +29,7 @@ type Props = {
   children_leaving?: ChildLeavingInfo[];
   mortgage_payoff_year?: number | null;
   percentile?: number;
+  onYearSelect?: (yearIndex: number) => void;
 };
 
 // SVG icons for chart markers
@@ -89,7 +90,8 @@ export function ExpensesChart({
   retirement_years,
   children_leaving = [],
   mortgage_payoff_year = null,
-  percentile = 50
+  percentile = 50,
+  onYearSelect,
 }: Props) {
   const [useLogScale, setUseLogScale] = useState(false);
 
@@ -155,7 +157,19 @@ export function ExpensesChart({
       </div>
       <div className="h-[576px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
+          <ComposedChart
+            data={data}
+            margin={{ top: 45, right: 20, bottom: 20, left: 0 }}
+            onClick={(data) => {
+              if (!onYearSelect || !data || typeof data !== "object") return;
+              const payload = (data as any).activePayload;
+              if (payload && payload.length > 0) {
+                const clickedYear = payload[0].payload.year;
+                const idx = years.indexOf(clickedYear);
+                if (idx !== -1) onYearSelect(idx);
+              }
+            }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="year" stroke="#94a3b8" />
             <YAxis

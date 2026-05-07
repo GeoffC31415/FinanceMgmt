@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import type { SimulationResponse } from "../../types";
 import { IncomeChart } from "../charts/IncomeChart";
 import { ExpensesChart } from "../charts/ExpensesChart";
@@ -16,6 +17,11 @@ export function IncomeSpendingTab({
   mortgage_payoff_year,
   percentile,
 }: Props) {
+  const [selectedYearIndex, setSelectedYearIndex] = useState<number | null>(null);
+  const handleYearSelect = useCallback((idx: number) => {
+    setSelectedYearIndex((prev) => (prev === idx ? null : idx));
+  }, []);
+
   if (!display_result) return null;
 
   return (
@@ -45,8 +51,13 @@ export function IncomeSpendingTab({
         children_leaving={children_leaving}
         mortgage_payoff_year={mortgage_payoff_year}
         percentile={percentile}
+        onYearSelect={handleYearSelect}
       />
-      <TaxBreakdownPanel display_result={display_result} percentile={percentile} />
+      <TaxBreakdownPanel
+        display_result={display_result}
+        percentile={percentile}
+        selectedYearIndex={selectedYearIndex}
+      />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { SimulationResponse, SafeWithdrawalResponse, ScenarioRead } from "../../types";
 import { NetWorthChart } from "../charts/NetWorthChart";
 import { OverviewInsights } from "../OverviewInsights";
-import type { BondAllocations } from "./utils";
+import { format_currency_compact } from "./utils";
 import type { DashboardDerivedData } from "./useDashboardData";
 
 type Props = {
@@ -90,7 +90,7 @@ export function OverviewTab({
           <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
             <div className="text-xs font-medium text-slate-400 mb-1">Peak Net Worth</div>
             <div className="text-3xl font-bold text-cyan-400">
-              {overview_metrics.peak_value >= 0 ? `£${Math.round(overview_metrics.peak_value).toLocaleString()}` : "---"}
+              {overview_metrics.peak_value >= 0 ? format_currency_compact(overview_metrics.peak_value) : "---"}
             </div>
             <div className="mt-1 text-xs text-slate-500">
               in {overview_metrics.peak_year} (median)
@@ -105,12 +105,12 @@ export function OverviewTab({
             <div className={`text-3xl font-bold ${
               overview_metrics.final_net_worth_median >= 0 ? "text-slate-100" : "text-rose-400"
             }`}>
-              £{Math.round(overview_metrics.final_net_worth_median).toLocaleString()}
+              {format_currency_compact(overview_metrics.final_net_worth_median)}
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              P10: £{Math.round(overview_metrics.final_net_worth_p10).toLocaleString()}
+              P10: {format_currency_compact(overview_metrics.final_net_worth_p10)}
               {" / "}
-              P90: £{Math.round(overview_metrics.final_net_worth_p90).toLocaleString()}
+              P90: {format_currency_compact(overview_metrics.final_net_worth_p90)}
             </div>
           </div>
         </div>
