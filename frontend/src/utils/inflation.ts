@@ -29,6 +29,8 @@ export function applyInflationAdjustment(
 ): SimulationResponse {
   const adjust = (arr: number[]) =>
     arr?.length ? adjustForInflation(arr, result.years, inflationRate, startYear) : (arr ?? []);
+  const adjustOptional = (arr: number[] | undefined) =>
+    arr?.length ? adjustForInflation(arr, result.years, inflationRate, startYear) : arr;
 
   return {
     ...result,
@@ -59,6 +61,15 @@ export function applyInflationAdjustment(
     rental_income_tax_paid_median: adjust(result.rental_income_tax_paid_median),
     pension_drawdown_tax_paid_median: adjust(result.pension_drawdown_tax_paid_median),
     capital_gains_tax_paid_median: adjust(result.capital_gains_tax_paid_median),
+    salary_income_tax_personal_allowance_used_median: adjustOptional(result.salary_income_tax_personal_allowance_used_median),
+    salary_income_tax_personal_allowance_lost_median: adjustOptional(result.salary_income_tax_personal_allowance_lost_median),
+    salary_income_tax_basic_band_amount_median: adjustOptional(result.salary_income_tax_basic_band_amount_median),
+    salary_income_tax_basic_band_tax_median: adjustOptional(result.salary_income_tax_basic_band_tax_median),
+    salary_income_tax_higher_band_amount_median: adjustOptional(result.salary_income_tax_higher_band_amount_median),
+    salary_income_tax_higher_band_tax_median: adjustOptional(result.salary_income_tax_higher_band_tax_median),
+    salary_income_tax_additional_band_amount_median: adjustOptional(result.salary_income_tax_additional_band_amount_median),
+    salary_income_tax_additional_band_tax_median: adjustOptional(result.salary_income_tax_additional_band_tax_median),
+    salary_income_tax_allowance_taper_tax_median: adjustOptional(result.salary_income_tax_allowance_taper_tax_median),
     isa_balance_median: adjust(result.isa_balance_median),
     pension_balance_median: adjust(result.pension_balance_median),
     cash_balance_median: adjust(result.cash_balance_median),

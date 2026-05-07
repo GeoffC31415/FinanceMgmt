@@ -10,7 +10,7 @@
 >
 > Disclaimer: this app is a planning tool, not tax advice. Add clear UX copy wherever more realistic tax modelling is introduced.
 >
-> Last updated: 2026-04-26. Frontend copy/warnings for pension/state-pension tax assumptions have been partially implemented; core backend tax correctness items remain open unless noted below.
+> Last updated: 2026-05-07. Salary income tax now includes a per-band breakdown with personal allowance taper exposed separately in backend/API/frontend.
 
 ---
 
@@ -21,9 +21,9 @@ Recent repo changes that affect this roadmap:
 - Frontend UX/onboarding has moved forward: `/intro`, reusable `Button`/`Card`, starter/sample scenarios, and a refreshed app shell are implemented. Track remaining UX work in `frontend/TODO.md`.
 - Allocation projection now shows selected-percentile peak net worth, final net worth, and bankruptcy risk; bond override now preserves current extra spend, retirement-age offset, and percentile.
 - Risk Analysis safe-withdrawal no longer silently shows `---` on backend failure; frontend surfaces the error and backend `/safe-withdrawal` has the missing `numpy` import fixed.
-- Frontend tests: `npm test -- --run` passes with 253 tests across 23 files.
+- Frontend tests: `npm test -- --run` passes with 254 tests across 23 files.
 - Frontend production build now passes with `npm run build`; Vite emits only a non-blocking large-chunk warning. `frontend/TODO.md` item `4a` is complete.
-- Backend tests were not run in this environment because `pytest`/runtime dependencies are unavailable; backend syntax checks for recently touched files passed via `python3 -m py_compile`. Frontend tests pass with `npm test -- --run` (253 tests / 23 files).
+- Backend tests pass with `cd backend && ../.venv/bin/pytest -q` (174 tests). Frontend tests pass with `cd frontend && npm test -- --run` (254 tests / 23 files); frontend production build passes with the existing non-blocking large-chunk warning.
 - P0.1 backend state-pension taxation is implemented in `engine_fast.py`: state pension is accumulated per person, taxed after salary/rental income, added to cash net of tax, included in `income_tax_paid`, and exposed as `state_pension_tax_paid` / `state_pension_tax_paid_median`. Frontend `SimulationResponse` now carries the optional field, inflation-adjusts it when present, includes it in Excel export, and shows state-pension tax in the dashboard tax breakdown.
 - P0.2 backend private-pension drawdown taxation now processes eligible pension pots per owner/person in `engine_fast.py`, tracks each owner's taxable pension drawdown in-year, and includes a regression test for one-owner vs two-owner households with equal pension totals.
 - P0.3 backend validation now rejects salary employee/employer pension contribution percentages when the salary's person has no matching pension asset/pot, preventing contributions from silently disappearing.
@@ -50,7 +50,7 @@ Important current limitations/gaps:
 - State pension is now taxed per person each year in the fast engine and added to cash net of state-pension tax. Dashboard tax-breakdown visibility and Excel export are implemented; broader source-specific tax reporting remains open under P1.1/P3.3.
 - Private pension drawdown tax now processes eligible pots per owner in `engine_fast.py`, using each owner's own salary/rental/state-pension income and prior taxable pension drawdown in the year. Broader source-specific pension-tax reporting remains open under P1.1/P3.3.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
-- The simulation output now separates `state_pension_tax_paid`, but still does not separately expose CGT, pension drawdown tax, rental tax, and salary income tax.
+- The simulation output separates salary, rental, state-pension, pension-drawdown, CGT, NI, and total tax. Salary income tax also exposes personal allowance used/lost, basic/higher/additional band amounts and taxes, and a separate allowance-taper tax line.
 - Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`. `fast_tax.py` now mirrors personal-allowance tapering and has parity tests for income tax and pension drawdown, but broader consolidation remains open.
 - The selected tax year is applied statically across the whole simulation horizon.
 
@@ -136,7 +136,7 @@ Important current limitations/gaps:
 - `backend/simulation/tax/fast_tax.py`
 - internal JIT helpers in `backend/simulation/engine_fast.py`
 
-`fast_tax.py` does not currently mirror personal allowance tapering while `income_tax.py` and `engine_fast.py` do. Even if some code paths are unused, this creates regression risk.
+`fast_tax.py`, `income_tax.py`, and `engine_fast.py` now mirror personal allowance tapering, but tax logic is still duplicated across modules. Keep parity tests broad so future band/taper changes do not diverge.
 
 **Backend tasks:**
 
@@ -188,8 +188,8 @@ Important current limitations/gaps:
 
 - [x] Add TypeScript types for new fields.
 - [ ] Add a stacked tax chart: Income Tax, NI, CGT, Pension Drawdown Tax.
-- [ ] Add tax columns to Excel export.
-- [ ] Add tooltips explaining each tax bucket.
+- [x] Add tax columns to Excel export.
+- [x] Add tooltips/explanatory copy explaining each tax bucket in the dashboard tax breakdown.
 
 **Acceptance criteria:** Backend now exposes per-source tax fields; frontend types and Excel export updated. Frontend charts/export to follow.
 
@@ -198,8 +198,12 @@ Important current limitations/gaps:
 - [x] Engine loop now writes individual tax fields alongside the legacy bundled `income_tax_paid`
 - [x] Added `salary_income_tax_paid_median`, `rental_income_tax_paid_median`, `pension_drawdown_tax_paid_median`, `capital_gains_tax_paid_median` to `SimulationResponse` schema
 - [x] Updated `ResponseFormatter` to expose new fields
+- [x] Added salary income tax per-band fields: personal allowance used/lost, basic/higher/additional band amounts/taxes, and allowance taper tax.
+- [x] Added backend tax-unit coverage for salary tax breakdown reconciliation with personal allowance taper.
+- [x] Added dashboard UI rendering salary income tax by band with taper shown as a separate row.
+- [x] Added salary tax band/taper fields to the Excel Tax sheet.
 - [x] Updated CSV export columns
-- [x] Updated frontend TypeScript types and all test mocks (253 tests pass)
+- [x] Updated frontend TypeScript types and all test mocks (254 tests pass)
 
 ---
 
@@ -538,7 +542,7 @@ Important current limitations/gaps:
 - [ ] Add tests for advanced tax settings validation.
 - [ ] Add tests that tax-year preset selection displays all relevant thresholds/rates.
 - [ ] Add tests for stale/misleading tax copy.
-- [ ] Add chart tests for tax breakdown rendering once fields are added.
+- [x] Add dashboard tests for tax breakdown rendering once fields are added. Remaining: dedicated stacked tax chart tests if/when that chart is added.
 - [ ] Add API contract/type tests for new tax fields.
 
 ### End-to-end/manual scenarios

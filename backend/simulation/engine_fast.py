@@ -74,8 +74,17 @@ F_SALARY_INCOME_TAX_PAID = 43
 F_RENTAL_INCOME_TAX_PAID = 44
 F_PENSION_DRAWDOWN_TAX_PAID = 45
 F_CAPITAL_GAINS_TAX_PAID = 46
+F_SALARY_TAX_PERSONAL_ALLOWANCE_USED = 47
+F_SALARY_TAX_PERSONAL_ALLOWANCE_LOST = 48
+F_SALARY_TAX_BASIC_BAND_AMOUNT = 49
+F_SALARY_TAX_BASIC_BAND_TAX = 50
+F_SALARY_TAX_HIGHER_BAND_AMOUNT = 51
+F_SALARY_TAX_HIGHER_BAND_TAX = 52
+F_SALARY_TAX_ADDITIONAL_BAND_AMOUNT = 53
+F_SALARY_TAX_ADDITIONAL_BAND_TAX = 54
+F_SALARY_TAX_ALLOWANCE_TAPER_TAX = 55
 
-N_FIELDS = 47
+N_FIELDS = 56
 
 # Asset type codes
 ASSET_CASH = 0
@@ -246,6 +255,11 @@ def _run_monte_carlo_fast(
         "state_pension_tax_paid",
         "salary_income_tax_paid", "rental_income_tax_paid",
         "pension_drawdown_tax_paid", "capital_gains_tax_paid",
+        "salary_income_tax_personal_allowance_used", "salary_income_tax_personal_allowance_lost",
+        "salary_income_tax_basic_band_amount", "salary_income_tax_basic_band_tax",
+        "salary_income_tax_higher_band_amount", "salary_income_tax_higher_band_tax",
+        "salary_income_tax_additional_band_amount", "salary_income_tax_additional_band_tax",
+        "salary_income_tax_allowance_taper_tax",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -289,6 +303,58 @@ def _calculate_income_tax(
 
     tax += remaining * ar
     return tax
+
+@njit(cache=True)
+def _calculate_income_tax_breakdown(
+    taxable_income: float,
+    pa: float, brl: float, hrl: float,
+    br: float, hr: float, ar: float,
+) -> tuple:
+    """Return salary income tax split by bands plus explicit PA taper tax.
+
+    Band amounts/taxes are calculated with the full personal allowance. The
+    extra tax caused by personal allowance tapering is returned separately so
+    high-income effective marginal rates are visible and totals reconcile with
+    _calculate_income_tax().
+    """
+    if taxable_income <= 0.0:
+        return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+    effective_pa = pa
+    if taxable_income > 100_000.0:
+        reduction = min(pa, (taxable_income - 100_000.0) / 2.0)
+        effective_pa = max(0.0, pa - reduction)
+
+    pa_used = min(taxable_income, effective_pa)
+    pa_lost = max(0.0, pa - effective_pa)
+
+    remaining_without_taper = max(0.0, taxable_income - pa)
+
+    basic_band = max(0.0, brl - pa)
+    basic_amount = min(remaining_without_taper, basic_band)
+    remaining_without_taper -= basic_amount
+    basic_tax = basic_amount * br
+
+    higher_band = max(0.0, hrl - brl)
+    higher_amount = min(remaining_without_taper, higher_band)
+    remaining_without_taper -= higher_amount
+    higher_tax = higher_amount * hr
+
+    additional_amount = max(0.0, remaining_without_taper)
+    additional_tax = additional_amount * ar
+
+    total_tax = _calculate_income_tax(taxable_income, pa, brl, hrl, br, hr, ar)
+    tax_without_taper = basic_tax + higher_tax + additional_tax
+    taper_tax = max(0.0, total_tax - tax_without_taper)
+
+    return (
+        pa_used, pa_lost,
+        basic_amount, basic_tax,
+        higher_amount, higher_tax,
+        additional_amount, additional_tax,
+        taper_tax, total_tax,
+    )
+
 
 @njit(cache=True)
 def _calculate_ni(
@@ -694,6 +760,15 @@ def _simulate_all_iterations(
             ni_paid = 0.0
             rental_income_tax = 0.0
             state_pension_tax = 0.0
+            salary_tax_pa_used = 0.0
+            salary_tax_pa_lost = 0.0
+            salary_tax_basic_amount = 0.0
+            salary_tax_basic_tax = 0.0
+            salary_tax_higher_amount = 0.0
+            salary_tax_higher_tax = 0.0
+            salary_tax_additional_amount = 0.0
+            salary_tax_additional_tax = 0.0
+            salary_tax_taper_tax = 0.0
             for p in range(n_people):
                 if people_is_child[p] == 1:
                     continue
@@ -704,10 +779,26 @@ def _simulate_all_iterations(
 
                 # Income tax on salary (net of pension contributions)
                 p_taxable_salary = max(0.0, p_salary - p_emp_pension)
-                income_tax += _calculate_income_tax(
+                (
+                    p_pa_used, p_pa_lost,
+                    p_basic_amount, p_basic_tax,
+                    p_higher_amount, p_higher_tax,
+                    p_additional_amount, p_additional_tax,
+                    p_taper_tax, p_income_tax,
+                ) = _calculate_income_tax_breakdown(
                     p_taxable_salary, personal_allowance, basic_rate_limit,
                     higher_rate_limit, basic_rate, higher_rate, additional_rate,
                 )
+                income_tax += p_income_tax
+                salary_tax_pa_used += p_pa_used
+                salary_tax_pa_lost += p_pa_lost
+                salary_tax_basic_amount += p_basic_amount
+                salary_tax_basic_tax += p_basic_tax
+                salary_tax_higher_amount += p_higher_amount
+                salary_tax_higher_tax += p_higher_tax
+                salary_tax_additional_amount += p_additional_amount
+                salary_tax_additional_tax += p_additional_tax
+                salary_tax_taper_tax += p_taper_tax
                 # NI on gross salary (per person)
                 ni_paid += _calculate_ni(
                     p_salary, ni_primary_threshold, ni_upper_earnings_limit,
@@ -1206,6 +1297,15 @@ def _simulate_all_iterations(
             out[it, y_idx, F_RENTAL_INCOME_TAX_PAID] = rental_income_tax
             out[it, y_idx, F_PENSION_DRAWDOWN_TAX_PAID] = pension_income_tax
             out[it, y_idx, F_CAPITAL_GAINS_TAX_PAID] = cgt_paid
+            out[it, y_idx, F_SALARY_TAX_PERSONAL_ALLOWANCE_USED] = salary_tax_pa_used
+            out[it, y_idx, F_SALARY_TAX_PERSONAL_ALLOWANCE_LOST] = salary_tax_pa_lost
+            out[it, y_idx, F_SALARY_TAX_BASIC_BAND_AMOUNT] = salary_tax_basic_amount
+            out[it, y_idx, F_SALARY_TAX_BASIC_BAND_TAX] = salary_tax_basic_tax
+            out[it, y_idx, F_SALARY_TAX_HIGHER_BAND_AMOUNT] = salary_tax_higher_amount
+            out[it, y_idx, F_SALARY_TAX_HIGHER_BAND_TAX] = salary_tax_higher_tax
+            out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_AMOUNT] = salary_tax_additional_amount
+            out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_TAX] = salary_tax_additional_tax
+            out[it, y_idx, F_SALARY_TAX_ALLOWANCE_TAPER_TAX] = salary_tax_taper_tax
 
     return out
 

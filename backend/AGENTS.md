@@ -173,7 +173,7 @@ ResponseFormatter.format() → dict
 SimulationResponse (Pydantic)
 ```
 
-The fast engine uses **43 output fields** stored as `float64` arrays. Boolean metrics use 0.0/1.0 for fast averaging.
+The fast engine uses **56 output fields** stored as `float64` arrays. Boolean metrics use 0.0/1.0 for fast averaging.
 
 ---
 
@@ -227,7 +227,7 @@ Each has:
 
 ## 6. Output Field Reference
 
-The fast engine produces 43 fields per (iteration, year):
+The fast engine produces 56 fields per (iteration, year):
 
 | Index | Field | Type | Notes |
 |-------|-------|------|-------|
@@ -268,6 +268,19 @@ The fast engine produces 43 fields per (iteration, year):
 | 40 | property_maintenance | float64 | |
 | 41 | property_returns | float64 | |
 | 42 | state_pension_tax_paid | float64 | Income tax attributable to state pension after salary/rental income |
+| 43 | salary_income_tax_paid | float64 | Salary income tax, excluding NI |
+| 44 | rental_income_tax_paid | float64 | Marginal tax attributable to rental/property income |
+| 45 | pension_drawdown_tax_paid | float64 | Income tax attributable to private pension drawdown |
+| 46 | capital_gains_tax_paid | float64 | CGT on taxable disposals |
+| 47 | salary_income_tax_personal_allowance_used | float64 | Salary tax-free personal allowance used after taper |
+| 48 | salary_income_tax_personal_allowance_lost | float64 | Personal allowance lost due to salary income taper |
+| 49 | salary_income_tax_basic_band_amount | float64 | Salary amount in the basic-rate band before taper adjustment |
+| 50 | salary_income_tax_basic_band_tax | float64 | Salary tax at basic rate |
+| 51 | salary_income_tax_higher_band_amount | float64 | Salary amount in the higher-rate band before taper adjustment |
+| 52 | salary_income_tax_higher_band_tax | float64 | Salary tax at higher rate |
+| 53 | salary_income_tax_additional_band_amount | float64 | Salary amount in the additional-rate band before taper adjustment |
+| 54 | salary_income_tax_additional_band_tax | float64 | Salary tax at additional rate |
+| 55 | salary_income_tax_allowance_taper_tax | float64 | Extra salary tax from personal allowance taper, shown separately so high-income effective rates reconcile |
 
 ---
 

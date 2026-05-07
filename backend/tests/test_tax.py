@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.simulation.tax.income_tax import IncomeTaxBands, calculate_income_tax
+from backend.simulation.tax.income_tax import IncomeTaxBands, calculate_income_tax, calculate_income_tax_breakdown
 from backend.simulation.tax.national_insurance import NationalInsuranceBands, calculate_ni_class1
 from backend.simulation.tax.calculator import TaxBreakdown, TaxCalculator
 from backend.simulation.tax.pension_relief import apply_pension_contribution_relief, pension_tax_free_lump_sum
@@ -110,6 +110,27 @@ class TestIncomeTax:
         marginal = (tax_110k - tax_100k) / 10_000.0
         # Should be ~60% (40% higher rate + 20% from losing PA at 50p/£1)
         assert marginal == pytest.approx(0.60, abs=0.01)
+
+    def test_breakdown_exposes_allowance_taper(self):
+        """The breakdown should reconcile while showing PA taper separately."""
+        breakdown = calculate_income_tax_breakdown(taxable_income=110_000.0, bands=self.bands)
+
+        assert breakdown.personal_allowance_used == pytest.approx(7_570.0)
+        assert breakdown.personal_allowance_lost == pytest.approx(5_000.0)
+        assert breakdown.basic_band_amount == pytest.approx(37_700.0)
+        assert breakdown.basic_band_tax == pytest.approx(7_540.0)
+        assert breakdown.higher_band_amount == pytest.approx(59_730.0)
+        assert breakdown.higher_band_tax == pytest.approx(23_892.0)
+        assert breakdown.additional_band_amount == pytest.approx(0.0)
+        assert breakdown.additional_band_tax == pytest.approx(0.0)
+        assert breakdown.allowance_taper_tax == pytest.approx(2_000.0)
+        assert breakdown.total_tax == pytest.approx(calculate_income_tax(taxable_income=110_000.0, bands=self.bands))
+        assert (
+            breakdown.basic_band_tax
+            + breakdown.higher_band_tax
+            + breakdown.additional_band_tax
+            + breakdown.allowance_taper_tax
+        ) == pytest.approx(breakdown.total_tax)
 
     def test_no_tapering_below_100k(self):
         """Below 100k, PA should not be tapered."""

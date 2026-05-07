@@ -61,6 +61,15 @@ class SimulationResponse(BaseModel):
     rental_income_tax_paid_median: list[float] = Field(description="Median income tax attributable to rental income per year")
     pension_drawdown_tax_paid_median: list[float] = Field(description="Median income tax attributable to private pension drawdown per year")
     capital_gains_tax_paid_median: list[float] = Field(description="Median capital gains tax paid per year")
+    salary_income_tax_personal_allowance_used_median: list[float] = Field(description="Median salary tax-free personal allowance used per year")
+    salary_income_tax_personal_allowance_lost_median: list[float] = Field(description="Median personal allowance lost to salary income taper per year")
+    salary_income_tax_basic_band_amount_median: list[float] = Field(description="Median salary income amount taxed in the basic-rate band per year")
+    salary_income_tax_basic_band_tax_median: list[float] = Field(description="Median salary income tax paid at the basic rate per year")
+    salary_income_tax_higher_band_amount_median: list[float] = Field(description="Median salary income amount taxed in the higher-rate band per year")
+    salary_income_tax_higher_band_tax_median: list[float] = Field(description="Median salary income tax paid at the higher rate per year")
+    salary_income_tax_additional_band_amount_median: list[float] = Field(description="Median salary income amount taxed in the additional-rate band per year")
+    salary_income_tax_additional_band_tax_median: list[float] = Field(description="Median salary income tax paid at the additional rate per year")
+    salary_income_tax_allowance_taper_tax_median: list[float] = Field(description="Median extra salary income tax caused by personal allowance taper per year")
     
     # Assets
     isa_balance_median: list[float] = Field(description="Median ISA balance per year")

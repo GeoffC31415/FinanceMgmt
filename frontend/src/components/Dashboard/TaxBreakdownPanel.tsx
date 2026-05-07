@@ -1,10 +1,22 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { SimulationResponse } from "../../types";
 
 type Props = {
   display_result: SimulationResponse;
   percentile: number;
   selectedYearIndex: number | null;
+};
+
+export type SalaryTaxBandBreakdown = {
+  personal_allowance_used: number;
+  personal_allowance_lost: number;
+  basic_band_amount: number;
+  basic_band_tax: number;
+  higher_band_amount: number;
+  higher_band_tax: number;
+  additional_band_amount: number;
+  additional_band_tax: number;
+  allowance_taper_tax: number;
 };
 
 export type TaxBreakdownSummary = {
@@ -20,6 +32,7 @@ export type TaxBreakdownSummary = {
   rental_tax: number;
   pension_drawdown_tax: number;
   cgt: number;
+  salary_band_breakdown: SalaryTaxBandBreakdown | null;
 };
 
 const sanitize = (value: number | undefined | null): number => {
@@ -41,6 +54,20 @@ export function getTaxBreakdownSummary(
   const pension_drawdown_tax = sanitize(result.pension_drawdown_tax_paid_median[yearIndex]);
   const cgt = sanitize(result.capital_gains_tax_paid_median[yearIndex]);
   const state_pension_tax_series = result.state_pension_tax_paid_median;
+  const has_salary_band_breakdown = Boolean(result.salary_income_tax_basic_band_tax_median?.length);
+  const salary_band_breakdown: SalaryTaxBandBreakdown | null = has_salary_band_breakdown
+    ? {
+        personal_allowance_used: sanitize(result.salary_income_tax_personal_allowance_used_median?.[yearIndex]),
+        personal_allowance_lost: sanitize(result.salary_income_tax_personal_allowance_lost_median?.[yearIndex]),
+        basic_band_amount: sanitize(result.salary_income_tax_basic_band_amount_median?.[yearIndex]),
+        basic_band_tax: sanitize(result.salary_income_tax_basic_band_tax_median?.[yearIndex]),
+        higher_band_amount: sanitize(result.salary_income_tax_higher_band_amount_median?.[yearIndex]),
+        higher_band_tax: sanitize(result.salary_income_tax_higher_band_tax_median?.[yearIndex]),
+        additional_band_amount: sanitize(result.salary_income_tax_additional_band_amount_median?.[yearIndex]),
+        additional_band_tax: sanitize(result.salary_income_tax_additional_band_tax_median?.[yearIndex]),
+        allowance_taper_tax: sanitize(result.salary_income_tax_allowance_taper_tax_median?.[yearIndex]),
+      }
+    : null;
 
   let state_pension_tax: number | null = null;
   let state_pension_tax_share_pct: number | null = null;
@@ -75,6 +102,7 @@ export function getTaxBreakdownSummary(
     rental_tax,
     pension_drawdown_tax,
     cgt,
+    salary_band_breakdown,
   };
 }
 
@@ -119,6 +147,7 @@ function TaxLineItem({
   tone,
   totalTax,
   muted = false,
+  children,
 }: {
   label: string;
   value: number | null;
@@ -126,6 +155,7 @@ function TaxLineItem({
   tone: "slate" | "cyan" | "amber" | "rose";
   totalTax: number;
   muted?: boolean;
+  children?: ReactNode;
 }) {
   const displayValue = value ?? 0;
   const width = totalTax > 0 && value !== null ? Math.min((displayValue / totalTax) * 100, 100) : 0;
@@ -170,6 +200,72 @@ function TaxLineItem({
       </div>
       <div className={`mt-3 h-2 overflow-hidden rounded-full ${toneClasses[tone].rail}`}>
         <div className={`h-full rounded-full ${toneClasses[tone].bar}`} style={{ width: `${width}%` }} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SalaryTaxBandBreakdownTable({ breakdown }: { breakdown: SalaryTaxBandBreakdown }) {
+  const rateLabel = (tax: number, amount: number) => (amount > 0 ? formatPercent((tax / amount) * 100) : "—");
+  const rows = [
+    {
+      label: "Personal allowance used",
+      amount: breakdown.personal_allowance_used,
+      rate: "0%",
+      tax: 0,
+      detail: "Tax-free salary allowance remaining after taper",
+    },
+    {
+      label: "Basic rate band",
+      amount: breakdown.basic_band_amount,
+      rate: rateLabel(breakdown.basic_band_tax, breakdown.basic_band_amount),
+      tax: breakdown.basic_band_tax,
+      detail: "Salary income taxed at the basic rate",
+    },
+    {
+      label: "Higher rate band",
+      amount: breakdown.higher_band_amount,
+      rate: rateLabel(breakdown.higher_band_tax, breakdown.higher_band_amount),
+      tax: breakdown.higher_band_tax,
+      detail: "Salary income taxed at the higher rate",
+    },
+    {
+      label: "Additional rate band",
+      amount: breakdown.additional_band_amount,
+      rate: rateLabel(breakdown.additional_band_tax, breakdown.additional_band_amount),
+      tax: breakdown.additional_band_tax,
+      detail: "Salary income taxed at the additional rate",
+    },
+    {
+      label: "Personal allowance taper",
+      amount: breakdown.personal_allowance_lost,
+      rate: "lost PA",
+      tax: breakdown.allowance_taper_tax,
+      detail: "Extra tax caused by losing £1 of allowance for each £2 above £100k",
+      emphasize: breakdown.allowance_taper_tax > 0,
+    },
+  ];
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
+      <div className="border-b border-slate-800 px-3 py-2 text-xs font-semibold text-slate-300">
+        Salary income tax by band, with allowance taper shown separately
+      </div>
+      <div className="divide-y divide-slate-800/80">
+        {rows.map((row) => (
+          <div key={row.label} className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 text-xs sm:grid-cols-[1fr_auto_auto_auto]">
+            <div>
+              <div className={row.emphasize ? "font-semibold text-amber-200" : "font-medium text-slate-200"}>{row.label}</div>
+              <div className="mt-0.5 text-slate-500">{row.detail}</div>
+            </div>
+            <div className="text-right text-slate-300">{formatCurrency(row.amount)}</div>
+            <div className="hidden min-w-16 text-right text-slate-500 sm:block">{row.rate}</div>
+            <div className={row.emphasize ? "min-w-20 text-right font-semibold text-amber-200" : "min-w-20 text-right text-slate-100"}>
+              {formatCurrency(row.tax)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -234,7 +330,15 @@ export function TaxBreakdownPanel({
               detail="Income tax charged on employment income, excluding NI"
               tone="rose"
               totalTax={summary.total_tax}
-            />
+            >
+              {summary.salary_band_breakdown ? (
+                <SalaryTaxBandBreakdownTable breakdown={summary.salary_band_breakdown} />
+              ) : (
+                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-500">
+                  Run against a newer backend to see salary tax by band and personal allowance taper.
+                </div>
+              )}
+            </TaxLineItem>
             <TaxLineItem
               label="Rental income tax"
               value={summary.rental_tax}
