@@ -20,5 +20,8 @@ class AssetAccount:
     # Fraction of this asset allocated to bonds (0.0 = 100% equity, 1.0 = 100% bonds).
     bond_allocation: float = 0.0
 
+    # Owner key used for owner-specific tax modelling (not required for ISA/CASH).
+    person_key: str | None = None
+
     # For simplified GIA CGT modelling: treat this as remaining cost basis.
     cost_basis: float = 0.0

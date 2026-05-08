@@ -25,6 +25,7 @@ from backend.simulation.tax.withdrawals import (
     GiaWithdrawalResult,
 )
 from backend.simulation.tax.fast_tax import calculate_income_tax_fast, calculate_pension_drawdown_fast
+from backend.simulation.engine_fast import _apply_cgt_tax
 
 
 # ────────────────────────────── Income Tax ──────────────────────────────
@@ -454,7 +455,7 @@ class TestGiaWithdrawal:
             balance=10_000.0,
             cost_basis=10_000.0,
             cgt_allowance_remaining=3_000.0,
-            cgt_rate=0.10,
+            remaining_basic_rate_band=100_000.0,
         )
         assert result.gross_withdrawal == 5_000.0
         assert result.gains_realized == 0.0
@@ -468,7 +469,7 @@ class TestGiaWithdrawal:
             balance=20_000.0,
             cost_basis=10_000.0,  # 50% gain ratio
             cgt_allowance_remaining=3_000.0,
-            cgt_rate=0.10,
+            remaining_basic_rate_band=100_000.0,
         )
         # gains_realized = 5000 * (10000/20000) = 2500
         assert result.gains_realized == pytest.approx(2_500.0, abs=1.0)
@@ -481,7 +482,7 @@ class TestGiaWithdrawal:
             balance=20_000.0,
             cost_basis=10_000.0,  # 50% gain ratio
             cgt_allowance_remaining=3_000.0,
-            cgt_rate=0.10,
+            remaining_basic_rate_band=100_000.0,
         )
         # gains = 10000 * 0.5 = 5000
         assert result.gains_realized == pytest.approx(5_000.0, abs=1.0)
@@ -497,7 +498,7 @@ class TestGiaWithdrawal:
             balance=0.0,
             cost_basis=0.0,
             cgt_allowance_remaining=3_000.0,
-            cgt_rate=0.10,
+            remaining_basic_rate_band=100_000.0,
         )
         assert result.gross_withdrawal == 0.0
 
@@ -507,6 +508,215 @@ class TestGiaWithdrawal:
             balance=20_000.0,
             cost_basis=15_000.0,
             cgt_allowance_remaining=3_000.0,
-            cgt_rate=0.10,
+            remaining_basic_rate_band=100_000.0,
         )
         assert result.gross_withdrawal == 20_000.0
+
+    def test_income_dependent_cgt_rates(self):
+        """CGT rates depend on remaining basic rate band: 10%/20%."""
+        result = calculate_gia_withdrawal(
+            requested=10_000.0,
+            balance=20_000.0,
+            cost_basis=10_000.0,
+            cgt_allowance_remaining=3_000.0,
+            remaining_basic_rate_band=20_000.0,
+        )
+        assert result.gains_realized == pytest.approx(5_000.0, abs=1.0)
+        assert result.tax_paid == pytest.approx(200.0, abs=1.0)
+
+    def test_income_dependent_cgt_split_band(self):
+        """Gains spanning both bands: 10% on lower, 20% on higher."""
+        result = calculate_gia_withdrawal(
+            requested=10_000.0,
+            balance=20_000.0,
+            cost_basis=10_000.0,
+            cgt_allowance_remaining=3_000.0,
+            remaining_basic_rate_band=2_000.0,
+        )
+        assert result.gains_realized == pytest.approx(5_000.0, abs=1.0)
+        assert result.tax_paid == pytest.approx(200.0, abs=1.0)
+
+
+# ────────────────────────────── _apply_cgt_tax (Numba engine) ──────────────────────────────
+
+
+class TestApplyCgtTax:
+    """Direct tests for the Numba _apply_cgt_tax function used by the fast engine.
+
+    Validates the function actually used during simulation (not just the standalone
+    withdrawals.py version) and cross-checks it against the standalone calculator.
+    """
+
+    def test_no_gains_no_tax(self):
+        """When cost basis equals balance, no gains, no tax."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=10_000.0,
+            cost_basis=10_000.0,
+            gross=5_000.0,
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        assert tax == pytest.approx(0.0, abs=0.01)
+        assert allowance_used == pytest.approx(0.0, abs=0.01)
+        assert allowance_remaining == pytest.approx(3_000.0, abs=0.01)
+        # basis_reduction = 10000 * (5000/10000) = 5000
+        assert basis_reduction == pytest.approx(5_000.0, abs=0.01)
+
+    def test_gains_within_allowance_no_tax(self):
+        """Gains within CGT allowance pay no tax."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,  # 50% gains ratio
+            gross=5_000.0,       # gains_realized = 5000 * 0.5 = 2500
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        assert tax == pytest.approx(0.0, abs=0.01)
+        assert allowance_used == pytest.approx(2_500.0, abs=0.01)
+        assert allowance_remaining == pytest.approx(500.0, abs=0.01)
+
+    def test_gains_exceed_allowance_basic_rate(self):
+        """Gains exceeding allowance taxed at 10% (basic rate CGT)."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,  # 50% gains ratio
+            gross=10_000.0,       # gains_realized = 10000 * 0.5 = 5000
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        # taxable = 5000 - 3000 = 2000, all in basic band
+        assert tax == pytest.approx(200.0, abs=0.01)  # 2000 * 0.10
+        assert allowance_used == pytest.approx(3_000.0, abs=0.01)
+        assert allowance_remaining == pytest.approx(0.0, abs=0.01)
+
+    def test_gains_split_across_bands(self):
+        """Gains spanning both basic and higher CGT bands."""
+        tax, allowance_used, allowance_remaining, _ = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,  # 50% gains ratio
+            gross=10_000.0,       # gains_realized = 5000
+            remaining_basic_rate_band=2_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        # gains_realized = 5000, allowance = 3000
+        # taxable_gains = 2000, all fitting in the remaining basic-rate band
+        # tax = 2000 * 0.10 = 200
+        assert tax == pytest.approx(200.0, abs=0.01)
+
+    def test_zero_balance(self):
+        """Zero balance returns no tax."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=0.0,
+            cost_basis=0.0,
+            gross=5_000.0,
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        assert tax == 0.0
+        assert allowance_used == 0.0
+        assert allowance_remaining == 3_000.0
+        assert basis_reduction == 0.0
+
+    def test_zero_gross(self):
+        """Zero gross withdrawal returns no tax."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,
+            gross=0.0,
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        assert tax == 0.0
+        assert allowance_used == 0.0
+        assert allowance_remaining == 3_000.0
+        assert basis_reduction == 0.0
+
+    def test_loss_position_no_tax(self):
+        """When cost basis exceeds balance (loss), no CGT is charged."""
+        tax, allowance_used, allowance_remaining, basis_reduction = _apply_cgt_tax(
+            balance=8_000.0,
+            cost_basis=10_000.0,  # loss position
+            gross=5_000.0,
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        assert tax == pytest.approx(0.0, abs=0.01)
+        assert allowance_used == pytest.approx(0.0, abs=0.01)
+
+    def test_basis_reduction_proportional(self):
+        """Cost basis is reduced proportionally to fraction sold."""
+        _, _, _, basis_reduction = _apply_cgt_tax(
+            balance=100_000.0,
+            cost_basis=60_000.0,
+            gross=25_000.0,  # selling 25% of balance
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=3_000.0,
+        )
+        # basis_reduction = 60000 * (25000 / 100000) = 15000
+        assert basis_reduction == pytest.approx(15_000.0, abs=0.01)
+
+    def test_allowance_depletion_tracking(self):
+        """Allowance remaining is correctly decremented."""
+        _, _, allowance_remaining, _ = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,
+            gross=6_000.0,  # gains_realized = 6000 * 0.5 = 3000
+            remaining_basic_rate_band=100_000.0,
+            cgt_allowance_remaining=5_000.0,
+        )
+        # allowance_used = min(3000, 5000) = 3000
+        assert allowance_remaining == pytest.approx(2_000.0, abs=0.01)
+
+    def test_higher_rate_only(self):
+        """When basic band is fully consumed, all gains taxed at 20%."""
+        tax, _, _, _ = _apply_cgt_tax(
+            balance=20_000.0,
+            cost_basis=10_000.0,  # 50% gains ratio
+            gross=10_000.0,       # gains_realized = 5000
+            remaining_basic_rate_band=0.0,  # no basic band left
+            cgt_allowance_remaining=3_000.0,
+        )
+        # taxable = 5000 - 3000 = 2000, all at higher rate
+        assert tax == pytest.approx(400.0, abs=0.01)  # 2000 * 0.20
+
+    @pytest.mark.parametrize(
+        ("balance", "cost_basis", "gross", "band", "allowance"),
+        [
+            (20_000.0, 10_000.0, 5_000.0, 100_000.0, 3_000.0),
+            (20_000.0, 10_000.0, 10_000.0, 100_000.0, 3_000.0),
+            (20_000.0, 10_000.0, 10_000.0, 2_000.0, 3_000.0),
+            (100_000.0, 80_000.0, 50_000.0, 50_000.0, 3_000.0),
+            (50_000.0, 50_000.0, 10_000.0, 100_000.0, 3_000.0),  # no gains
+            (30_000.0, 10_000.0, 15_000.0, 0.0, 0.0),  # no allowance, higher rate
+        ],
+    )
+    def test_cgt_tax_matches_standalone_withdrawal(
+        self,
+        balance: float,
+        cost_basis: float,
+        gross: float,
+        band: float,
+        allowance: float,
+    ):
+        """The Numba _apply_cgt_tax must produce the same tax as the standalone calculator."""
+        from backend.simulation.tax.withdrawals import calculate_gia_withdrawal
+
+        # Call the engine function
+        tax, _, _, _ = _apply_cgt_tax(
+            balance=balance,
+            cost_basis=cost_basis,
+            gross=gross,
+            remaining_basic_rate_band=band,
+            cgt_allowance_remaining=allowance,
+        )
+
+        # Call the standalone function
+        result = calculate_gia_withdrawal(
+            requested=gross,
+            balance=balance,
+            cost_basis=cost_basis,
+            cgt_allowance_remaining=allowance,
+            remaining_basic_rate_band=band,
+        )
+
+        assert tax == pytest.approx(result.tax_paid, abs=0.25)

@@ -178,6 +178,8 @@ export type SimulationResponse = {
   rental_income_tax_paid_median: number[];
   pension_drawdown_tax_paid_median: number[];
   capital_gains_tax_paid_median: number[];
+  gia_cgt_paid_median?: number[];
+  property_cgt_paid_median?: number[];
   salary_income_tax_personal_allowance_used_median?: number[];
   salary_income_tax_personal_allowance_lost_median?: number[];
   salary_income_tax_basic_band_amount_median?: number[];

@@ -31,13 +31,15 @@ def calculate_gia_withdrawal(
     balance: float,
     cost_basis: float,
     cgt_allowance_remaining: float,
-    cgt_rate: float,
+    remaining_basic_rate_band: float,
 ) -> GiaWithdrawalResult:
     """
-    Simplified GIA withdrawal tax treatment.
+    GIA withdrawal tax treatment with income-dependent CGT rates.
 
     - Treat a portion of each withdrawal as capital gains based on (balance - cost_basis) / balance.
-    - Apply an annual CGT allowance, then a flat CGT rate above the allowance.
+    - Apply an annual CGT allowance, then income-dependent CGT rates:
+      - 10% on gains within the remaining basic rate band
+      - 20% on gains above the remaining basic rate band
 
     Notes:
     - This is a simplification: real CGT uses per-disposal rules, loss offsets, and varying rates.
@@ -64,7 +66,13 @@ def calculate_gia_withdrawal(
     allowance_used = min(allowance_remaining, gains_realized)
     taxable_gains = max(0.0, gains_realized - allowance_used)
 
-    tax_paid = taxable_gains * max(0.0, cgt_rate)
+    # Income-dependent CGT rates: annual exempt amount is deducted first,
+    # then taxable gains use any remaining basic-rate band at 10% and the
+    # excess at 20%.
+    lower_band_remaining = max(0.0, remaining_basic_rate_band)
+    taxable_lower = min(taxable_gains, lower_band_remaining)
+    taxable_higher = max(0.0, taxable_gains - taxable_lower)
+    tax_paid = taxable_lower * 0.10 + taxable_higher * 0.20
     net = gross - tax_paid
 
     return GiaWithdrawalResult(

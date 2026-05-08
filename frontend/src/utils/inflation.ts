@@ -61,6 +61,8 @@ export function applyInflationAdjustment(
     rental_income_tax_paid_median: adjust(result.rental_income_tax_paid_median),
     pension_drawdown_tax_paid_median: adjust(result.pension_drawdown_tax_paid_median),
     capital_gains_tax_paid_median: adjust(result.capital_gains_tax_paid_median),
+    gia_cgt_paid_median: adjustOptional(result.gia_cgt_paid_median),
+    property_cgt_paid_median: adjustOptional(result.property_cgt_paid_median),
     salary_income_tax_personal_allowance_used_median: adjustOptional(result.salary_income_tax_personal_allowance_used_median),
     salary_income_tax_personal_allowance_lost_median: adjustOptional(result.salary_income_tax_personal_allowance_lost_median),
     salary_income_tax_basic_band_amount_median: adjustOptional(result.salary_income_tax_basic_band_amount_median),

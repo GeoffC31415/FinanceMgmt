@@ -173,7 +173,7 @@ ResponseFormatter.format() → dict
 SimulationResponse (Pydantic)
 ```
 
-The fast engine uses **56 output fields** stored as `float64` arrays. Boolean metrics use 0.0/1.0 for fast averaging.
+The fast engine uses **58 output fields** stored as `float64` arrays. Boolean metrics use 0.0/1.0 for fast averaging.
 
 ---
 
@@ -244,9 +244,9 @@ The fast engine produces 56 fields per (iteration, year):
 | 10 | mortgage_payment | float64 | |
 | 11 | pension_contributions | float64 | Employee + employer |
 | 12 | fun_fund | float64 | Extra retirement spend |
-| 13 | income_tax_paid | float64 | Legacy aggregate: income tax + pension drawdown tax + CGT |
+| 13 | income_tax_paid | float64 | Income tax aggregate: salary + rental + state pension + pension drawdown tax; excludes CGT |
 | 14 | ni_paid | float64 | |
-| 15 | total_tax | float64 | `income_tax_paid` plus NI |
+| 15 | total_tax | float64 | `income_tax_paid` plus NI and CGT |
 | 16 | isa_balance | float64 | |
 | 17 | pension_balance | float64 | |
 | 18 | cash_balance | float64 | |
@@ -281,6 +281,8 @@ The fast engine produces 56 fields per (iteration, year):
 | 53 | salary_income_tax_additional_band_amount | float64 | Salary amount in the additional-rate band before taper adjustment |
 | 54 | salary_income_tax_additional_band_tax | float64 | Salary tax at additional rate |
 | 55 | salary_income_tax_allowance_taper_tax | float64 | Extra salary tax from personal allowance taper, shown separately so high-income effective rates reconcile |
+| 56 | gia_cgt_paid | float64 | CGT on GIA disposals |
+| 57 | property_cgt_paid | float64 | CGT on property disposals |
 
 ---
 
@@ -429,7 +431,7 @@ pytest --benchmark-only
 
 3. **Bond sweep**: Runs 3 rounds (coarse 25%, refining 5%, fine 1%) with binary search per combo. Total combos = 5^n + 5^n + 7^n where n = active asset classes.
 
-4. **CGT simplification**: Uses a flat CGT rate with annual allowance, proportional cost basis reduction on disposal. Real CGT is more complex (per-disposal rules, loss offsets).
+4. **CGT simplification**: Uses owner-specific annual CGT allowances, income-band-dependent GIA/property CGT rates, and proportional cost basis reduction on disposal. Real CGT is more complex (residential property rates, per-disposal rules, loss offsets).
 
 5. **Pension drawdown**: Uses binary search (20 iterations in `engine_fast.py`) to find gross withdrawal that delivers target net income, accounting for 25% tax-free portion and marginal tax rates. Current tax ordering in the fast engine is salary after employee pension contributions → rental/property income → state pension → private pension drawdown. State pension tax is per person and exposed as `state_pension_tax_paid`; private pension drawdown is now processed per pension owner, with each owner using their own allowance/bands and prior taxable pension drawdown in the year.
 

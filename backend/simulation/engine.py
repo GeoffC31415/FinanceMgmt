@@ -23,7 +23,6 @@ class SimulationAssumptions:
     isa_annual_limit: float = 20_000.0
     state_pension_annual: float = 11_500.0
     cgt_annual_allowance: float = 3_000.0
-    cgt_rate: float = 0.10
     emergency_fund_months: float = 6.0
     pension_access_age: int = 55  # UK minimum private pension access age
     debt_interest_rate: float = 0.08  # Annual interest rate on negative cash (debt)

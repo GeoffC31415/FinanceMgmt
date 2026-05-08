@@ -84,7 +84,11 @@ F_SALARY_TAX_ADDITIONAL_BAND_AMOUNT = 53
 F_SALARY_TAX_ADDITIONAL_BAND_TAX = 54
 F_SALARY_TAX_ALLOWANCE_TAPER_TAX = 55
 
-N_FIELDS = 56
+# Separate CGT tracking by source
+F_GIA_CGT_PAID = 56
+F_PROPERTY_CGT_PAID = 57
+
+N_FIELDS = 58
 
 # Asset type codes
 ASSET_CASH = 0
@@ -148,6 +152,11 @@ def _run_monte_carlo_fast(
 
     # Call the Numba kernel
     a = sc.assumptions
+    n_people = len(sc.people_birth_years)
+    gia_owner_lookup = np.full(n_assets, -1, dtype=np.intp)
+    for ai in range(n_assets):
+        if sc.asset_types[ai] == ASSET_GIA:
+            gia_owner_lookup[ai] = sc.asset_gia_owner_idx[ai]
     out = _simulate_all_iterations(
         iterations=iterations,
         n_years=n_years,
@@ -188,6 +197,8 @@ def _run_monte_carlo_fast(
         asset_returns=returns.asset_returns,
         cash_idx=cash_idx,
         n_assets=n_assets,
+        n_people=n_people,
+        gia_owner_lookup=gia_owner_lookup,
         # Properties
         property_person_idx=sc.property_person_idx,
         property_values=sc.property_values.copy(),
@@ -220,7 +231,6 @@ def _run_monte_carlo_fast(
         isa_annual_limit=a.isa_annual_limit,
         state_pension_annual=a.state_pension_annual,
         cgt_annual_allowance=a.cgt_annual_allowance,
-        cgt_rate=a.cgt_rate,
         emergency_fund_months=a.emergency_fund_months,
         pension_access_age=a.pension_access_age,
         debt_interest_rate=a.debt_interest_rate,
@@ -260,6 +270,7 @@ def _run_monte_carlo_fast(
         "salary_income_tax_higher_band_amount", "salary_income_tax_higher_band_tax",
         "salary_income_tax_additional_band_amount", "salary_income_tax_additional_band_tax",
         "salary_income_tax_allowance_taper_tax",
+        "gia_cgt_paid", "property_cgt_paid",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -435,42 +446,88 @@ def _step_mortgage(
 
 
 @njit(cache=True)
-def _sell_taxable_holding(
+def _apply_cgt_tax(
     balance: float,
     cost_basis: float,
-    target_net: float,
+    gross: float,
+    remaining_basic_rate_band: float,
     cgt_allowance_remaining: float,
-    cgt_rate: float,
 ) -> tuple:
-    """Returns (gross, net, tax, allowance_used, basis_reduction)."""
-    if balance <= 0 or target_net <= 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0
+    """Calculate CGT on a taxable (GIA/property) disposal.
+
+    Returns (tax, allowance_used, new_cgt_allowance_remaining, basis_reduction).
+
+    Uses income-dependent CGT rates after deducting available annual exemption:
+      - 10% on taxable gains within the remaining basic rate band
+      - 20% on taxable gains above the remaining basic rate band
+
+    Cost basis is reduced proportionally to the fraction of the balance sold
+    (identical-asset pooling / average cost method).
+    """
+    if balance <= 0 or gross <= 0:
+        return 0.0, 0.0, cgt_allowance_remaining, 0.0
 
     total_gains = max(0.0, balance - cost_basis)
     gains_ratio = total_gains / balance if balance > 0 else 0.0
-
-    if gains_ratio * cgt_rate > 0 and cgt_allowance_remaining <= 0:
-        desired_gross = target_net / (1.0 - gains_ratio * cgt_rate)
-    elif gains_ratio > 0 and cgt_rate > 0:
-        allowance_gross = cgt_allowance_remaining / gains_ratio if gains_ratio > 0 else target_net
-        if target_net <= allowance_gross:
-            desired_gross = target_net
-        else:
-            desired_gross = (target_net - cgt_allowance_remaining * cgt_rate) / (1.0 - gains_ratio * cgt_rate)
-    else:
-        desired_gross = target_net
-
-    gross = min(balance, max(0.0, desired_gross))
     gains_realized = gross * gains_ratio
-    allowance_used = min(cgt_allowance_remaining, gains_realized)
+
+    allowance_remaining = max(0.0, cgt_allowance_remaining)
+    allowance_used = min(max(0.0, gains_realized), allowance_remaining)
     taxable_gains = max(0.0, gains_realized - allowance_used)
-    tax = taxable_gains * cgt_rate
+
+    taxable_lower = min(taxable_gains, max(0.0, remaining_basic_rate_band))
+    taxable_higher = max(0.0, taxable_gains - taxable_lower)
+    tax = taxable_lower * 0.10 + taxable_higher * 0.20
+
+    new_allowance_remaining = allowance_remaining - allowance_used
+    basis_reduction = cost_basis * (gross / balance) if balance > 0 else 0.0
+
+    return tax, allowance_used, new_allowance_remaining, basis_reduction
+
+
+@njit(cache=True)
+def _remaining_basic_rate_band_for_cgt(
+    taxable_income_before_pa: float,
+    pa: float,
+    brl: float,
+) -> float:
+    """Return remaining basic-rate band available for CGT lower-rate gains."""
+    effective_pa = pa
+    if taxable_income_before_pa > 100_000.0:
+        taper_reduction = min(pa, (taxable_income_before_pa - 100_000.0) / 2.0)
+        effective_pa = max(0.0, pa - taper_reduction)
+
+    taxable_income = max(0.0, taxable_income_before_pa - effective_pa)
+    basic_band = max(0.0, brl - pa)
+    return max(0.0, basic_band - taxable_income)
+
+
+@njit(cache=True)
+def _apply_taxable_disposal(
+    balance: float,
+    cost_basis: float,
+    requested_cash_amount: float,
+    remaining_basic_rate_band: float,
+    cgt_allowance_remaining: float,
+) -> tuple:
+    """Apply a GIA/property disposal and return updated scalar state.
+
+    Returns (gross, tax, net, new_allowance_remaining, new_cost_basis, new_balance).
+    """
+    if balance <= 0.0 or requested_cash_amount <= 0.0:
+        return 0.0, 0.0, 0.0, cgt_allowance_remaining, cost_basis, balance
+
+    gross = min(balance, requested_cash_amount)
+    tax, _, new_allowance_remaining, basis_reduction = _apply_cgt_tax(
+        balance, cost_basis, gross, remaining_basic_rate_band, cgt_allowance_remaining,
+    )
     net = gross - tax
-    basis_reduction = cost_basis * (gross / balance) if balance > 0 and cost_basis > 0 else 0.0
-    return gross, net, tax, allowance_used, basis_reduction
+    new_cost_basis = max(0.0, cost_basis - basis_reduction)
+    new_balance = max(0.0, balance - gross)
+    return gross, tax, net, new_allowance_remaining, new_cost_basis, new_balance
 
 
-@njit(parallel=True, cache=True)
+@njit(cache=True)
 def _simulate_all_iterations(
     iterations: int,
     n_years: int,
@@ -511,6 +568,8 @@ def _simulate_all_iterations(
     asset_returns: np.ndarray,
     cash_idx: int,
     n_assets: int,
+    n_people: int,
+    gia_owner_lookup: np.ndarray,
     # Properties
     property_person_idx: np.ndarray,
     property_values: np.ndarray,
@@ -543,7 +602,6 @@ def _simulate_all_iterations(
     isa_annual_limit: float,
     state_pension_annual: float,
     cgt_annual_allowance: float,
-    cgt_rate: float,
     emergency_fund_months: float,
     pension_access_age: int,
     debt_interest_rate: float,
@@ -762,6 +820,7 @@ def _simulate_all_iterations(
             state_pension_tax = 0.0
             salary_tax_pa_used = 0.0
             salary_tax_pa_lost = 0.0
+            salary_tax_pa_used_per_person = np.zeros(n_people, dtype=np.float64)
             salary_tax_basic_amount = 0.0
             salary_tax_basic_tax = 0.0
             salary_tax_higher_amount = 0.0
@@ -792,6 +851,7 @@ def _simulate_all_iterations(
                 income_tax += p_income_tax
                 salary_tax_pa_used += p_pa_used
                 salary_tax_pa_lost += p_pa_lost
+                salary_tax_pa_used_per_person[p] = p_pa_used
                 salary_tax_basic_amount += p_basic_amount
                 salary_tax_basic_tax += p_basic_tax
                 salary_tax_higher_amount += p_higher_amount
@@ -830,6 +890,21 @@ def _simulate_all_iterations(
             salary_net = salary_gross_total - income_tax - ni_paid - employee_pension_total
             rental_income_net = rental_income_gross - rental_income_tax
             state_pension_income_net = state_pension_income - state_pension_tax
+
+            # Remaining basic-rate band for CGT: each person's lower-rate CGT
+            # headroom after taxable income already recognized in the year.  Pension
+            # drawdown can occur before taxable disposals, so disposal sites refresh
+            # the owner's band using per_person_pension_taxable before applying CGT.
+            remaining_basic_rate_band = np.zeros(n_people, dtype=np.float64)
+            for p in range(n_people):
+                if people_is_child[p] == 1:
+                    continue
+                taxable_income_before_pa = max(0.0, per_person_salary[p] - per_person_employee_pension[p])
+                taxable_income_before_pa += per_person_rental[p]
+                taxable_income_before_pa += per_person_state_pension[p]
+                remaining_basic_rate_band[p] = _remaining_basic_rate_band_for_cgt(
+                    taxable_income_before_pa, personal_allowance, basic_rate_limit,
+                )
 
             # Mortgage payment
             mortgage_payment = 0.0
@@ -880,7 +955,9 @@ def _simulate_all_iterations(
             pension_income_tax = 0.0
             per_person_pension_taxable = np.zeros(n_people, dtype=np.float64)
             cgt_paid = 0.0
-            cgt_allowance_remaining = cgt_annual_allowance
+            gia_cgt_paid = 0.0
+            property_cgt_paid = 0.0
+            cgt_allowance_remaining_by_person = np.full(n_people, cgt_annual_allowance, dtype=np.float64)
 
             # Per-type flow tracking (annual, per iteration)
             isa_withdrawals = 0.0
@@ -962,14 +1039,27 @@ def _simulate_all_iterations(
                         elif asset_type == ASSET_GIA:
                             balance = it_asset_balances[a_idx]
                             cost_basis = it_asset_cost_bases[a_idx]
-                            gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
-                                balance, cost_basis, shortfall, cgt_allowance_remaining, cgt_rate
+                            if balance <= 0:
+                                continue
+                            gia_owner = gia_owner_lookup[a_idx]
+                            if gia_owner < 0 or gia_owner >= n_people:
+                                gia_owner = 0
+                            taxable_before_pa = max(0.0, per_person_salary[gia_owner] - per_person_employee_pension[gia_owner])
+                            taxable_before_pa += per_person_rental[gia_owner]
+                            taxable_before_pa += per_person_state_pension[gia_owner]
+                            taxable_before_pa += per_person_pension_taxable[gia_owner]
+                            remaining_band = _remaining_basic_rate_band_for_cgt(
+                                taxable_before_pa, personal_allowance, basic_rate_limit,
                             )
-                            cgt_allowance_remaining -= allowance_used
+                            remaining_basic_rate_band[gia_owner] = remaining_band
+                            gross, tax, net, new_allowance, new_basis, new_balance = _apply_taxable_disposal(
+                                balance, cost_basis, shortfall, remaining_band, cgt_allowance_remaining_by_person[gia_owner],
+                            )
+                            cgt_allowance_remaining_by_person[gia_owner] = new_allowance
                             cgt_paid += tax
-                            it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
-
-                            it_asset_balances[a_idx] -= gross
+                            gia_cgt_paid += tax
+                            it_asset_cost_bases[a_idx] = new_basis
+                            it_asset_balances[a_idx] = new_balance
                             it_asset_balances[cash_idx] += net
                             shortfall -= net
                             gia_withdrawals += gross
@@ -989,12 +1079,26 @@ def _simulate_all_iterations(
 
                         balance = it_property_values[prop_idx]
                         cost_basis = it_property_cost_bases[prop_idx]
-                        gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
-                            balance, cost_basis, shortfall, cgt_allowance_remaining, cgt_rate
+                        if balance <= 0:
+                            continue
+                        prop_owner = property_person_idx[prop_idx] if prop_idx < len(property_person_idx) else 0
+                        if prop_owner < 0 or prop_owner >= n_people:
+                            prop_owner = 0
+                        taxable_before_pa = max(0.0, per_person_salary[prop_owner] - per_person_employee_pension[prop_owner])
+                        taxable_before_pa += per_person_rental[prop_owner]
+                        taxable_before_pa += per_person_state_pension[prop_owner]
+                        taxable_before_pa += per_person_pension_taxable[prop_owner]
+                        remaining_band = _remaining_basic_rate_band_for_cgt(
+                            taxable_before_pa, personal_allowance, basic_rate_limit,
                         )
-                        cgt_allowance_remaining -= allowance_used
+                        remaining_basic_rate_band[prop_owner] = remaining_band
+                        gross, tax, net, new_allowance, new_basis, new_balance = _apply_taxable_disposal(
+                            balance, cost_basis, shortfall, remaining_band, cgt_allowance_remaining_by_person[prop_owner],
+                        )
+                        cgt_allowance_remaining_by_person[prop_owner] = new_allowance
                         cgt_paid += tax
-                        it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        property_cgt_paid += tax
+                        it_property_cost_bases[prop_idx] = new_basis
                         mortgage_repayment = 0.0
                         if balance > 0.0 and it_property_mortgage_balances[prop_idx] > 0.0 and gross > 0.0:
                             mortgage_repayment = min(
@@ -1002,7 +1106,7 @@ def _simulate_all_iterations(
                                 it_property_mortgage_balances[prop_idx] * (gross / balance),
                             )
                             it_property_mortgage_balances[prop_idx] -= mortgage_repayment
-                        it_property_values[prop_idx] -= gross
+                        it_property_values[prop_idx] = new_balance
                         net_after_mortgage = max(0.0, net - mortgage_repayment)
                         it_asset_balances[cash_idx] += net_after_mortgage
                         shortfall -= net_after_mortgage
@@ -1087,14 +1191,27 @@ def _simulate_all_iterations(
                         elif asset_type == ASSET_GIA:
                             balance = it_asset_balances[a_idx]
                             cost_basis = it_asset_cost_bases[a_idx]
-                            gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
-                                balance, cost_basis, debt_to_repay, cgt_allowance_remaining, cgt_rate
+                            if balance <= 0:
+                                continue
+                            gia_owner = gia_owner_lookup[a_idx]
+                            if gia_owner < 0 or gia_owner >= n_people:
+                                gia_owner = 0
+                            taxable_before_pa = max(0.0, per_person_salary[gia_owner] - per_person_employee_pension[gia_owner])
+                            taxable_before_pa += per_person_rental[gia_owner]
+                            taxable_before_pa += per_person_state_pension[gia_owner]
+                            taxable_before_pa += per_person_pension_taxable[gia_owner]
+                            remaining_band = _remaining_basic_rate_band_for_cgt(
+                                taxable_before_pa, personal_allowance, basic_rate_limit,
                             )
-                            cgt_allowance_remaining -= allowance_used
+                            remaining_basic_rate_band[gia_owner] = remaining_band
+                            gross, tax, net, new_allowance, new_basis, new_balance = _apply_taxable_disposal(
+                                balance, cost_basis, debt_to_repay, remaining_band, cgt_allowance_remaining_by_person[gia_owner],
+                            )
+                            cgt_allowance_remaining_by_person[gia_owner] = new_allowance
                             cgt_paid += tax
-                            it_asset_cost_bases[a_idx] = max(0.0, cost_basis - basis_reduction)
-
-                            it_asset_balances[a_idx] -= gross
+                            gia_cgt_paid += tax
+                            it_asset_cost_bases[a_idx] = new_basis
+                            it_asset_balances[a_idx] = new_balance
                             actual_repayment = min(net, it_debt_balance)
                             it_debt_balance -= actual_repayment
                             debt_to_repay -= actual_repayment
@@ -1108,12 +1225,26 @@ def _simulate_all_iterations(
 
                         balance = it_property_values[prop_idx]
                         cost_basis = it_property_cost_bases[prop_idx]
-                        gross, net, tax, allowance_used, basis_reduction = _sell_taxable_holding(
-                            balance, cost_basis, debt_to_repay, cgt_allowance_remaining, cgt_rate
+                        if balance <= 0:
+                            continue
+                        prop_owner = property_person_idx[prop_idx] if prop_idx < len(property_person_idx) else 0
+                        if prop_owner < 0 or prop_owner >= n_people:
+                            prop_owner = 0
+                        taxable_before_pa = max(0.0, per_person_salary[prop_owner] - per_person_employee_pension[prop_owner])
+                        taxable_before_pa += per_person_rental[prop_owner]
+                        taxable_before_pa += per_person_state_pension[prop_owner]
+                        taxable_before_pa += per_person_pension_taxable[prop_owner]
+                        remaining_band = _remaining_basic_rate_band_for_cgt(
+                            taxable_before_pa, personal_allowance, basic_rate_limit,
                         )
-                        cgt_allowance_remaining -= allowance_used
+                        remaining_basic_rate_band[prop_owner] = remaining_band
+                        gross, tax, net, new_allowance, new_basis, new_balance = _apply_taxable_disposal(
+                            balance, cost_basis, debt_to_repay, remaining_band, cgt_allowance_remaining_by_person[prop_owner],
+                        )
+                        cgt_allowance_remaining_by_person[prop_owner] = new_allowance
                         cgt_paid += tax
-                        it_property_cost_bases[prop_idx] = max(0.0, cost_basis - basis_reduction)
+                        property_cgt_paid += tax
+                        it_property_cost_bases[prop_idx] = new_basis
                         mortgage_repayment = 0.0
                         if balance > 0.0 and it_property_mortgage_balances[prop_idx] > 0.0 and gross > 0.0:
                             mortgage_repayment = min(
@@ -1121,7 +1252,7 @@ def _simulate_all_iterations(
                                 it_property_mortgage_balances[prop_idx] * (gross / balance),
                             )
                             it_property_mortgage_balances[prop_idx] -= mortgage_repayment
-                        it_property_values[prop_idx] -= gross
+                        it_property_values[prop_idx] = new_balance
                         net_after_mortgage = max(0.0, net - mortgage_repayment)
                         actual_repayment = min(net_after_mortgage, it_debt_balance)
                         it_debt_balance -= actual_repayment
@@ -1145,7 +1276,6 @@ def _simulate_all_iterations(
                         amount = min(investable, isa_remaining, cap)
                         if amount > 0:
                             it_asset_balances[a_idx] += amount
-                            it_asset_cost_bases[a_idx] += amount
                             it_asset_balances[cash_idx] -= amount
                             investable -= amount
                             isa_remaining -= amount
@@ -1257,7 +1387,7 @@ def _simulate_all_iterations(
             out[it, y_idx, F_MORTGAGE_PAYMENT] = mortgage_payment
             out[it, y_idx, F_PENSION_CONTRIBUTIONS] = employee_pension_total + employer_pension_total
             out[it, y_idx, F_FUN_FUND] = extra_retirement_spend
-            out[it, y_idx, F_INCOME_TAX_PAID] = income_tax + rental_income_tax + state_pension_tax + pension_income_tax + cgt_paid
+            out[it, y_idx, F_INCOME_TAX_PAID] = income_tax + rental_income_tax + state_pension_tax + pension_income_tax
             out[it, y_idx, F_NI_PAID] = ni_paid
             out[it, y_idx, F_TOTAL_TAX] = total_tax
             out[it, y_idx, F_ISA_BALANCE] = isa_balance
@@ -1297,6 +1427,8 @@ def _simulate_all_iterations(
             out[it, y_idx, F_RENTAL_INCOME_TAX_PAID] = rental_income_tax
             out[it, y_idx, F_PENSION_DRAWDOWN_TAX_PAID] = pension_income_tax
             out[it, y_idx, F_CAPITAL_GAINS_TAX_PAID] = cgt_paid
+            out[it, y_idx, F_GIA_CGT_PAID] = gia_cgt_paid
+            out[it, y_idx, F_PROPERTY_CGT_PAID] = property_cgt_paid
             out[it, y_idx, F_SALARY_TAX_PERSONAL_ALLOWANCE_USED] = salary_tax_pa_used
             out[it, y_idx, F_SALARY_TAX_PERSONAL_ALLOWANCE_LOST] = salary_tax_pa_lost
             out[it, y_idx, F_SALARY_TAX_BASIC_BAND_AMOUNT] = salary_tax_basic_amount

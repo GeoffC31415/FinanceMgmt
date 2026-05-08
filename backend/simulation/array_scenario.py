@@ -14,7 +14,6 @@ class ArrayAssumptions:
     isa_annual_limit: float
     state_pension_annual: float
     cgt_annual_allowance: float
-    cgt_rate: float
     emergency_fund_months: float
     pension_access_age: int
     debt_interest_rate: float
@@ -70,6 +69,7 @@ class ArrayScenario:
     asset_annual_contrib: np.ndarray
     asset_contrib_end_retirement: np.ndarray
     asset_names: list[str]
+    asset_gia_owner_idx: np.ndarray  # person index who owns each GIA asset, -1 if not GIA
 
     property_person_idx: np.ndarray
     property_withdrawal_priority: np.ndarray
@@ -211,6 +211,13 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         [1 if getattr(a, "contributions_end_at_retirement", False) else 0 for a in assets],
         dtype=np.int8,
     )
+    # GIA owner: map each GIA asset to the person who owns it
+    asset_gia_owner_idx = np.array(
+        [person_key_to_idx.get(getattr(a, "person_key", None), -1)
+         if _asset_type_code(getattr(a, "asset_type", "")) == 2 else -1
+         for a in assets],
+        dtype=np.int32,
+    )
 
     properties = list(scenario.properties)
     property_names = [p.name for p in properties]
@@ -285,7 +292,6 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         isa_annual_limit=float(a.isa_annual_limit),
         state_pension_annual=float(a.state_pension_annual),
         cgt_annual_allowance=float(a.cgt_annual_allowance),
-        cgt_rate=float(a.cgt_rate),
         emergency_fund_months=float(a.emergency_fund_months),
         pension_access_age=int(a.pension_access_age),
         debt_interest_rate=float(a.debt_interest_rate),
@@ -334,6 +340,7 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         asset_annual_contrib=asset_annual_contrib,
         asset_contrib_end_retirement=asset_contrib_end_retirement,
         asset_names=asset_names,
+        asset_gia_owner_idx=asset_gia_owner_idx,
         property_person_idx=property_person_idx,
         property_withdrawal_priority=property_withdrawal_priority,
         property_values=property_values,
@@ -383,6 +390,7 @@ def _scenario_assets_for_arrays(*, scenario: SimulationScenario) -> list[object]
                     "balance": 0.0,
                     "annual_contribution": 0.0,
                     "contributions_end_at_retirement": False,
+                    "person_key": None,
                     "cost_basis": 0.0,
                 },
             )()

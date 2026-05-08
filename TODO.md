@@ -40,7 +40,7 @@ Verified against current code on 2026-04-26. The repo currently models:
 - Rental income is taxed at the person's marginal income tax rate, with no NI.
 - Gift income is tax-free.
 - Pension drawdown is modelled as 25% tax-free and 75% taxable.
-- GIA/property disposals use a simplified proportional cost-basis model with a single annual CGT allowance and flat CGT rate.
+- GIA/property disposals use a simplified proportional cost-basis model with owner-specific annual CGT allowances and income-band-dependent CGT rates.
 - Tax year presets exist in `backend/simulation/tax/tax_config.py` and can be selected in `AssumptionsForm.tsx`.
 - Frontend copy now states that state pension is taxable and that private pension withdrawals are modelled as 25% tax-free / 75% taxable, subject to simplifications.
 - Frontend now warns about pension contributions with no matching pension asset and pension assets with no owner/default ownership.
@@ -236,17 +236,17 @@ Important current limitations/gaps:
 
 ### P1.3 — Improve CGT modelling for GIAs and properties
 
-**Problem:** CGT uses a flat `cgt_rate`, one allowance, and proportional disposals. It does not distinguish basic-rate/higher-rate CGT bands, residential property rates, owner-specific allowances, losses, or annual exempt amount changes.
+**Problem:** CGT uses proportional disposals and simplified rates. It now distinguishes owner-specific allowances and basic-rate/higher-rate CGT bands, but still does not model residential property rates, losses, or annual exempt amount changes.
 
 **Backend tasks:**
 
-- [ ] Make CGT allowance per individual, not household-wide.
-- [ ] Calculate CGT rate from taxable income band headroom:
+- [x] Make CGT allowance per individual, not household-wide.
+- [x] Calculate CGT rate from taxable income band headroom:
   - [ ] non-residential assets/GIA rates;
   - [ ] residential property rates;
   - [ ] configurable rates by tax year.
 - [ ] Track realized losses and allow same-year/future offset where configured.
-- [ ] Add separate `property_cgt_paid` and `gia_cgt_paid` outputs.
+- [x] Add separate `property_cgt_paid` and `gia_cgt_paid` outputs.
 - [ ] Add per-asset `cost_basis` to DB/schema/frontend instead of defaulting cost basis to current value in `ScenarioBuilder`.
 - [ ] For property sales, consider full sale vs partial sale. Current partial-sale behaviour is unrealistic for most properties.
 - [ ] Add tests for CGT allowance consumption across multiple disposals in the same year.
@@ -448,7 +448,7 @@ Important current limitations/gaps:
 
 ### P3.1 — Add advanced tax settings UI
 
-**Problem:** Backend accepts assumptions such as `cgt_annual_allowance`, `cgt_rate`, `emergency_fund_months`, and tax band overrides, but the frontend only exposes tax year selection and core assumptions.
+**Problem:** Backend accepts assumptions such as `cgt_annual_allowance`, `emergency_fund_months`, and tax band overrides, but the frontend only exposes tax year selection and core assumptions.
 
 **Frontend tasks:**
 
@@ -529,7 +529,7 @@ Important current limitations/gaps:
   - [ ] pure tax-module state pension examples if/when source-specific helpers are added;
   - [ ] multi-person household allowances;
   - [ ] pension drawdown ownership;
-  - [ ] CGT allowance use across GIA and property disposals;
+  - [x] CGT allowance use across GIA and property disposals;
   - [ ] salary sacrifice/net pay/relief-at-source pension contributions;
   - [ ] rental profit taxation.
 - [ ] Add engine-level tests to ensure pure tax modules match `engine_fast.py` outputs.

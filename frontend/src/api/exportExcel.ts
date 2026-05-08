@@ -121,6 +121,8 @@ const COLUMN_GROUPS: ColGroup[] = [
       { header: "Rental Tax", key: "rental_income_tax_paid_median", format: "currency" },
       { header: "Pension Drawdown Tax", key: "pension_drawdown_tax_paid_median", format: "currency" },
       { header: "Capital Gains Tax", key: "capital_gains_tax_paid_median", format: "currency" },
+      { header: "GIA CGT", key: "gia_cgt_paid_median", format: "currency" },
+      { header: "Property CGT", key: "property_cgt_paid_median", format: "currency" },
       { header: "State Pension Tax", key: "state_pension_tax_paid_median", format: "currency" },
       { header: "National Insurance", key: "ni_paid_median", format: "currency" },
       { header: "Total Tax", key: "total_tax_median", format: "currency" },

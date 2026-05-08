@@ -38,7 +38,7 @@ frontend/
 │   │   │   ├── AssetsTab.tsx
 │   │   │   ├── RiskTab.tsx
 │   │   │   ├── AllocationTab.tsx
-│   │   │   ├── TaxBreakdownPanel.tsx # Dashboard tax summary including state pension tax and salary band/taper breakdown
+│   │   │   ├── TaxBreakdownPanel.tsx # Dashboard tax summary including state pension tax, CGT source split, and salary band/taper breakdown
 │   │   │   └── index.ts
 │   │   ├── ComparisonDashboard.tsx  # Scenario comparison view
 │   │   ├── OverviewInsights.tsx    # Auto-generated insights
@@ -164,7 +164,7 @@ Contains arrays indexed by year for:
 - **Net worth**: `net_worth_p10`, `net_worth_median`, `net_worth_p90`
 - **Income**: salary (gross/net), rental, gift, pension, state pension, investment returns, total
 - **Expenses**: total, mortgage, pension contributions, fun fund
-- **Tax**: income tax, optional state pension tax breakdown (`state_pension_tax_paid_median`, included in inflation adjustment, dashboard tax breakdown, and Excel export), salary income tax by band with personal allowance taper fields, NI, total tax
+- **Tax**: income tax, optional state pension tax breakdown (`state_pension_tax_paid_median`, included in inflation adjustment, dashboard tax breakdown, and Excel export), salary income tax by band with personal allowance taper fields, CGT with GIA/property source split, NI, total tax
 - **Asset balances**: ISA, pension, cash, GIA, property, total
 - **Flows**: returns, contributions, withdrawals per asset type
 - **Liabilities**: mortgage balance, debt balance, debt interest
@@ -435,7 +435,7 @@ Used via `useFieldArray` from react-hook-form:
 | `types/index.ts` | ~200 | |
 | `exportExcel.ts` | ~250 | |
 | **Total source** | **~5,500+** | |
-| **Total tests** | **254** | (23 test files)
+| **Total tests** | **255** | (23 test files)
 
 ---
 

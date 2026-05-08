@@ -97,8 +97,8 @@ export function HelpPage() {
             <span className="font-semibold">ISA withdrawals:</span> treated as tax-free.
           </li>
           <li>
-            <span className="font-semibold">GIA withdrawals:</span> a simplified CGT model applies (annual allowance,
-            then a flat CGT rate on realized gains).
+            <span className="font-semibold">GIA withdrawals:</span> a simplified CGT model applies (owner-specific annual allowance,
+            then income-band-dependent CGT rates on taxable realized gains).
           </li>
           <li>
             <span className="font-semibold">Pension drawdown (if still short):</span> pension is drawn down to cover any

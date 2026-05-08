@@ -32,6 +32,8 @@ export type TaxBreakdownSummary = {
   rental_tax: number;
   pension_drawdown_tax: number;
   cgt: number;
+  gia_cgt: number;
+  property_cgt: number;
   salary_band_breakdown: SalaryTaxBandBreakdown | null;
 };
 
@@ -53,6 +55,8 @@ export function getTaxBreakdownSummary(
   const rental_tax = sanitize(result.rental_income_tax_paid_median[yearIndex]);
   const pension_drawdown_tax = sanitize(result.pension_drawdown_tax_paid_median[yearIndex]);
   const cgt = sanitize(result.capital_gains_tax_paid_median[yearIndex]);
+  const gia_cgt = sanitize(result.gia_cgt_paid_median?.[yearIndex]);
+  const property_cgt = sanitize(result.property_cgt_paid_median?.[yearIndex]);
   const state_pension_tax_series = result.state_pension_tax_paid_median;
   const has_salary_band_breakdown = Boolean(result.salary_income_tax_basic_band_tax_median?.length);
   const salary_band_breakdown: SalaryTaxBandBreakdown | null = has_salary_band_breakdown
@@ -102,6 +106,8 @@ export function getTaxBreakdownSummary(
     rental_tax,
     pension_drawdown_tax,
     cgt,
+    gia_cgt,
+    property_cgt,
     salary_band_breakdown,
   };
 }
@@ -305,7 +311,7 @@ export function TaxBreakdownPanel({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Built like a tax P&amp;L for the selected year: source taxes roll into the income tax bucket, then National Insurance is added to reach the final total.
+            Built like a tax P&amp;L for the selected year: income taxes, CGT, and National Insurance roll up to total tax.
           </p>
         </div>
       </div>
@@ -314,8 +320,8 @@ export function TaxBreakdownPanel({
         <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold text-slate-100">Income Tax Build-Up</div>
-              <div className="mt-1 text-xs text-slate-500">Each source below contributes to the income tax bucket before NI is added.</div>
+              <div className="text-sm font-semibold text-slate-100">Tax Build-Up</div>
+              <div className="mt-1 text-xs text-slate-500">Income-tax sources contribute to the subtotal; CGT and NI are added separately in total tax.</div>
             </div>
             <div className="text-right">
               <div className="text-xs uppercase tracking-wide text-slate-500">Subtotal</div>
@@ -367,7 +373,20 @@ export function TaxBreakdownPanel({
               detail="Tax on realised investment and property gains"
               tone="cyan"
               totalTax={summary.total_tax}
-            />
+            >
+              {(summary.gia_cgt > 0 || summary.property_cgt > 0) ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <div className="text-slate-500">GIA CGT</div>
+                    <div className="mt-1 font-semibold text-slate-100">{formatCurrency(summary.gia_cgt)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <div className="text-slate-500">Property CGT</div>
+                    <div className="mt-1 font-semibold text-slate-100">{formatCurrency(summary.property_cgt)}</div>
+                  </div>
+                </div>
+              ) : null}
+            </TaxLineItem>
           </div>
         </div>
 
@@ -383,6 +402,11 @@ export function TaxBreakdownPanel({
               <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
                 <div className="text-xs text-slate-500">National Insurance</div>
                 <div className="mt-1 text-xl font-semibold text-slate-100">{formatCurrency(summary.national_insurance)}</div>
+              </div>
+              <div className="flex items-center justify-center text-slate-500">+</div>
+              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                <div className="text-xs text-slate-500">Capital gains tax</div>
+                <div className="mt-1 text-xl font-semibold text-slate-100">{formatCurrency(summary.cgt)}</div>
               </div>
               <div className="flex items-center justify-center text-slate-500">=</div>
               <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3">

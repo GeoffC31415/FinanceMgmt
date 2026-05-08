@@ -35,6 +35,8 @@ function makeResult(overrides: Partial<SimulationResponse> = {}): SimulationResp
     rental_income_tax_paid_median: [0, 1200, 1600],
     pension_drawdown_tax_paid_median: [0, 0, 0],
     capital_gains_tax_paid_median: [0, 0, 0],
+    gia_cgt_paid_median: [0, 0, 0],
+    property_cgt_paid_median: [0, 0, 0],
     salary_income_tax_personal_allowance_used_median: [12_570, 12_570, 7_570],
     salary_income_tax_personal_allowance_lost_median: [0, 0, 5_000],
     salary_income_tax_basic_band_amount_median: [25_000, 27_500, 37_700],
@@ -92,6 +94,8 @@ describe("TaxBreakdownPanel", () => {
       rental_tax: 1600,
       pension_drawdown_tax: 0,
       cgt: 0,
+      gia_cgt: 0,
+      property_cgt: 0,
     });
   });
 
@@ -113,7 +117,7 @@ describe("TaxBreakdownPanel", () => {
     expect(screen.getByText("£5,000")).toBeInTheDocument();
     expect(screen.getByText("Rental income tax")).toBeInTheDocument();
     expect(screen.getByText("Pension drawdown tax")).toBeInTheDocument();
-    expect(screen.getByText("Capital gains tax")).toBeInTheDocument();
+    expect(screen.getAllByText("Capital gains tax").length).toBeGreaterThanOrEqual(1);
   });
 
   it("returns summary for a selected year index", () => {
@@ -130,7 +134,29 @@ describe("TaxBreakdownPanel", () => {
       rental_tax: 0,
       pension_drawdown_tax: 0,
       cgt: 0,
+      gia_cgt: 0,
+      property_cgt: 0,
     });
+  });
+
+  it("shows GIA and property CGT split when backend data is present", () => {
+    render(
+      <TaxBreakdownPanel
+        display_result={makeResult({
+          total_tax_median: [11_000, 12_000, 13_000],
+          capital_gains_tax_paid_median: [1_000, 2_000, 3_000],
+          gia_cgt_paid_median: [600, 1_200, 1_800],
+          property_cgt_paid_median: [400, 800, 1_200],
+        })}
+        percentile={50}
+        selectedYearIndex={null}
+      />,
+    );
+
+    expect(screen.getByText("GIA CGT")).toBeInTheDocument();
+    expect(screen.getByText("Property CGT")).toBeInTheDocument();
+    expect(screen.getByText("£1,800")).toBeInTheDocument();
+    expect(screen.getAllByText("£1,200").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows a compatibility message when state pension tax is missing", () => {

@@ -92,7 +92,6 @@ class ScenarioBuilder:
             isa_annual_limit=self._coerce_float(assumptions_json.get("isa_annual_limit"), 20_000.0),
             state_pension_annual=self._coerce_float(assumptions_json.get("state_pension_annual"), 11_500.0),
             cgt_annual_allowance=self._coerce_float(assumptions_json.get("cgt_annual_allowance"), 3_000.0),
-            cgt_rate=self._coerce_float(assumptions_json.get("cgt_rate"), 0.10),
             emergency_fund_months=self._coerce_float(assumptions_json.get("emergency_fund_months"), 6.0),
             pension_access_age=self._coerce_int(assumptions_json.get("pension_access_age"), 55),
             debt_interest_rate=self._coerce_float(assumptions_json.get("debt_interest_rate"), 0.08),
@@ -211,6 +210,14 @@ class ScenarioBuilder:
                 pension_withdrawal_priority = min(pension_withdrawal_priority, int(withdrawal_priority))
                 continue
 
+            if asset.person_id:
+                person_key = next(
+                    (p.label for p in scenario.people if p.id == asset.person_id),
+                    scenario.people[0].label,
+                )
+            else:
+                person_key = scenario.people[0].label
+
             assets.append(
                 AssetAccount(
                     name=asset.name,
@@ -222,6 +229,7 @@ class ScenarioBuilder:
                     growth_rate_std=asset.growth_rate_std,
                     contributions_end_at_retirement=asset.contributions_end_at_retirement,
                     bond_allocation=bond_allocation,
+                    person_key=person_key,
                     cost_basis=asset.balance,
                 )
             )
@@ -419,6 +427,8 @@ class ResponseFormatter:
             "rental_income_tax_paid_median": _from_iter("rental_income_tax_paid"),
             "pension_drawdown_tax_paid_median": _from_iter("pension_drawdown_tax_paid"),
             "capital_gains_tax_paid_median": _from_iter("capital_gains_tax_paid"),
+            "gia_cgt_paid_median": _from_iter("gia_cgt_paid"),
+            "property_cgt_paid_median": _from_iter("property_cgt_paid"),
             "salary_income_tax_personal_allowance_used_median": _from_iter("salary_income_tax_personal_allowance_used"),
             "salary_income_tax_personal_allowance_lost_median": _from_iter("salary_income_tax_personal_allowance_lost"),
             "salary_income_tax_basic_band_amount_median": _from_iter("salary_income_tax_basic_band_amount"),

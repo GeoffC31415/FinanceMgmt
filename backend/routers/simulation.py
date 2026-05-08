@@ -373,6 +373,11 @@ _CSV_COLUMNS = [
     # P1.1: Structured tax breakdown
     "salary_income_tax_paid", "rental_income_tax_paid",
     "pension_drawdown_tax_paid", "capital_gains_tax_paid",
+    "salary_income_tax_personal_allowance_used", "salary_income_tax_personal_allowance_lost",
+    "salary_income_tax_basic_band_amount", "salary_income_tax_basic_band_tax",
+    "salary_income_tax_higher_band_amount", "salary_income_tax_higher_band_tax",
+    "salary_income_tax_additional_band_amount", "salary_income_tax_additional_band_tax",
+    "salary_income_tax_allowance_taper_tax", "gia_cgt_paid", "property_cgt_paid",
 ]
 
 
@@ -402,8 +407,8 @@ async def export_simulation(
         for col_name in _CSV_COLUMNS:
             values = fields.get(col_name)
             if values is not None and values.size > 0:
-                flat = [float(x) for x in values.flatten()]
-                writer.writerow([col_name] + [f"{v:.2f}" for v in flat])
+                per_year = [float(x) for x in np.median(values, axis=0)]
+                writer.writerow([col_name] + [f"{v:.2f}" for v in per_year])
             else:
                 writer.writerow([col_name] + ["0.00"] * len(years))
 
@@ -415,8 +420,8 @@ async def export_simulation(
         for col_name in _CSV_COLUMNS:
             values = fields.get(col_name)
             if values is not None and values.size > 0:
-                flat = [float(x) for x in values.flatten()]
-                data[col_name] = [round(v, 2) for v in flat]
+                per_year = [float(x) for x in np.median(values, axis=0)]
+                data[col_name] = [round(v, 2) for v in per_year]
             else:
                 data[col_name] = [0.0] * len(years)
         body = json.dumps(data)

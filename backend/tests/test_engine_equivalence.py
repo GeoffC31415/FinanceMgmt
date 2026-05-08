@@ -163,7 +163,6 @@ def _make_test_scenario(
             isa_annual_limit=20_000.0,
             state_pension_annual=11_500.0,
             cgt_annual_allowance=3_000.0,
-            cgt_rate=0.10,
             emergency_fund_months=6.0,
             pension_access_age=55,
         ),
@@ -678,6 +677,58 @@ class TestPensionDrawdownOwnership:
         assert single_result.fields["pension_income"][0, 0] == pytest.approx(25_000.0, abs=0.05)
         assert single_result.fields["income_tax_paid"][0, 0] > 1_400.0
         assert single_result.fields["pension_withdrawals"][0, 0] > split_result.fields["pension_withdrawals"][0, 0]
+
+
+class TestCgtOwnership:
+    """Regression tests for owner-specific CGT allowance handling."""
+
+    @staticmethod
+    def _zero_return_result(scenario: SimulationScenario):
+        return TestStatePensionTax._zero_return_result(scenario)
+
+    def test_two_gia_owners_use_two_cgt_allowances(self):
+        people = [
+            PersonEntity(key="person1", birth_date=date(1950, 1, 1), planned_retirement_age=65, state_pension_age=99),
+            PersonEntity(key="person2", birth_date=date(1951, 1, 1), planned_retirement_age=65, state_pension_age=99),
+        ]
+        gia1 = AssetAccount(
+            name="GIA 1", asset_type="GIA", withdrawal_priority=40,
+            balance=10_000.0, annual_contribution=0.0,
+            growth_rate_mean=0.0, growth_rate_std=0.0,
+            contributions_end_at_retirement=False, bond_allocation=0.0,
+            person_key="person1", cost_basis=0.0,
+        )
+        gia2 = AssetAccount(
+            name="GIA 2", asset_type="GIA", withdrawal_priority=40,
+            balance=10_000.0, annual_contribution=0.0,
+            growth_rate_mean=0.0, growth_rate_std=0.0,
+            contributions_end_at_retirement=False, bond_allocation=0.0,
+            person_key="person2", cost_basis=0.0,
+        )
+        scenario = SimulationScenario(
+            start_year=2024,
+            end_year=2024,
+            people=people,
+            salary_by_person={},
+            pension_by_person={},
+            assets=[gia1, gia2],
+            properties=[],
+            expenses=[ExpenseItem(name="Living", annual_amount=20_000.0, is_inflation_linked=False)],
+            assumptions=SimulationAssumptions(
+                inflation_rate=0.0,
+                state_pension_annual=0.0,
+                cgt_annual_allowance=3_000.0,
+                emergency_fund_months=0.0,
+                bankruptcy_threshold=-1_000_000.0,
+            ),
+        )
+
+        result = self._zero_return_result(scenario)
+
+        # Each owner realizes £10k of gains, uses their own £3k allowance,
+        # and pays 10% on £7k because no income has consumed the basic-rate band.
+        assert result.fields["capital_gains_tax_paid"][0, 0] == pytest.approx(1_400.0, abs=0.05)
+        assert result.fields["gia_cgt_paid"][0, 0] == pytest.approx(1_400.0, abs=0.05)
 
 
 class TestFirstYearGrowth:

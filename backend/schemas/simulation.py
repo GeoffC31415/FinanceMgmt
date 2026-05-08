@@ -52,7 +52,7 @@ class SimulationResponse(BaseModel):
     fun_fund_median: list[float] = Field(description="Median extra retirement spend (fun fund) per year")
     
     # Tax
-    income_tax_paid_median: list[float] = Field(description="Median income tax paid per year, including CGT in legacy aggregate")
+    income_tax_paid_median: list[float] = Field(description="Median income tax paid per year, excluding CGT")
     state_pension_tax_paid_median: list[float] = Field(description="Median income tax attributable to taxable state pension per year")
     ni_paid_median: list[float] = Field(description="Median National Insurance paid per year")
     total_tax_median: list[float] = Field(description="Median total tax paid per year")
@@ -61,6 +61,8 @@ class SimulationResponse(BaseModel):
     rental_income_tax_paid_median: list[float] = Field(description="Median income tax attributable to rental income per year")
     pension_drawdown_tax_paid_median: list[float] = Field(description="Median income tax attributable to private pension drawdown per year")
     capital_gains_tax_paid_median: list[float] = Field(description="Median capital gains tax paid per year")
+    gia_cgt_paid_median: list[float] = Field(description="Median CGT paid on GIA disposals per year")
+    property_cgt_paid_median: list[float] = Field(description="Median CGT paid on property disposals per year")
     salary_income_tax_personal_allowance_used_median: list[float] = Field(description="Median salary tax-free personal allowance used per year")
     salary_income_tax_personal_allowance_lost_median: list[float] = Field(description="Median personal allowance lost to salary income taper per year")
     salary_income_tax_basic_band_amount_median: list[float] = Field(description="Median salary income amount taxed in the basic-rate band per year")
