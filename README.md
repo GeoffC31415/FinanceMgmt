@@ -46,7 +46,7 @@ The hot loop is Numba-accelerated so recalculations stay interactive.
 
 The backend includes simplified UK tax logic for:
 
-- income tax bands and personal allowance tapering;
+- income tax bands, personal allowance tapering, and per-band breakdown;
 - National Insurance on salary;
 - salary pension contributions;
 - taxable state pension, calculated per person;
@@ -65,7 +65,7 @@ Explore results through:
 - safe withdrawal analysis;
 - bond allocation optimisation;
 - scenario comparison;
-- real-vs-nominal value toggle;
+- real (today's pounds) by default, with nominal toggle;
 - Excel export.
 
 ---
@@ -225,7 +225,7 @@ Current historical sources in `data/`:
 - S&P 500 annual returns;
 - US 10-Year Treasury annual returns.
 
-The model uses nominal returns. The dashboard can display values in nominal terms or adjusted back to today’s purchasing power using the scenario inflation assumption.
+The model uses nominal returns. The dashboard displays real values (adjusted to today’s purchasing power) by default, with a nominal toggle.
 
 ### Parametric returns
 
@@ -339,10 +339,20 @@ FinanceMgmt/
 │   ├── schemas/             # Pydantic schemas
 │   ├── models/              # SQLAlchemy ORM models
 │   ├── simulation/          # Monte Carlo engine, tax logic, services
-│   └── tests/               # Backend tests
+│   │   ├── tax/             # Income tax, NI, pension drawdown, CGT
+│   │   ├── entities/        # Simulation entity models
+│   │   ├── session_cache.py # Persistent file-backed session cache
+│   │   ├── returns_cache.py # Cached historical return paths
+│   │   └── bond_sweep.py   # Bond allocation optimiser
+│   ├── tests/               # Backend tests
+│   └── alembic/             # Database migrations
 ├── frontend/                # React + TypeScript + Vite frontend
 │   ├── src/api/             # API client and Excel export
 │   ├── src/components/      # Dashboard, charts, config forms, help
+│   │   ├── config/          # Scenario configuration forms
+│   │   ├── Dashboard/       # Projection dashboard panels
+│   │   ├── onboarding/      # Intro wizard and starter scenarios
+│   │   └── ui/              # Reusable UI primitives (Button, Card, etc.)
 │   ├── src/hooks/           # Scenario/simulation hooks
 │   ├── src/types/           # TypeScript types
 │   └── src/utils/           # Shared utilities
@@ -414,12 +424,12 @@ Main endpoints live under `/api`.
 
 ## Current validation status
 
-At the time of this README rewrite:
+As of May 2026:
 
-- frontend build passes with `npm run build`;
-- frontend tests pass with `npm test -- --run`;
-- backend syntax checks pass in the current environment;
-- backend pytest availability depends on installed environment dependencies.
+- frontend build passes with `npm run build` (with non-blocking large-chunk warning);
+- frontend tests pass with `npm test -- --run` (254 tests across 23 files);
+- backend tests pass with `cd backend && ../.venv/bin/pytest -q` (174 tests);
+- backend syntax checks pass in the current environment.
 
 ---
 
