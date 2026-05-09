@@ -28,6 +28,14 @@ class SimulationAssumptions:
     debt_interest_rate: float = 0.08  # Annual interest rate on negative cash (debt)
     bankruptcy_threshold: float = -100_000.0  # Net worth below which simulation terminates
 
+    # P1.5/P1.6: Pension rules
+    pension_annual_allowance: float = 60_000.0
+    pension_lump_sum_allowance: float = 26_100.0
+    pension_tapered_threshold: float = 260_000.0
+    pension_tapered_reduction_rate: float = 0.5
+    pension_minimum_allowance: float = 10_000.0
+    mpaa_annual_allowance: float = 10_000.0
+
     # Configurable tax bands (default: UK 2024/25)
     personal_allowance: float = 12_570.0
     basic_rate_limit: float = 50_270.0

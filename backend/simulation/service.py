@@ -96,6 +96,14 @@ class ScenarioBuilder:
             pension_access_age=self._coerce_int(assumptions_json.get("pension_access_age"), 55),
             debt_interest_rate=self._coerce_float(assumptions_json.get("debt_interest_rate"), 0.08),
             bankruptcy_threshold=self._coerce_float(assumptions_json.get("bankruptcy_threshold"), -100_000.0),
+            # P1.5/P1.6: Pension rules
+            pension_annual_allowance=getattr(tax_cfg, "pension_annual_allowance", 60_000.0),
+            pension_lump_sum_allowance=getattr(tax_cfg, "pension_lump_sum_allowance", 26_100.0),
+            pension_tapered_threshold=getattr(tax_cfg, "pension_tapered_threshold", 260_000.0),
+            pension_tapered_reduction_rate=getattr(tax_cfg, "pension_tapered_reduction_rate", 0.5),
+            pension_minimum_allowance=getattr(tax_cfg, "pension_minimum_allowance", 10_000.0),
+            mpaa_annual_allowance=getattr(tax_cfg, "mpaa_annual_allowance", 10_000.0),
+            # Tax bands
             personal_allowance=tax_cfg.personal_allowance,
             basic_rate_limit=tax_cfg.basic_rate_limit,
             higher_rate_limit=tax_cfg.higher_rate_limit,
@@ -438,6 +446,14 @@ class ResponseFormatter:
             "salary_income_tax_additional_band_amount_median": _from_iter("salary_income_tax_additional_band_amount"),
             "salary_income_tax_additional_band_tax_median": _from_iter("salary_income_tax_additional_band_tax"),
             "salary_income_tax_allowance_taper_tax_median": _from_iter("salary_income_tax_allowance_taper_tax"),
+            # P1.5/P1.6: Pension rules
+            "pension_annual_allowance_charge_median": _from_iter("pension_annual_allowance_charge"),
+            "pension_tax_free_cash_remaining_median": _from_iter("pension_tax_free_cash_remaining"),
+            "pension_tax_free_cash_taken_median": _from_iter("pension_tax_free_cash_taken"),
+            "pension_mpaa_active_median": _from_iter("pension_mpaa_active"),
+            "pension_annual_allowance_median": _from_iter("pension_annual_allowance"),
+            "pension_tapered_allowance_median": _from_iter("pension_tapered_allowance"),
+            "pension_is_tapered_median": _from_iter("pension_is_tapered"),
             # Assets
             "isa_balance_median": _from_iter("isa_balance"),
             "pension_balance_median": _from_iter("pension_balance"),

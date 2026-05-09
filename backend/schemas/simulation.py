@@ -72,7 +72,16 @@ class SimulationResponse(BaseModel):
     salary_income_tax_additional_band_amount_median: list[float] = Field(description="Median salary income amount taxed in the additional-rate band per year")
     salary_income_tax_additional_band_tax_median: list[float] = Field(description="Median salary income tax paid at the additional rate per year")
     salary_income_tax_allowance_taper_tax_median: list[float] = Field(description="Median extra salary income tax caused by personal allowance taper per year")
-    
+
+    # P1.5/P1.6: Pension rules
+    pension_annual_allowance_charge_median: list[float] = Field(description="Median annual allowance charge per year (when contributions exceed allowance)")
+    pension_tax_free_cash_remaining_median: list[float] = Field(description="Median remaining tax-free cash allowance per year")
+    pension_tax_free_cash_taken_median: list[float] = Field(description="Median total tax-free cash taken per year")
+    pension_mpaa_active_median: list[float] = Field(description="Median MPAA flag (1=active) per year")
+    pension_annual_allowance_median: list[float] = Field(description="Median effective annual allowance per year")
+    pension_tapered_allowance_median: list[float] = Field(description="Median tapered annual allowance per year")
+    pension_is_tapered_median: list[float] = Field(description="Median flag indicating if tapered allowance applies per year")
+
     # Assets
     isa_balance_median: list[float] = Field(description="Median ISA balance per year")
     pension_balance_median: list[float] = Field(description="Median pension balance per year")

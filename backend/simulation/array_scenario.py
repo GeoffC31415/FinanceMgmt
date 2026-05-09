@@ -18,6 +18,13 @@ class ArrayAssumptions:
     pension_access_age: int
     debt_interest_rate: float
     bankruptcy_threshold: float
+    # P1.5/P1.6: Pension rules
+    pension_annual_allowance: float = 60_000.0
+    pension_lump_sum_allowance: float = 26_100.0
+    pension_tapered_threshold: float = 260_000.0
+    pension_tapered_reduction_rate: float = 0.5
+    pension_minimum_allowance: float = 10_000.0
+    mpaa_annual_allowance: float = 10_000.0
     # Configurable tax bands
     personal_allowance: float = 12_570.0
     basic_rate_limit: float = 50_270.0
@@ -296,6 +303,14 @@ def build_array_scenario(*, scenario: SimulationScenario, returns: ReturnsMatrix
         pension_access_age=int(a.pension_access_age),
         debt_interest_rate=float(a.debt_interest_rate),
         bankruptcy_threshold=float(a.bankruptcy_threshold),
+        # P1.5/P1.6: Pension rules
+        pension_annual_allowance=float(getattr(a, "pension_annual_allowance", 60_000.0)),
+        pension_lump_sum_allowance=float(getattr(a, "pension_lump_sum_allowance", 26_100.0)),
+        pension_tapered_threshold=float(getattr(a, "pension_tapered_threshold", 260_000.0)),
+        pension_tapered_reduction_rate=float(getattr(a, "pension_tapered_reduction_rate", 0.5)),
+        pension_minimum_allowance=float(getattr(a, "pension_minimum_allowance", 10_000.0)),
+        mpaa_annual_allowance=float(getattr(a, "mpaa_annual_allowance", 10_000.0)),
+        # Tax bands
         personal_allowance=float(a.personal_allowance),
         basic_rate_limit=float(a.basic_rate_limit),
         higher_rate_limit=float(a.higher_rate_limit),

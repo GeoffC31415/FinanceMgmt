@@ -14,6 +14,7 @@ class IncomeCreate(BaseModel):
 
     employee_pension_pct: float = Field(default=0.0, ge=0.0, le=1.0, description="Employee pension contribution percentage")
     employer_pension_pct: float = Field(default=0.0, ge=0.0, le=1.0, description="Employer pension contribution percentage")
+    pension_contribution_method: str = Field(default="net_pay", description="Pension contribution method: 'net_pay', 'relief_at_source', or 'salary_sacrifice'")
 
     start_year: int | None = Field(default=None, ge=1900, le=2200, description="Year this income starts (None = from simulation start)")
     end_year: int | None = Field(default=None, ge=1900, le=2200, description="Year this income ends (None = indefinite)")

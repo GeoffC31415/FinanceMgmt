@@ -88,7 +88,16 @@ F_SALARY_TAX_ALLOWANCE_TAPER_TAX = 55
 F_GIA_CGT_PAID = 56
 F_PROPERTY_CGT_PAID = 57
 
-N_FIELDS = 58
+# P1.5/P1.6: Pension rules
+F_PENSION_ANNUAL_ALLOWANCE_CHARGE = 58
+F_PENSION_TAX_FREE_CASH_REMAINING = 59
+F_PENSION_TAX_FREE_CASH_TAKEN = 60
+F_PENSION_MPA_ACTIVE = 61
+F_PENSION_ANNUAL_ALLOWANCE = 62
+F_PENSION_TAPERED_ALLOWANCE = 63
+F_PENSION_IS_TAPERED = 64
+
+N_FIELDS = 65
 
 # Asset type codes
 ASSET_CASH = 0
@@ -98,6 +107,17 @@ ASSET_GIA = 2
 WITHDRAW_ASSET = 0
 WITHDRAW_PENSION = 1
 WITHDRAW_PROPERTY = 2
+
+# Pension drawdown mode codes (P1.5)
+DRAWDOWN_MODE_SIMPLE = 0
+DRAWDOWN_MODE_UFULS = 1
+DRAWDOWN_MODE_PCLS_THEN_DRAWDOWN = 2
+DRAWDOWN_MODE_FULLY_TAXABLE = 3
+
+# Pension contribution method codes (P1.6)
+CONTRIB_METHOD_NET_PAY = 0
+CONTRIB_METHOD_RELIEF_AT_SOURCE = 1
+CONTRIB_METHOD_SALARY_SACRIFICE = 2
 
 
 def run_simulation(
@@ -235,6 +255,13 @@ def _run_monte_carlo_fast(
         pension_access_age=a.pension_access_age,
         debt_interest_rate=a.debt_interest_rate,
         bankruptcy_threshold=a.bankruptcy_threshold,
+        # P1.5/P1.6: Pension rules
+        pension_annual_allowance=a.pension_annual_allowance,
+        pension_lump_sum_allowance=a.pension_lump_sum_allowance,
+        pension_tapered_threshold=a.pension_tapered_threshold,
+        pension_tapered_reduction_rate=a.pension_tapered_reduction_rate,
+        pension_minimum_allowance=a.pension_minimum_allowance,
+        mpaa_annual_allowance=a.mpaa_annual_allowance,
         # Tax bands (configurable per scenario)
         personal_allowance=a.personal_allowance,
         basic_rate_limit=a.basic_rate_limit,
@@ -271,6 +298,14 @@ def _run_monte_carlo_fast(
         "salary_income_tax_additional_band_amount", "salary_income_tax_additional_band_tax",
         "salary_income_tax_allowance_taper_tax",
         "gia_cgt_paid", "property_cgt_paid",
+        # P1.5/P1.6: Pension rules
+        "pension_annual_allowance_charge",
+        "pension_tax_free_cash_remaining",
+        "pension_tax_free_cash_taken",
+        "pension_mpaa_active",
+        "pension_annual_allowance",
+        "pension_tapered_allowance",
+        "pension_is_tapered",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -606,6 +641,13 @@ def _simulate_all_iterations(
     pension_access_age: int,
     debt_interest_rate: float,
     bankruptcy_threshold: float,
+    # P1.5/P1.6: Pension rules
+    pension_annual_allowance: float,
+    pension_lump_sum_allowance: float,
+    pension_tapered_threshold: float,
+    pension_tapered_reduction_rate: float,
+    pension_minimum_allowance: float,
+    mpaa_annual_allowance: float,
     # Tax bands (configurable)
     personal_allowance: float,
     basic_rate_limit: float,
@@ -650,6 +692,14 @@ def _simulate_all_iterations(
         # Debt tracking for this iteration
         it_debt_balance = 0.0
         it_is_bankrupt = False
+
+        # P1.5/P1.6: Per-person pension state tracking
+        it_pension_tax_free_remaining = np.full(n_people, pension_lump_sum_allowance, dtype=np.float64)
+        it_pension_tax_free_taken = np.zeros(n_people, dtype=np.float64)
+        it_pension_mpaa_active = np.zeros(n_people, dtype=np.int8)
+        it_personal_allowance_for_taper = np.zeros(n_people, dtype=np.float64)  # PA used for tapered allowance calc
+        it_pension_annual_allowance = np.full(n_people, pension_annual_allowance, dtype=np.float64)
+        it_pension_is_tapered = np.zeros(n_people, dtype=np.int8)
 
         for y_idx in range(n_years):
             year = years[y_idx]
@@ -761,6 +811,33 @@ def _simulate_all_iterations(
 
                 # Apply salary growth for next year (after use)
                 it_salary_gross[s] *= (1.0 + salary_growth_rate[s])
+
+            # --- P1.5: Annual allowance check per person ---
+            # Calculate effective allowance based on tapered rules and MPAA
+            for p in range(n_people):
+                if people_is_child[p] == 1:
+                    continue
+                # Threshold income = salary + benefits + employee pension contributions
+                threshold_income = per_person_salary[p] + per_person_employee_pension[p]
+                # Adjusted income = threshold income + employer contributions
+                adjusted_income = threshold_income + per_person_employer_pension[p]
+
+                is_tapered = 0
+                effective_allowance = pension_annual_allowance
+
+                if it_pension_mpaa_active[p] == 1:
+                    # MPAA active: use lower allowance
+                    effective_allowance = mpaa_annual_allowance
+                elif threshold_income > pension_tapered_threshold:
+                    # Tapered allowance applies
+                    excess_income = adjusted_income - pension_tapered_threshold
+                    reduction = min(pension_annual_allowance, excess_income * pension_tapered_reduction_rate)
+                    effective_allowance = max(pension_minimum_allowance, pension_annual_allowance - reduction)
+                    is_tapered = 1
+
+                it_pension_annual_allowance[p] = effective_allowance
+                it_pension_is_tapered[p] = is_tapered
+                it_personal_allowance_for_taper[p] = per_person_salary[p] + per_person_employee_pension[p]
 
             # Process rental income (per person)
             rental_income_gross = 0.0
@@ -1438,6 +1515,41 @@ def _simulate_all_iterations(
             out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_AMOUNT] = salary_tax_additional_amount
             out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_TAX] = salary_tax_additional_tax
             out[it, y_idx, F_SALARY_TAX_ALLOWANCE_TAPER_TAX] = salary_tax_taper_tax
+
+            # P1.5/P1.6: Pension rules output
+            # Annual allowance charge per person (summed)
+            total_aa_charge = 0.0
+            for p in range(n_people):
+                if people_is_child[p] == 1:
+                    continue
+                total_contrib = per_person_employee_pension[p] + per_person_employer_pension[p]
+                excess = max(0.0, total_contrib - it_pension_annual_allowance[p])
+                total_aa_charge += excess
+            out[it, y_idx, F_PENSION_ANNUAL_ALLOWANCE_CHARGE] = total_aa_charge
+
+            # Tax-free cash remaining (summed across people)
+            total_tax_free_remaining = 0.0
+            total_tax_free_taken = 0.0
+            for p in range(n_people):
+                total_tax_free_remaining += it_pension_tax_free_remaining[p]
+                total_tax_free_taken += it_pension_tax_free_taken[p]
+            out[it, y_idx, F_PENSION_TAX_FREE_CASH_REMAINING] = total_tax_free_remaining
+            out[it, y_idx, F_PENSION_TAX_FREE_CASH_TAKEN] = total_tax_free_taken
+
+            # MPAA active (summed)
+            total_mpaa = 0.0
+            for p in range(n_people):
+                total_mpaa += it_pension_mpaa_active[p]
+            out[it, y_idx, F_PENSION_MPA_ACTIVE] = total_mpaa
+
+            # Annual allowance and tapered status (averaged)
+            out[it, y_idx, F_PENSION_ANNUAL_ALLOWANCE] = np.mean(it_pension_annual_allowance)
+            out[it, y_idx, F_PENSION_TAPERED_ALLOWANCE] = np.mean(
+                np.where(it_pension_is_tapered == 1,
+                         pension_minimum_allowance,
+                         pension_annual_allowance)
+            )
+            out[it, y_idx, F_PENSION_IS_TAPERED] = np.max(it_pension_is_tapered)
 
     return out
 
