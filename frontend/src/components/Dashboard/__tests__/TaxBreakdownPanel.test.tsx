@@ -111,13 +111,15 @@ describe("TaxBreakdownPanel", () => {
     expect(screen.getByText("Tax Breakdown")).toBeInTheDocument();
     expect(screen.getByText("State pension tax")).toBeInTheDocument();
     expect(screen.getAllByText("£1,600").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/16% of total tax; peak £1,800 in 2026/)).toBeInTheDocument();
+    // State pension detail: "Peak £1,800 in 2026"
+    expect(screen.getByText(/Peak £1,800 in 2026/)).toBeInTheDocument();
     expect(screen.getByText("Salary income tax")).toBeInTheDocument();
     expect(screen.getByText("Personal allowance taper")).toBeInTheDocument();
     expect(screen.getByText("£5,000")).toBeInTheDocument();
     expect(screen.getByText("Rental income tax")).toBeInTheDocument();
     expect(screen.getByText("Pension drawdown tax")).toBeInTheDocument();
-    expect(screen.getAllByText("Capital gains tax").length).toBeGreaterThanOrEqual(1);
+    // CGT is 0 in base data, so the CGT section is not rendered
+    expect(screen.queryByText("Capital gains tax")).not.toBeInTheDocument();
   });
 
   it("returns summary for a selected year index", () => {
@@ -153,10 +155,12 @@ describe("TaxBreakdownPanel", () => {
       />,
     );
 
-    expect(screen.getByText("GIA CGT")).toBeInTheDocument();
-    expect(screen.getByText("Property CGT")).toBeInTheDocument();
-    expect(screen.getByText("£1,800")).toBeInTheDocument();
-    expect(screen.getAllByText("£1,200").length).toBeGreaterThanOrEqual(1);
+    // CGT section header (rendered as "Capital gains tax")
+    expect(screen.getByText(/Capital.*gains.*tax/i)).toBeInTheDocument();
+    // Inline split: "GIA: £1,800 · Property: £1,200"
+    expect(screen.getByText(/GIA: .*£1,800/)).toBeInTheDocument();
+    // Total CGT for last year is £3,000
+    expect(screen.getByText("£3,000")).toBeInTheDocument();
   });
 
   it("shows a compatibility message when state pension tax is missing", () => {
@@ -171,7 +175,8 @@ describe("TaxBreakdownPanel", () => {
     );
 
     expect(screen.getByText("(P10)")).toBeInTheDocument();
-    expect(screen.getByText("Not returned")).toBeInTheDocument();
-    expect(screen.getByText(/Run against a newer backend/)).toBeInTheDocument();
+    // State pension tax row is hidden when data is missing; no "Not returned" message
+    expect(screen.queryByText("Not returned")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Run against a newer backend/)).not.toBeInTheDocument();
   });
 });

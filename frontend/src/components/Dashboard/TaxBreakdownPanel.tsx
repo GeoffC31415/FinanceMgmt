@@ -35,6 +35,14 @@ export type TaxBreakdownSummary = {
   gia_cgt: number;
   property_cgt: number;
   salary_band_breakdown: SalaryTaxBandBreakdown | null;
+  // P1.5/P1.6: Pension rules
+  pension_annual_allowance_charge: number;
+  pension_tax_free_cash_remaining: number;
+  pension_tax_free_cash_taken: number;
+  pension_mpaa_active: number;
+  pension_annual_allowance: number;
+  pension_is_tapered: number;
+  pension_tapered_allowance: number;
 };
 
 const sanitize = (value: number | undefined | null): number => {
@@ -58,6 +66,16 @@ export function getTaxBreakdownSummary(
   const gia_cgt = sanitize(result.gia_cgt_paid_median?.[yearIndex]);
   const property_cgt = sanitize(result.property_cgt_paid_median?.[yearIndex]);
   const state_pension_tax_series = result.state_pension_tax_paid_median;
+
+  // P1.5/P1.6: Pension rules
+  const pension_aa_charge = sanitize(result.pension_annual_allowance_charge_median?.[yearIndex]);
+  const pension_tax_free_remaining = sanitize(result.pension_tax_free_cash_remaining_median?.[yearIndex]);
+  const pension_tax_free_taken = sanitize(result.pension_tax_free_cash_taken_median?.[yearIndex]);
+  const pension_mpaa_active = sanitize(result.pension_mpaa_active_median?.[yearIndex]);
+  const pension_aa = sanitize(result.pension_annual_allowance_median?.[yearIndex]);
+  const pension_is_tapered = sanitize(result.pension_is_tapered_median?.[yearIndex]);
+  const pension_tapered_aa = sanitize(result.pension_tapered_allowance_median?.[yearIndex]);
+
   const has_salary_band_breakdown = Boolean(result.salary_income_tax_basic_band_tax_median?.length);
   const salary_band_breakdown: SalaryTaxBandBreakdown | null = has_salary_band_breakdown
     ? {
@@ -109,6 +127,14 @@ export function getTaxBreakdownSummary(
     gia_cgt,
     property_cgt,
     salary_band_breakdown,
+    // P1.5/P1.6: Pension rules
+    pension_annual_allowance_charge: pension_aa_charge,
+    pension_tax_free_cash_remaining: pension_tax_free_remaining,
+    pension_tax_free_cash_taken: pension_tax_free_taken,
+    pension_mpaa_active: pension_mpaa_active,
+    pension_annual_allowance: pension_aa,
+    pension_is_tapered: pension_is_tapered,
+    pension_tapered_allowance: pension_tapered_aa,
   };
 }
 
@@ -120,97 +146,7 @@ function formatPercent(value: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
 }
 
-function TaxMetricCard({
-  label,
-  value,
-  detail,
-  tone = "slate",
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "slate" | "cyan" | "amber";
-}) {
-  const toneClasses = {
-    slate: "text-slate-100 border-slate-700/50 bg-slate-900/60",
-    cyan: "text-cyan-200 border-cyan-300/20 bg-cyan-300/10",
-    amber: "text-amber-200 border-amber-300/20 bg-amber-300/10",
-  };
-
-  return (
-    <div className={`rounded-lg border p-4 ${toneClasses[tone]}`}>
-      <div className="text-xs font-medium text-slate-400 mb-1">{label}</div>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{detail}</div>
-    </div>
-  );
-}
-
-function TaxLineItem({
-  label,
-  value,
-  detail,
-  tone,
-  totalTax,
-  muted = false,
-  children,
-}: {
-  label: string;
-  value: number | null;
-  detail: string;
-  tone: "slate" | "cyan" | "amber" | "rose";
-  totalTax: number;
-  muted?: boolean;
-  children?: ReactNode;
-}) {
-  const displayValue = value ?? 0;
-  const width = totalTax > 0 && value !== null ? Math.min((displayValue / totalTax) * 100, 100) : 0;
-  const toneClasses = {
-    slate: {
-      text: "text-slate-200",
-      bar: "bg-slate-500/60",
-      rail: "bg-slate-800/70",
-    },
-    cyan: {
-      text: "text-cyan-200",
-      bar: "bg-cyan-400/80",
-      rail: "bg-cyan-950/60",
-    },
-    amber: {
-      text: "text-amber-200",
-      bar: "bg-amber-400/80",
-      rail: "bg-amber-950/60",
-    },
-    rose: {
-      text: "text-rose-200",
-      bar: "bg-rose-400/80",
-      rail: "bg-rose-950/60",
-    },
-  };
-
-  return (
-    <div className={`rounded-lg border border-slate-800/80 bg-slate-950/40 p-3 ${muted ? "opacity-75" : ""}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className={`text-sm font-medium ${toneClasses[tone].text}`}>{label}</div>
-          <div className="mt-1 text-xs text-slate-500">{detail}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-base font-semibold text-slate-100">
-            {value === null ? "Not returned" : formatCurrency(displayValue)}
-          </div>
-          {value !== null && totalTax > 0 && (
-            <div className="mt-1 text-xs text-slate-500">{formatPercent((displayValue / totalTax) * 100)} of total tax</div>
-          )}
-        </div>
-      </div>
-      <div className={`mt-3 h-2 overflow-hidden rounded-full ${toneClasses[tone].rail}`}>
-        <div className={`h-full rounded-full ${toneClasses[tone].bar}`} style={{ width: `${width}%` }} />
-      </div>
-      {children}
-    </div>
-  );
-}
+/* ─── Salary tax band table (kept as-is) ─── */
 
 function SalaryTaxBandBreakdownTable({ breakdown }: { breakdown: SalaryTaxBandBreakdown }) {
   const rateLabel = (tax: number, amount: number) => (amount > 0 ? formatPercent((tax / amount) * 100) : "—");
@@ -256,7 +192,7 @@ function SalaryTaxBandBreakdownTable({ breakdown }: { breakdown: SalaryTaxBandBr
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
       <div className="border-b border-slate-800 px-3 py-2 text-xs font-semibold text-slate-300">
-        Salary income tax by band, with allowance taper shown separately
+        Salary income tax by band
       </div>
       <div className="divide-y divide-slate-800/80">
         {rows.map((row) => (
@@ -277,6 +213,96 @@ function SalaryTaxBandBreakdownTable({ breakdown }: { breakdown: SalaryTaxBandBr
   );
 }
 
+/* ─── Income tax source breakdown ─── */
+
+function TaxSourceRow({
+  label,
+  value,
+  detail,
+  tone,
+  muted = false,
+  children,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  tone: "rose" | "amber" | "cyan";
+  muted?: boolean;
+  children?: ReactNode;
+}) {
+  const width = 100; // 100% of the income tax bucket
+  const toneClasses = {
+    rose: { bar: "bg-rose-400/80", rail: "bg-rose-950/60" },
+    amber: { bar: "bg-amber-400/80", rail: "bg-amber-950/60" },
+    cyan: { bar: "bg-cyan-400/80", rail: "bg-cyan-950/60" },
+  };
+
+  return (
+    <div className={`rounded-lg border border-slate-800/80 ${muted ? "opacity-60" : ""}`}>
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+        <div className="flex-1">
+          <span className="font-medium text-slate-200">{label}</span>
+          <span className="ml-2 text-xs text-slate-500">{detail}</span>
+        </div>
+        <span className="text-base font-semibold text-slate-100">{formatCurrency(value)}</span>
+      </div>
+      <div className={`h-1 overflow-hidden rounded-full ${toneClasses[tone].rail}`}>
+        <div className={`h-full rounded-full ${toneClasses[tone].bar}`} style={{ width: `${width}%` }} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ─── Pension rules compact strip ─── */
+
+function PensionRulesStrip({
+  isTapered,
+  taperedAllowance,
+  aaCharge,
+  taxFreeRemaining,
+  taxFreeTaken,
+  mpaaActive,
+  annualAllowance,
+}: {
+  isTapered: number;
+  taperedAllowance: number;
+  aaCharge: number;
+  taxFreeRemaining: number;
+  taxFreeTaken: number;
+  mpaaActive: number;
+  annualAllowance: number;
+}) {
+  const hasAlerts = aaCharge > 0 || isTapered > 0.5 || mpaaActive > 0.5;
+
+  return (
+    <div className={`rounded-lg border ${hasAlerts ? "border-amber-800/40 bg-amber-950/20" : "border-slate-800 bg-slate-950/30"} px-3 py-2.5`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span className="text-slate-500">AA: <span className="font-medium text-slate-300">{formatCurrency(annualAllowance)}</span></span>
+        {isTapered > 0.5 && (
+          <span className="flex items-center gap-1 text-amber-300">
+            ⚠ Tapered → <span className="font-medium">{formatCurrency(taperedAllowance)}</span>
+          </span>
+        )}
+        {aaCharge > 0 && (
+          <span className="flex items-center gap-1 text-red-300">
+            AA charge: <span className="font-medium">{formatCurrency(aaCharge)}</span>
+          </span>
+        )}
+        <span className="text-slate-500">Tax-free: <span className="font-medium text-slate-300">{formatCurrency(taxFreeRemaining)}</span> left</span>
+        <span className="text-slate-500">Taken: <span className="font-medium text-slate-300">{formatCurrency(taxFreeTaken)}</span></span>
+        {mpaaActive > 0.5 && (
+          <span className="flex items-center gap-1 text-orange-300">
+            MPAA active
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main panel ─── */
+
 export function TaxBreakdownPanel({
   display_result,
   percentile,
@@ -290,13 +316,33 @@ export function TaxBreakdownPanel({
   );
   if (!summary) return null;
 
-  const has_state_pension_tax = summary.state_pension_tax !== null;
-  const statePensionDetail = has_state_pension_tax
-    ? `${formatPercent(summary.state_pension_tax_share_pct ?? 0)} of total tax; peak ${formatCurrency(summary.peak_state_pension_tax ?? 0)} in ${summary.peak_state_pension_tax_year}`
-    : "Run against a newer backend to see this source-specific field";
+  const {
+    total_tax,
+    income_tax_bucket,
+    national_insurance,
+    cgt,
+    salary_tax,
+    rental_tax,
+    pension_drawdown_tax,
+    state_pension_tax,
+    gia_cgt,
+    property_cgt,
+    salary_band_breakdown,
+    // Pension rules
+    pension_annual_allowance_charge,
+    pension_tax_free_cash_remaining,
+    pension_tax_free_cash_taken,
+    pension_mpaa_active,
+    pension_annual_allowance,
+    pension_is_tapered,
+    pension_tapered_allowance,
+  } = summary;
+
+  const has_state_pension_tax = state_pension_tax !== null;
 
   return (
     <section className="rounded border border-slate-800 bg-slate-900/30 p-4">
+      {/* Header */}
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -311,112 +357,100 @@ export function TaxBreakdownPanel({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Built like a tax P&amp;L for the selected year: income taxes, CGT, and National Insurance roll up to total tax.
+            Income tax, CGT, and NI roll up to total tax for the selected year.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-        <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-slate-100">Tax Build-Up</div>
-              <div className="mt-1 text-xs text-slate-500">Income-tax sources contribute to the subtotal; CGT and NI are added separately in total tax.</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Subtotal</div>
-              <div className="text-lg font-semibold text-slate-100">{formatCurrency(summary.income_tax_bucket)}</div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <TaxLineItem
-              label="Salary income tax"
-              value={summary.salary_tax}
-              detail="Income tax charged on employment income, excluding NI"
-              tone="rose"
-              totalTax={summary.total_tax}
-            >
-              {summary.salary_band_breakdown ? (
-                <SalaryTaxBandBreakdownTable breakdown={summary.salary_band_breakdown} />
-              ) : (
-                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-500">
-                  Run against a newer backend to see salary tax by band and personal allowance taper.
-                </div>
-              )}
-            </TaxLineItem>
-            <TaxLineItem
-              label="Rental income tax"
-              value={summary.rental_tax}
-              detail="Marginal income tax from rental property income"
-              tone="amber"
-              totalTax={summary.total_tax}
-            />
-            <TaxLineItem
-              label="Pension drawdown tax"
-              value={summary.pension_drawdown_tax}
-              detail="Income tax triggered by private pension withdrawals"
-              tone="amber"
-              totalTax={summary.total_tax}
-            />
-            <TaxLineItem
-              label="State pension tax"
-              value={summary.state_pension_tax}
-              detail={statePensionDetail}
-              tone="amber"
-              totalTax={summary.total_tax}
-              muted={!has_state_pension_tax}
-            />
-            <TaxLineItem
-              label="Capital gains tax"
-              value={summary.cgt}
-              detail="Tax on realised investment and property gains"
-              tone="cyan"
-              totalTax={summary.total_tax}
-            >
-              {(summary.gia_cgt > 0 || summary.property_cgt > 0) ? (
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
-                    <div className="text-slate-500">GIA CGT</div>
-                    <div className="mt-1 font-semibold text-slate-100">{formatCurrency(summary.gia_cgt)}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
-                    <div className="text-slate-500">Property CGT</div>
-                    <div className="mt-1 font-semibold text-slate-100">{formatCurrency(summary.property_cgt)}</div>
-                  </div>
-                </div>
-              ) : null}
-            </TaxLineItem>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-xl border border-cyan-300/20 bg-cyan-950/30 p-4">
-            <div className="text-xs uppercase tracking-wide text-cyan-200/80">Roll-Up</div>
-            <div className="mt-3 space-y-3">
-              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-                <div className="text-xs text-slate-500">Income tax bucket</div>
-                <div className="mt-1 text-xl font-semibold text-slate-100">{formatCurrency(summary.income_tax_bucket)}</div>
-              </div>
-              <div className="flex items-center justify-center text-slate-500">+</div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-                <div className="text-xs text-slate-500">National Insurance</div>
-                <div className="mt-1 text-xl font-semibold text-slate-100">{formatCurrency(summary.national_insurance)}</div>
-              </div>
-              <div className="flex items-center justify-center text-slate-500">+</div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-                <div className="text-xs text-slate-500">Capital gains tax</div>
-                <div className="mt-1 text-xl font-semibold text-slate-100">{formatCurrency(summary.cgt)}</div>
-              </div>
-              <div className="flex items-center justify-center text-slate-500">=</div>
-              <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3">
-                <div className="text-xs text-cyan-200/80">Total tax</div>
-                <div className="mt-1 text-2xl font-bold text-cyan-100">{formatCurrency(summary.total_tax)}</div>
-              </div>
-            </div>
-          </div>
+      {/* ─── Total Tax hero ─── */}
+      <div className="mb-6 rounded-xl border border-cyan-300/20 bg-cyan-950/30 p-5">
+        <div className="text-xs uppercase tracking-wide text-cyan-200/70">Total Tax</div>
+        <div className="mt-1 text-3xl font-bold text-cyan-100">{formatCurrency(total_tax)}</div>
+        <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
+          <span>{formatCurrency(income_tax_bucket)} income tax</span>
+          <span>+</span>
+          <span>{formatCurrency(cgt)} CGT</span>
+          <span>+</span>
+          <span>{formatCurrency(national_insurance)} NI</span>
+          <span className="ml-auto text-slate-400">=</span>
         </div>
       </div>
+
+      {/* ─── Income tax sources ─── */}
+      <div className="mb-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Income Tax Sources</div>
+        <div className="space-y-1">
+          <TaxSourceRow
+            label="Salary income tax"
+            value={salary_tax}
+            detail="Employment income"
+            tone="rose"
+          >
+            {salary_band_breakdown ? (
+              <SalaryTaxBandBreakdownTable breakdown={salary_band_breakdown} />
+            ) : (
+              <div className="mt-2 px-3 pb-2 text-xs text-slate-500">
+                Run against a newer backend to see salary tax by band.
+              </div>
+            )}
+          </TaxSourceRow>
+
+          <TaxSourceRow
+            label="Rental income tax"
+            value={rental_tax}
+            detail="Property rental"
+            tone="amber"
+            muted={rental_tax === 0}
+          />
+
+          <TaxSourceRow
+            label="Pension drawdown tax"
+            value={pension_drawdown_tax}
+            detail="Private pension withdrawals"
+            tone="amber"
+            muted={pension_drawdown_tax === 0}
+          />
+
+          {has_state_pension_tax && (
+            <TaxSourceRow
+              label="State pension tax"
+              value={state_pension_tax}
+              detail={`Peak ${formatCurrency(summary.peak_state_pension_tax ?? 0)} in ${summary.peak_state_pension_tax_year}`}
+              tone="amber"
+              muted={state_pension_tax === 0}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ─── CGT ─── */}
+      {cgt > 0 && (
+        <div className="mb-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Capital Gains Tax</div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 flex items-center justify-between">
+            <span className="text-sm text-slate-200">
+              GIA: {formatCurrency(gia_cgt ?? 0)} · Property: {formatCurrency(property_cgt ?? 0)}
+            </span>
+            <span className="text-base font-semibold text-cyan-200">{formatCurrency(cgt)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Pension rules compact strip ─── */}
+      {(pension_annual_allowance_charge > 0 || pension_is_tapered > 0.5 || pension_mpaa_active > 0.5) && (
+        <div className="mb-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Pension Rules</div>
+          <PensionRulesStrip
+            isTapered={pension_is_tapered}
+            taperedAllowance={pension_tapered_allowance}
+            aaCharge={pension_annual_allowance_charge}
+            taxFreeRemaining={pension_tax_free_cash_remaining}
+            taxFreeTaken={pension_tax_free_cash_taken}
+            mpaaActive={pension_mpaa_active}
+            annualAllowance={pension_annual_allowance}
+          />
+        </div>
+      )}
     </section>
   );
 }
