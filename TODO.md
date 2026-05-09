@@ -51,7 +51,7 @@ Important current limitations/gaps:
 - Private pension drawdown tax now processes eligible pots per owner in `engine_fast.py`, using each owner's own salary/rental/state-pension income and prior taxable pension drawdown in the year. Broader source-specific pension-tax reporting remains open under P1.1/P3.3.
 - Tax settings beyond `tax_year` are backend-supported in assumptions but mostly hidden from the frontend.
 - The simulation output separates salary, rental, state-pension, pension-drawdown, CGT, NI, and total tax. Salary income tax also exposes personal allowance used/lost, basic/higher/additional band amounts and taxes, and a separate allowance-taper tax line.
-- Some tax logic is duplicated across pure-Python modules, `fast_tax.py`, and internal JIT helpers in `engine_fast.py`. `fast_tax.py` now mirrors personal-allowance tapering and has parity tests for income tax and pension drawdown, but broader consolidation remains open.
+- Some tax logic is duplicated across pure-Python modules and internal JIT helpers in `engine_fast.py`. Broader consolidation remains open.
 - The selected tax year is applied statically across the whole simulation horizon.
 
 ---
@@ -133,16 +133,14 @@ Important current limitations/gaps:
 - `backend/simulation/tax/income_tax.py`
 - `backend/simulation/tax/national_insurance.py`
 - `backend/simulation/tax/pension_drawdown.py`
-- `backend/simulation/tax/fast_tax.py`
 - internal JIT helpers in `backend/simulation/engine_fast.py`
 
-`fast_tax.py`, `income_tax.py`, and `engine_fast.py` now mirror personal allowance tapering, but tax logic is still duplicated across modules. Keep parity tests broad so future band/taper changes do not diverge.
+`income_tax.py` and `engine_fast.py` now mirror personal allowance tapering, but tax logic is still duplicated across modules. Keep parity tests broad so future band/taper changes do not diverge.
 
 **Backend tasks:**
 
 - [ ] Define one canonical tax specification with examples in tests.
-- [ ] Decide whether `fast_tax.py` is used. If unused, remove it or mark it clearly as deprecated.
-- [x] If retained, make `fast_tax.py` match pure-Python calculations exactly, including personal allowance tapering.
+- [x] `fast_tax.py` has been removed (was only used for parity testing; tests now reference pure-Python directly).
 - [x] Add property-based or parametrized parity tests comparing pure-Python functions to JIT-compatible helpers across income ranges. Current coverage: `calculate_income_tax_fast` and `calculate_pension_drawdown_fast` vs pure-Python tax modules.
 - [x] Add tests around boundary values: £12,570, £50,270, £100,000, £125,140, and additional-rate thresholds.
 
@@ -580,7 +578,6 @@ Important current limitations/gaps:
 - `backend/simulation/tax/pension_drawdown.py`
 - `backend/simulation/tax/withdrawals.py`
 - `backend/simulation/tax/tax_config.py`
-- `backend/simulation/tax/fast_tax.py`
 - `backend/simulation/service.py`
 - `backend/simulation/validator.py`
 - `backend/schemas/simulation.py`
