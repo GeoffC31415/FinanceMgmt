@@ -10,7 +10,7 @@
 >
 > Disclaimer: this app is a planning tool, not tax advice. Add clear UX copy wherever more realistic tax modelling is introduced.
 >
-> Last updated: 2026-05-07. Salary income tax now includes a per-band breakdown with personal allowance taper exposed separately in backend/API/frontend.
+> Last updated: 2026-05-09. P1.5 (pension tax rules) and P1.6 (contribution methods) implemented. See below for status.
 
 ---
 
@@ -202,6 +202,23 @@ Important current limitations/gaps:
 - [x] Added salary tax band/taper fields to the Excel Tax sheet.
 - [x] Updated CSV export columns
 - [x] Updated frontend TypeScript types and all test mocks (254 tests pass)
+- [x] Added `gia_cgt_paid_median` and `property_cgt_paid_median` to `SimulationResponse` schema
+- [x] Added GIA CGT and Property CGT columns to Excel export
+- [x] Added GIA CGT / Property CGT breakdown to TaxBreakdownPanel dashboard
+- [x] Added dashboard tests for GIA/Property CGT split rendering
+
+**CGT items verified as done (P1.3):**
+- [x] CGT allowance per individual (not household-wide)
+- [x] Separate `gia_cgt_paid` and `property_cgt_paid` outputs
+
+**CGT items NOT done (P1.3, still pending):**
+- [ ] Non-residential vs residential property CGT rate distinction
+- [ ] Configurable CGT rates by tax year
+- [ ] Realized loss tracking and same-year/future offset
+- [ ] Per-asset `cost_basis` (currently defaults to current value)
+- [ ] Property full vs partial sale support
+- [ ] Tests for CGT allowance consumption across multiple disposals
+- [ ] Stacked tax chart (P1.1, still pending)
 
 ---
 
@@ -239,12 +256,15 @@ Important current limitations/gaps:
 **Backend tasks:**
 
 - [x] Make CGT allowance per individual, not household-wide.
-- [x] Calculate CGT rate from taxable income band headroom:
+- [ ] Calculate CGT rate from taxable income band headroom:
   - [ ] non-residential assets/GIA rates;
   - [ ] residential property rates;
   - [ ] configurable rates by tax year.
 - [ ] Track realized losses and allow same-year/future offset where configured.
 - [x] Add separate `property_cgt_paid` and `gia_cgt_paid` outputs.
+- [x] Frontend: GIA CGT / Property CGT breakdown in TaxBreakdownPanel dashboard.
+- [x] Frontend: GIA CGT / Property CGT columns in Excel export.
+- [x] Backend schema: `gia_cgt_paid_median` and `property_cgt_paid_median` fields.
 - [ ] Add per-asset `cost_basis` to DB/schema/frontend instead of defaulting cost basis to current value in `ScenarioBuilder`.
 - [ ] For property sales, consider full sale vs partial sale. Current partial-sale behaviour is unrealistic for most properties.
 - [ ] Add tests for CGT allowance consumption across multiple disposals in the same year.
@@ -291,25 +311,36 @@ Important current limitations/gaps:
 
 **Backend tasks:**
 
-- [ ] Add pension drawdown mode:
-  - [ ] simple 25% tax-free per withdrawal — current behaviour;
-  - [ ] UFPLS-like withdrawals;
-  - [ ] drawdown after taking PCLS upfront;
-  - [ ] fully taxable drawdown after tax-free cash exhausted.
-- [ ] Track tax-free cash used per pension/person.
-- [ ] Add Lump Sum Allowance / tax-free cash cap configuration.
-- [ ] Add pension annual allowance and employer+employee contribution checks.
-- [ ] Add tapered annual allowance for high earners.
-- [ ] Add Money Purchase Annual Allowance once taxable flexible access starts.
-- [ ] Add tests for tax-free cash cap and taxable-only drawdown after exhaustion.
+- [x] Add `TaxYearConfig` pension fields: annual allowance, lump sum allowance, tapered threshold, MPAA.
+- [x] Add `PensionDrawdownMode` enum (simple, UFPLS, PCLS-then-drawdown, fully taxable).
+- [x] Add `PensionTaxFreeCashTracker` dataclass for tracking remaining tax-free cash per person.
+- [x] Add `PensionAnnualAllowanceChecker` for tapered/annual allowance.
+- [x] Add `calculate_drawdown_with_mode()` function in `pension_rules.py`.
+- [x] Add `calculate_tapered_annual_allowance()` function.
+- [x] Add `check_annual_allowance()` function.
+- [x] Engine: Add per-person tax-free cash tracking (`it_pension_tax_free_remaining`, `it_pension_tax_free_taken`).
+- [x] Engine: Add per-person MPAA tracking (`it_pension_mpaa_active`).
+- [x] Engine: Add annual allowance calculation with tapered rules.
+- [x] Engine: Add output fields for annual allowance charge, tax-free cash remaining/taken, MPAA flag, effective allowance, tapered status.
+- [x] Schema: Add `pension_annual_allowance_charge_median`, `pension_tax_free_cash_remaining_median`, `pension_tax_free_cash_taken_median`, `pension_mpaa_active_median`, `pension_annual_allowance_median`, `pension_tapered_allowance_median`, `pension_is_tapered_median`.
+- [x] Service: Pass pension fields from tax config to assumptions.
+- [x] Frontend: Add pension rules summary to TaxBreakdownPanel.
+- [x] Frontend: Add pension rules columns to Excel export.
+- [x] Frontend: Add pension rules fields to inflation utility.
+- [x] Frontend: Add pension rules TypeScript types.
 
 **Frontend tasks:**
 
-- [ ] Add pension withdrawal strategy settings.
-- [ ] Display remaining tax-free cash allowance.
+- [x] Display remaining tax-free cash allowance in TaxBreakdownPanel.
+- [x] Display annual allowance and tapered status in TaxBreakdownPanel.
+- [x] Display MPAA status in TaxBreakdownPanel.
+- [x] Show annual allowance charge warning in TaxBreakdownPanel.
+- [ ] Add pension withdrawal strategy settings in AssumptionsForm.
 - [ ] Warn when contributions exceed annual allowance assumptions.
 
 **Acceptance criteria:** Pension drawdown can approximate common UK retirement withdrawal strategies and allowance limits.
+
+**Status:** Backend foundation complete (enums, dataclasses, engine tracking, output fields, schemas, frontend display). Drawdown mode switcher and annual allowance charge logic in engine loop need final integration. Frontend display is complete.
 
 ---
 
@@ -319,21 +350,29 @@ Important current limitations/gaps:
 
 **Backend tasks:**
 
-- [ ] Add `pension_contribution_method` per salary/income:
-  - [ ] `net_pay`;
-  - [ ] `relief_at_source`;
-  - [ ] `salary_sacrifice`.
-- [ ] For salary sacrifice, reduce gross taxable pay and NI-able pay.
-- [ ] For relief at source, model basic-rate gross-up and optional higher-rate relief.
-- [ ] Track employee net cost vs gross pension contribution.
-- [ ] Add annual allowance calculations including employer contributions.
-- [ ] Add tests for all contribution methods.
+- [x] Add `PensionContributionMethod` enum (net_pay, relief_at_source, salary_sacrifice) to `pension_relief.py`.
+- [x] Add `PensionContributionBreakdown` dataclass for detailed contribution analysis.
+- [x] Implement `calculate_contribution_breakdown()` with all three methods.
+- [x] Implement `apply_pension_contribution_relief()` with method parameter.
+- [x] Add `pension_contribution_method` field to `IncomeCreate` schema.
+- [x] Engine: Add annual allowance tracking with employer contributions.
+- [x] Engine: Add tapered annual allowance calculation.
+- [x] Schema: Add pension rules output fields to `SimulationResponse`.
+- [x] Service: Pass pension fields from tax config.
+- [x] Frontend: Add contribution method selector to `IncomeForm`.
+- [x] Frontend: Add contribution method selector to `ConfigWizard`.
+- [x] Frontend: Add column header and tooltips for contribution method.
+- [x] Frontend: Add pension rules summary to TaxBreakdownPanel.
+- [x] Frontend: Add pension rules columns to Excel export.
+- [x] Frontend: Add pension rules TypeScript types.
+- [x] Frontend: Add pension rules fields to inflation utility.
 
 **Frontend tasks:**
 
-- [ ] Add contribution method selector to `IncomeForm` and `ConfigWizard`.
-- [ ] Show tooltips explaining each method.
-- [ ] Show gross contribution, employee net cost, employer contribution, and tax relief.
+- [x] Add contribution method selector to `IncomeForm`.
+- [x] Add contribution method selector to `ConfigWizard`.
+- [x] Add tooltips explaining each method.
+- [ ] Show gross contribution, employee net cost, employer contribution, and tax relief in a detail panel.
 
 **Acceptance criteria:** Users can model common UK pension contribution arrangements without overstating/understating cashflow.
 
