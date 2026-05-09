@@ -78,7 +78,7 @@ function default_draft(): ScenarioCreate {
       bankruptcy_threshold: -100000,
     },
     people: [{ id: null, label: "you", birth_date: "1985-01-01", planned_retirement_age: 60, state_pension_age: 67 }],
-    incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, person_id: null }],
+    incomes: [{ kind: "salary", gross_annual: 60000, annual_growth_rate: 0.02, employee_pension_pct: 0.05, employer_pension_pct: 0.05, pension_contribution_method: "net_pay", person_id: null }],
     assets: [
       { name: "ISA", asset_type: "ISA", withdrawal_priority: 30, balance: 50000, annual_contribution: 10000, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
       { name: "Pension", asset_type: "PENSION", withdrawal_priority: 10, balance: 150000, annual_contribution: 0, growth_rate_mean: 0.05, growth_rate_std: 0.10, contributions_end_at_retirement: false, bond_allocation: 0, person_id: null },
@@ -127,6 +127,7 @@ function to_draft(scenario: ScenarioRead): ScenarioCreate {
       annual_growth_rate: i.annual_growth_rate,
       employee_pension_pct: i.employee_pension_pct,
       employer_pension_pct: i.employer_pension_pct,
+      pension_contribution_method: i.pension_contribution_method ?? "net_pay",
       person_id: i.person_id ?? null,
       start_year: i.start_year ?? null,
       end_year: i.end_year ?? null,
@@ -567,6 +568,7 @@ export function ConfigWizard() {
                 <Label tooltip="How much this income increases each year (e.g. 2 = 2%).">Growth Rate (%)</Label>
                 <Label tooltip="Salary only: Percentage you contribute to pension. Deducted before tax.">Employee Pension %</Label>
                 <Label tooltip="Salary only: Percentage your employer adds to your pension.">Employer Pension %</Label>
+                <Label tooltip="How employee pension contributions are taxed: net_pay reduces taxable salary; relief_at_source uses net pay with basic-rate gross-up; salary_sacrifice reduces both salary and NI.">Contribution method</Label>
               </div>
               {draft.incomes.map((inc, idx) => {
                 const isSalary = inc.kind === "salary";
@@ -664,6 +666,23 @@ export function ConfigWizard() {
                         disabled={!isSalary}
                       />
                       <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">%</div>
+                    </div>
+                    <div className={`${isSalary ? "" : "opacity-40"}`}>
+                      <select
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs"
+                        value={inc.pension_contribution_method ?? "net_pay"}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            incomes: d.incomes.map((x, i) => (i === idx ? { ...x, pension_contribution_method: e.target.value as any } : x))
+                          }))
+                        }
+                        disabled={!isSalary}
+                      >
+                        <option value="net_pay">Net pay</option>
+                        <option value="relief_at_source">Relief at source</option>
+                        <option value="salary_sacrifice">Salary sacrifice</option>
+                      </select>
                     </div>
                   </div>
                 );

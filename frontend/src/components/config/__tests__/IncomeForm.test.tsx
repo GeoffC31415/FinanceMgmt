@@ -97,7 +97,7 @@ describe("IncomeForm", () => {
     render(<TestWrapper />);
     // Person dropdown should be present
     const selects = screen.getAllByRole("combobox");
-    expect(selects).toHaveLength(2); // person dropdown + kind dropdown
+    expect(selects).toHaveLength(3); // person dropdown + kind dropdown + contribution method
   });
 
   it("renders income type options", () => {

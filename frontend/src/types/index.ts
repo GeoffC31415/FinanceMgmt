@@ -20,6 +20,7 @@ export type IncomeCreate = {
   annual_growth_rate: number;
   employee_pension_pct: number;
   employer_pension_pct: number;
+  pension_contribution_method?: "net_pay" | "relief_at_source" | "salary_sacrifice";
   start_year?: number | null;
   end_year?: number | null;
 };
@@ -189,7 +190,16 @@ export type SimulationResponse = {
   salary_income_tax_additional_band_amount_median?: number[];
   salary_income_tax_additional_band_tax_median?: number[];
   salary_income_tax_allowance_taper_tax_median?: number[];
-  
+
+  // P1.5/P1.6: Pension rules
+  pension_annual_allowance_charge_median?: number[];
+  pension_tax_free_cash_remaining_median?: number[];
+  pension_tax_free_cash_taken_median?: number[];
+  pension_mpaa_active_median?: number[];
+  pension_annual_allowance_median?: number[];
+  pension_tapered_allowance_median?: number[];
+  pension_is_tapered_median?: number[];
+
   // Assets
   isa_balance_median: number[];
   pension_balance_median: number[];

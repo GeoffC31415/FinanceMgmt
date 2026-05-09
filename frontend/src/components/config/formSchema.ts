@@ -40,7 +40,8 @@ export const scenarioSchema = z.object({
       gross_annual: z.coerce.number().min(0),
       annual_growth_rate: z.coerce.number().min(-1).max(10),
       employee_pension_pct: z.coerce.number().min(0).max(1),
-      employer_pension_pct: z.coerce.number().min(0).max(1)
+      employer_pension_pct: z.coerce.number().min(0).max(1),
+      pension_contribution_method: z.enum(["net_pay", "relief_at_source", "salary_sacrifice"]).default("net_pay")
     })
   ),
   assets: z.array(

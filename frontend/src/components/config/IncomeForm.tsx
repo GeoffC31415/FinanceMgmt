@@ -63,6 +63,10 @@ export function IncomeForm({ form, incomes, scenario, income_total }: Props) {
             Employer_pension_%
             <InfoTip text="Only applies to salary income. Leave at 0 for rental/gift." />
           </div>
+          <div>
+            Contribution method
+            <InfoTip text="How employee pension contributions are taxed: net_pay reduces taxable salary; relief_at_source uses net pay with basic-rate gross-up; salary_sacrifice reduces both salary and NI." />
+          </div>
           <div></div>
         </div>
         <div className="min-w-[980px] space-y-2">
@@ -109,6 +113,16 @@ export function IncomeForm({ form, incomes, scenario, income_total }: Props) {
                 <div className={isSalary ? "" : "opacity-40"}>
                   <PercentInput control={form.control} name={`incomes.${idx}.employer_pension_pct`} placeholder="%" />
                 </div>
+                <div className={isSalary ? "" : "opacity-40"}>
+                  <select
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-2 text-xs"
+                    {...form.register(`incomes.${idx}.pension_contribution_method`)}
+                  >
+                    <option value="net_pay">Net pay</option>
+                    <option value="relief_at_source">Relief at source</option>
+                    <option value="salary_sacrifice">Salary sacrifice</option>
+                  </select>
+                </div>
                 <div className="flex items-center justify-end">
                   {incomes.fields.length > 1 && (
                     <button
@@ -140,7 +154,8 @@ export function IncomeForm({ form, incomes, scenario, income_total }: Props) {
             gross_annual: 0,
             annual_growth_rate: 0.0,
             employee_pension_pct: 0.0,
-            employer_pension_pct: 0.0
+            employer_pension_pct: 0.0,
+            pension_contribution_method: "net_pay"
           })
         }
       >

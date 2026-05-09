@@ -123,6 +123,7 @@ export function to_form_values(scenario: ScenarioRead): FormValues {
       annual_growth_rate: inc.annual_growth_rate,
       employee_pension_pct: inc.employee_pension_pct,
       employer_pension_pct: inc.employer_pension_pct,
+      pension_contribution_method: inc.pension_contribution_method ?? "net_pay",
     })),
     assets: scenario.assets.map((a) => ({
       person_id: a.person_id,

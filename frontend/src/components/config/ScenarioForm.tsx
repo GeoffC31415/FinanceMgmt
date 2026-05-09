@@ -67,6 +67,7 @@ function to_form_values(scenario: ScenarioRead): FormValues {
       annual_growth_rate: i.annual_growth_rate,
       employee_pension_pct: i.employee_pension_pct,
       employer_pension_pct: i.employer_pension_pct,
+      pension_contribution_method: i.pension_contribution_method ?? "net_pay",
       person_id: i.person_id ?? ""
     })),
     assets: scenario.assets.map((a) => {
