@@ -107,7 +107,14 @@ class SimulationResponse(BaseModel):
     pension_withdrawals_median: list[float] = Field(description="Median pension withdrawals per year")
     property_rental_income_median: list[float] = Field(description="Median property rental income per year")
     property_maintenance_median: list[float] = Field(description="Median property maintenance costs per year")
-    
+
+    # Asset class funding for outgoings (net cash contribution from each source per year)
+    asset_funding_cash_median: list[float] = Field(description="Median cash used to fund outgoings per year")
+    asset_funding_isa_median: list[float] = Field(description="Median ISA withdrawals used to fund outgoings per year")
+    asset_funding_gia_median: list[float] = Field(description="Median GIA net withdrawals (after CGT) used to fund outgoings per year")
+    asset_funding_pension_median: list[float] = Field(description="Median net pension drawdown used to fund outgoings per year")
+    asset_funding_property_median: list[float] = Field(description="Median net property cash (after mortgage) used to fund outgoings per year")
+
     # Liabilities
     mortgage_balance_median: list[float] = Field(description="Median mortgage balance per year")
     total_liabilities_median: list[float] = Field(description="Median total liabilities per year")

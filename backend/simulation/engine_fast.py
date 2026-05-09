@@ -97,7 +97,14 @@ F_PENSION_ANNUAL_ALLOWANCE = 62
 F_PENSION_TAPERED_ALLOWANCE = 63
 F_PENSION_IS_TAPERED = 64
 
-N_FIELDS = 65
+# Per-type asset funding for outgoings (net cash contribution)
+F_ASSET_FUNDING_CASH = 65
+F_ASSET_FUNDING_ISA = 66
+F_ASSET_FUNDING_GIA = 67
+F_ASSET_FUNDING_PENSION = 68
+F_ASSET_FUNDING_PROPERTY = 69
+
+N_FIELDS = 70
 
 # Asset type codes
 ASSET_CASH = 0
@@ -306,6 +313,9 @@ def _run_monte_carlo_fast(
         "pension_annual_allowance",
         "pension_tapered_allowance",
         "pension_is_tapered",
+        # Asset class funding for outgoings (net cash contribution)
+        "asset_funding_cash", "asset_funding_isa", "asset_funding_gia",
+        "asset_funding_pension", "asset_funding_property",
     ]
     return {name: out[:, :, i] for i, name in enumerate(field_names)}
 
@@ -1023,9 +1033,21 @@ def _simulate_all_iterations(
             monthly_outflows = total_outflows / 12.0 if total_outflows > 0 else 0.0
             emergency_target = monthly_outflows * emergency_fund_months
 
-            # Add income to cash
+            # Add income to cash, then pay annual outgoings from cash.
+            # Funding attribution is:
+            #   1. current-year non-drawdown income (salary, rental, gifts, state pension)
+            #   2. same-year withdrawals/disposals from ISA/GIA/pension/property
+            #   3. cash asset burndown for any remaining gap
+            # Cash is treated as a buffer. If outgoings temporarily reduce cash but
+            # withdrawals restore it in the same year, the outgoings gap is attributed
+            # to those withdrawals rather than to cash.
+            # Withdrawals beyond the current-year outgoings gap are emergency-fund
+            # top-ups or debt repayment, not outgoings funding.
+            current_net_income_before_pension = salary_net + rental_income_net + gift_income_total + state_pension_income_net
+            outgoings_unfunded_by_current_income = max(0.0, total_outflows - current_net_income_before_pension)
+            outgoings_unfunded_by_cash = outgoings_unfunded_by_current_income
             if cash_idx >= 0:
-                it_asset_balances[cash_idx] += salary_net + rental_income_net + gift_income_total + state_pension_income_net
+                it_asset_balances[cash_idx] += current_net_income_before_pension
                 it_asset_balances[cash_idx] -= total_outflows
 
             pension_income_net = 0.0
@@ -1042,6 +1064,14 @@ def _simulate_all_iterations(
             pension_withdrawals = 0.0
             isa_contributions = 0.0
             gia_contributions = 0.0
+            # Raw withdrawals are reported separately. Funding counters below
+            # are capped to the part of current-year outgoings not covered by
+            # current income, so emergency top-ups don't appear as outgoings
+            # funding.
+            isa_funding = 0.0
+            gia_funding = 0.0
+            pension_funding = 0.0
+            property_funding = 0.0
 
             # Withdraw from assets if below emergency fund
             if cash_idx >= 0 and it_asset_balances[cash_idx] < emergency_target:
@@ -1088,6 +1118,9 @@ def _simulate_all_iterations(
                             it_asset_balances[cash_idx] += net
                             shortfall -= net
                             pension_withdrawals += gross
+                            funding_amount = min(net, outgoings_unfunded_by_cash)
+                            pension_funding += funding_amount
+                            outgoings_unfunded_by_cash -= funding_amount
 
                             # Proportionally withdraw from this owner's eligible pots only.
                             if gross > 0.0:
@@ -1112,6 +1145,9 @@ def _simulate_all_iterations(
                             it_asset_balances[cash_idx] += gross
                             shortfall -= gross
                             isa_withdrawals += gross
+                            funding_amount = min(gross, outgoings_unfunded_by_cash)
+                            isa_funding += funding_amount
+                            outgoings_unfunded_by_cash -= funding_amount
 
                         elif asset_type == ASSET_GIA:
                             balance = it_asset_balances[a_idx]
@@ -1140,6 +1176,9 @@ def _simulate_all_iterations(
                             it_asset_balances[cash_idx] += net
                             shortfall -= net
                             gia_withdrawals += gross
+                            funding_amount = min(net, outgoings_unfunded_by_cash)
+                            gia_funding += funding_amount
+                            outgoings_unfunded_by_cash -= funding_amount
 
                         else:
                             # Other: treat as tax-free
@@ -1187,6 +1226,9 @@ def _simulate_all_iterations(
                         net_after_mortgage = max(0.0, net - mortgage_repayment)
                         it_asset_balances[cash_idx] += net_after_mortgage
                         shortfall -= net_after_mortgage
+                        funding_amount = min(net_after_mortgage, outgoings_unfunded_by_cash)
+                        property_funding += funding_amount
+                        outgoings_unfunded_by_cash -= funding_amount
 
                 # Track negative cash as debt (don't clamp to 0)
                 if it_asset_balances[cash_idx] < 0:
@@ -1515,6 +1557,18 @@ def _simulate_all_iterations(
             out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_AMOUNT] = salary_tax_additional_amount
             out[it, y_idx, F_SALARY_TAX_ADDITIONAL_BAND_TAX] = salary_tax_additional_tax
             out[it, y_idx, F_SALARY_TAX_ALLOWANCE_TAPER_TAX] = salary_tax_taper_tax
+
+            # Per-type asset burndown used for current-year outgoings (net cash
+            # contribution). Current-year non-drawdown income is intentionally not
+            # stored here; the frontend derives it as total outgoings less asset
+            # burndown so the chart can show income vs asset use.
+            total_non_cash_asset_funding = isa_funding + gia_funding + pension_funding + property_funding
+            cash_funding = max(0.0, outgoings_unfunded_by_current_income - total_non_cash_asset_funding)
+            out[it, y_idx, F_ASSET_FUNDING_CASH] = cash_funding
+            out[it, y_idx, F_ASSET_FUNDING_ISA] = isa_funding
+            out[it, y_idx, F_ASSET_FUNDING_GIA] = gia_funding
+            out[it, y_idx, F_ASSET_FUNDING_PENSION] = pension_funding
+            out[it, y_idx, F_ASSET_FUNDING_PROPERTY] = property_funding
 
             # P1.5/P1.6: Pension rules output
             # Annual allowance charge per person (summed)

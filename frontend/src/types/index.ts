@@ -226,6 +226,13 @@ export type SimulationResponse = {
   property_rental_income_median: number[];
   property_maintenance_median: number[];
   
+  // Asset class funding for outgoings (net cash contribution from each source)
+  asset_funding_cash_median: number[];
+  asset_funding_isa_median: number[];
+  asset_funding_gia_median: number[];
+  asset_funding_pension_median: number[];
+  asset_funding_property_median: number[];
+  
   // Liabilities
   mortgage_balance_median: number[];
   total_liabilities_median: number[];

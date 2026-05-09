@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import type { SimulationResponse } from "../../types";
 import { IncomeChart } from "../charts/IncomeChart";
 import { ExpensesChart } from "../charts/ExpensesChart";
+import { OutgoingsFundingChart } from "../charts/OutgoingsFundingChart";
 import { TaxBreakdownPanel } from "./TaxBreakdownPanel";
 
 type Props = {
@@ -52,6 +53,17 @@ export function IncomeSpendingTab({
         mortgage_payoff_year={mortgage_payoff_year}
         percentile={percentile}
         onYearSelect={handleYearSelect}
+      />
+      <OutgoingsFundingChart
+        years={display_result.years}
+        total_outgoings_median={display_result.total_expenses_median}
+        asset_funding_cash_median={display_result.asset_funding_cash_median}
+        asset_funding_isa_median={display_result.asset_funding_isa_median}
+        asset_funding_gia_median={display_result.asset_funding_gia_median}
+        asset_funding_pension_median={display_result.asset_funding_pension_median}
+        asset_funding_property_median={display_result.asset_funding_property_median}
+        retirement_years={display_result.retirement_years}
+        percentile={percentile}
       />
       <TaxBreakdownPanel
         display_result={display_result}

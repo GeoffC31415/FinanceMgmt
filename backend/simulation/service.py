@@ -476,6 +476,12 @@ class ResponseFormatter:
             "pension_withdrawals_median": _from_iter("pension_withdrawals"),
             "property_rental_income_median": _from_iter("property_rental_income"),
             "property_maintenance_median": _from_iter("property_maintenance"),
+            # Asset class funding for outgoings
+            "asset_funding_cash_median": _from_iter("asset_funding_cash"),
+            "asset_funding_isa_median": _from_iter("asset_funding_isa"),
+            "asset_funding_gia_median": _from_iter("asset_funding_gia"),
+            "asset_funding_pension_median": _from_iter("asset_funding_pension"),
+            "asset_funding_property_median": _from_iter("asset_funding_property"),
             # Liabilities
             "mortgage_balance_median": _from_iter("mortgage_balance"),
             "total_liabilities_median": _from_iter("total_liabilities"),
