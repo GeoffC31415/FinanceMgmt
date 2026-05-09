@@ -57,6 +57,8 @@ export function IncomeSpendingTab({
       <OutgoingsFundingChart
         years={display_result.years}
         total_outgoings_median={display_result.total_expenses_median}
+        total_tax_median={display_result.total_tax_median}
+        state_pension_income_median={display_result.state_pension_income_median}
         asset_funding_cash_median={display_result.asset_funding_cash_median}
         asset_funding_isa_median={display_result.asset_funding_isa_median}
         asset_funding_gia_median={display_result.asset_funding_gia_median}

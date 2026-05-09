@@ -14,6 +14,8 @@ import { ASSET_CLASS_COLORS } from "../../utils/assetClassColors";
 type Props = {
   years: number[];
   total_outgoings_median: number[];
+  total_tax_median: number[];
+  state_pension_income_median: number[];
   asset_funding_cash_median: number[];
   asset_funding_isa_median: number[];
   asset_funding_gia_median: number[];
@@ -26,7 +28,7 @@ type Props = {
 const formatGBP = (v: number) => `£${Math.round(v).toLocaleString()}`;
 
 const ASSET_LABELS: Record<string, string> = {
-  INCOME: "Income",
+  INCOME: "Other income",
   CASH: "Cash",
   ISA: "ISA",
   GIA: "GIA",
@@ -39,6 +41,8 @@ const INCOME_COLOR = "#22c55e";
 export function OutgoingsFundingChart({
   years,
   total_outgoings_median,
+  total_tax_median,
+  state_pension_income_median,
   asset_funding_cash_median,
   asset_funding_isa_median,
   asset_funding_gia_median,
@@ -59,15 +63,21 @@ export function OutgoingsFundingChart({
   const data = useMemo(() => {
     if (!hasData) return [];
     return years.map((year, idx) => {
-      const total = total_outgoings_median[idx] || 0;
+      // Match the Outgoings Breakdown chart: backend total_expenses excludes
+      // tax because tax is withheld from net income, while the displayed
+      // outgoings chart adds tax back as a visible outgoing.
+      const total = (total_outgoings_median[idx] || 0) + (total_tax_median[idx] || 0);
       const cash = asset_funding_cash_median[idx] || 0;
       const isa = asset_funding_isa_median[idx] || 0;
       const gia = asset_funding_gia_median[idx] || 0;
-      const pension = asset_funding_pension_median[idx] || 0;
+      const privatePension = asset_funding_pension_median[idx] || 0;
       const property = asset_funding_property_median[idx] || 0;
-      const assetFunding = cash + isa + gia + pension + property;
-      const income = Math.max(0, total - assetFunding);
-      const totalFunding = income + assetFunding;
+      const assetFunding = cash + isa + gia + privatePension + property;
+      const incomeBeforeStatePensionSplit = Math.max(0, total - assetFunding);
+      const statePension = Math.min(state_pension_income_median[idx] || 0, incomeBeforeStatePensionSplit);
+      const income = Math.max(0, incomeBeforeStatePensionSplit - statePension);
+      const pension = privatePension + statePension;
+      const totalFunding = income + cash + isa + gia + pension + property;
 
       // Calculate percentages for 100% stacked bar
       const incomePct = totalFunding > 0 ? (income / totalFunding) * 100 : 0;
@@ -92,6 +102,8 @@ export function OutgoingsFundingChart({
         _isa: isa,
         _gia: gia,
         _pension: pension,
+        _state_pension: statePension,
+        _private_pension: privatePension,
         _property: property,
       };
     });
@@ -99,6 +111,8 @@ export function OutgoingsFundingChart({
     hasData,
     years,
     total_outgoings_median,
+    total_tax_median,
+    state_pension_income_median,
     asset_funding_cash_median,
     asset_funding_isa_median,
     asset_funding_gia_median,
@@ -145,6 +159,15 @@ export function OutgoingsFundingChart({
                   const rawKey = `_${String(name).toLowerCase()}`;
                   const rawValue = item?.payload?.[rawKey];
                   if (typeof rawValue === "number") {
+                    if (name === "PENSION") {
+                      const statePension = item?.payload?._state_pension;
+                      const privatePension = item?.payload?._private_pension;
+                      const details = [
+                        typeof statePension === "number" && statePension > 0 ? `state ${formatGBP(statePension)}` : null,
+                        typeof privatePension === "number" && privatePension > 0 ? `private ${formatGBP(privatePension)}` : null,
+                      ].filter(Boolean).join("; ");
+                      return [`${pctStr} (${formatGBP(rawValue)}${details ? ` — ${details}` : ""})`, label];
+                    }
                     return [`${pctStr} (${formatGBP(rawValue)})`, label];
                   }
                   return [pctStr, label];
