@@ -107,6 +107,21 @@ export function HelpPage() {
             <span className="font-mono">25% tax-free</span> and <span className="font-mono">75% taxable</span> split,{" "}
             with income tax calculated using personal allowance and basic/higher rates.
           </li>
+          <li>
+            <span className="font-semibold">Pension contribution method:</span> each salary income can specify how
+            contributions are treated — <span className="font-mono">net_pay</span> (contribution reduces taxable salary,
+            NI on gross), <span className="font-mono">relief_at_source</span> (contribution from net pay with basic-rate
+            gross-up), or <span className="font-mono">salary_sacrifice</span> (reduces both taxable salary and NI-able salary).
+          </li>
+          <li>
+            <span className="font-semibold">Pension annual allowance:</span> total contributions (employee + employer)
+            are checked against the annual allowance (£60,000 default, reduced for high earners via tapered allowance
+            when threshold income exceeds £260,000). Excess contributions trigger a charge shown in the tax breakdown.
+          </li>
+          <li>
+            <span className="font-semibold">Tax-free cash allowance:</span> lifetime lump sum allowance (£26,100 default)
+            is tracked per person. Remaining tax-free cash and MPAA status are displayed in the tax breakdown panel.
+          </li>
         </ul>
       </div>
 
