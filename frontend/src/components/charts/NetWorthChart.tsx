@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { ASSET_CLASS_COLORS } from "../../utils/assetClassColors";
 
 type Props = {
   years: number[];
@@ -277,7 +278,7 @@ export function NetWorthChart({
             <Line
               type="monotone"
               dataKey="cash_balance"
-              stroke="#60a5fa"
+              stroke={ASSET_CLASS_COLORS.CASH}
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
@@ -286,7 +287,7 @@ export function NetWorthChart({
             <Line
               type="monotone"
               dataKey="isa_balance"
-              stroke="#34d399"
+              stroke={ASSET_CLASS_COLORS.ISA}
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
@@ -295,7 +296,7 @@ export function NetWorthChart({
             <Line
               type="monotone"
               dataKey="pension_balance"
-              stroke="#fbbf24"
+              stroke={ASSET_CLASS_COLORS.PENSION}
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
@@ -304,7 +305,7 @@ export function NetWorthChart({
             <Line
               type="monotone"
               dataKey="gia_balance"
-              stroke="#fb7185"
+              stroke={ASSET_CLASS_COLORS.GIA}
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
@@ -313,7 +314,7 @@ export function NetWorthChart({
             <Line
               type="monotone"
               dataKey="property_balance"
-              stroke="#f97316"
+              stroke={ASSET_CLASS_COLORS.PROPERTY}
               strokeWidth={1.5}
               dot={false}
               yAxisId="left"
